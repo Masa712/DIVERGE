@@ -1,0 +1,695 @@
+project:
+  name: Multi-Model Branching Chat App
+  version: 1.1.0
+  phase: MVP
+  strategy: 3-layer context reconstruction with caching
+  goal: >
+    Deliver a production-ready prototype that enables users to branch conversations at any node,
+    select different LLMs per branch (GPT-4o, Claude-3, Gemini-Pro, etc.),
+    and efficiently manage context with proper cost controls and monitoring.
+
+assumptions:
+  single_tenant: true                    # one workspace/org for MVP
+  traffic: "≤ 50 active users"
+  budget_cap_usd_per_month: 100
+  max_concurrent_requests: 10
+  expected_daily_active_users: 15
+
+functional_requirements:
+  - id: F1
+    name: Tree-structured conversation
+    description: Branch from any node to create parallel conversation threads
+    acceptance_criteria:
+      - Can branch from any existing node
+      - Maximum tree depth of 20 levels
+      - Preserve full conversation history per branch
+  
+  - id: F2
+    name: Context reconstruction with caching
+    description: Build prompt history from parent chain with intelligent caching
+    acceptance_criteria:
+      - Reconstruct context within 500ms for depths ≤ 10
+      - Cache frequently accessed contexts
+      - Automatic context truncation when exceeding model limits
+  
+  - id: F3
+    name: Multi-model routing
+    description: Dynamic model selection and routing per node
+    acceptance_criteria:
+      - Support GPT-4o, Claude-3, Gemini-Pro
+      - Fallback to cheaper models on budget constraints
+      - Model-specific parameter configuration
+  
+  - id: F4
+    name: Chat UI
+    description: Responsive chat interface with model controls
+    acceptance_criteria:
+      - Real-time streaming responses
+      - Model selector with cost indicator
+      - Context preview before sending
+      - Undo/redo for last 5 operations
+  
+  - id: F5
+    name: Visual tree view
+    description: Interactive conversation tree visualization
+    acceptance_criteria:
+      - React Flow based graph rendering
+      - Branch comparison view (side-by-side)
+      - Collapsible/expandable nodes
+      - Zoom and pan controls
+  
+  - id: F6
+    name: Persistence
+    description: Reliable data storage with backup strategy
+    acceptance_criteria:
+      - Supabase Postgres with RLS
+      - Automatic session recovery
+      - Export conversation as JSON/Markdown
+  
+  - id: F7
+    name: Authentication & authorization
+    description: Secure user management
+    acceptance_criteria:
+      - Email + password via Supabase Auth
+      - Session timeout after 24 hours
+      - Rate limiting per user
+
+non_functional_requirements:
+  security:
+    - store_api_keys_in_env: true
+    - row_level_security_on_db: true
+    - prompt_injection_protection: true
+    - api_key_rotation_schedule: quarterly
+    - audit_logging: enabled
+    - data_encryption_at_rest: true
+    - csrf_protection: enabled
+    - content_security_policy: strict
+  
+  performance:
+    p95_llm_latency_ms: 8000
+    p95_context_rebuild_ms: 500
+    max_tree_depth: 20
+    max_context_tokens: 8000
+    cache_ttl_seconds: 300
+    db_connection_pool_size: 10
+  
+  scalability:
+    architecture: "stateless, horizontally scalable"
+    load_balancing: "round-robin with health checks"
+    auto_scaling_threshold_cpu: 70
+  
+  reliability:
+    retry_policy:
+      strategy: exponential_backoff
+      max_retries: 3
+      initial_delay_ms: 1000
+    circuit_breaker:
+      threshold: 5_failures_in_60s
+      reset_timeout_ms: 30000
+    uptime_target_percent: 99.5
+  
+  cost_control:
+    monthly_budget_usd: 100
+    monthly_user_token_quota: 50_000
+    alert_at_budget_percentage: [50, 80, 95]
+    fallback_to_cheaper_model: true
+    token_estimation_before_call: true
+    cost_preview_in_ui: true
+  
+  observability:
+    logs:
+      format: structured_json
+      retention_days: 30
+      level: info
+    metrics:
+      - request_count
+      - token_usage_by_model
+      - latency_p50_p95_p99
+      - error_rate
+      - model_usage_distribution
+      - average_tree_depth
+      - branch_frequency
+      - cache_hit_ratio
+    alerts:
+      - error_rate_above_5_percent_5min
+      - budget_usage_above_threshold
+      - llm_service_unavailable
+      - database_connection_pool_exhausted
+
+data_model:
+  ChatNode:
+    id: uuid primary key
+    parentId: uuid | null references ChatNode(id)
+    sessionId: uuid references Session(id)
+    model: text not null                    # "gpt-4o" | "claude-3" | "gemini-pro"
+    systemPrompt: text | null
+    prompt: text not null
+    response: text
+    status: enum                            # pending | streaming | completed | failed | cancelled
+    errorMessage: text | null
+    depth: int not null default 0           # tree depth for optimization
+    promptTokens: int default 0
+    responseTokens: int default 0
+    costUsd: numeric(10,4) default 0
+    temperature: float | null
+    maxTokens: int | null
+    topP: float | null
+    metadata: jsonb                         # flexible field for additional data
+    createdAt: timestamptz default now()
+    updatedAt: timestamptz default now()
+    indexes:
+      - btree on (sessionId, createdAt)
+      - btree on (parentId)
+      - btree on (status)
+  
+  Session:
+    id: uuid primary key
+    name: text not null
+    description: text | null
+    userId: uuid references auth.users(id)
+    rootNodeId: uuid | null references ChatNode(id)
+    totalCostUsd: numeric(10,4) default 0
+    totalTokens: int default 0
+    nodeCount: int default 0
+    maxDepth: int default 0
+    isArchived: boolean default false
+    createdAt: timestamptz default now()
+    updatedAt: timestamptz default now()
+    lastAccessedAt: timestamptz default now()
+    indexes:
+      - btree on (userId, createdAt desc)
+      - btree on (lastAccessedAt desc)
+  
+  UsageLog:
+    id: uuid primary key
+    userId: uuid references auth.users(id)
+    sessionId: uuid references Session(id)
+    nodeId: uuid references ChatNode(id)
+    model: text not null
+    action: text not null                   # generate | retry | branch
+    promptTokens: int not null
+    completionTokens: int not null
+    costUsd: numeric(10,4) not null
+    latencyMs: int
+    cacheHit: boolean default false
+    createdAt: timestamptz default now()
+    indexes:
+      - btree on (userId, createdAt desc)
+      - btree on (model, createdAt desc)
+  
+  ContextCache:
+    id: uuid primary key
+    nodeId: uuid references ChatNode(id)
+    contextHash: text unique not null       # SHA-256 of context
+    context: text not null
+    tokenCount: int not null
+    expiresAt: timestamptz not null
+    createdAt: timestamptz default now()
+    indexes:
+      - btree on (nodeId)
+      - hash on (contextHash)
+      - btree on (expiresAt)
+  
+  UserQuota:
+    id: uuid primary key
+    userId: uuid unique references auth.users(id)
+    periodStart: date not null
+    periodEnd: date not null
+    tokenQuota: int not null default 50000
+    tokensUsed: int not null default 0
+    costQuotaUsd: numeric(10,4) default 10.00
+    costUsedUsd: numeric(10,4) default 0
+    updatedAt: timestamptz default now()
+    indexes:
+      - btree on (userId, periodStart desc)
+
+api:
+  base_path: /api/v1
+  rate_limit:
+    per_user_rps: 2
+    per_user_burst: 5
+    global_rps: 50
+  
+  endpoints:
+    - path: /generate
+      method: POST
+      auth: required
+      description: "Generate response for a node, rebuilding context from parent chain"
+      request:
+        body:
+          nodeId: uuid
+          prompt: string
+          model?: string
+          temperature?: float
+          maxTokens?: int
+          stream?: boolean
+      responses:
+        200: { node: ChatNode, contextUsed: string[], cacheHit: boolean }
+        400: "Invalid model or prompt"
+        402: "Token quota exceeded"
+        429: "Rate limit exceeded"
+        503: "LLM service unavailable"
+    
+    - path: /nodes
+      method: POST
+      auth: required
+      description: "Create a new node (branch point)"
+      request:
+        body:
+          parentId?: uuid
+          sessionId: uuid
+          prompt: string
+          model: string
+          systemPrompt?: string
+      responses:
+        201: { node: ChatNode }
+        400: "Invalid input"
+        404: "Parent node not found"
+    
+    - path: /nodes/:id
+      method: GET
+      auth: required
+      description: "Get node with reconstructed context"
+      responses:
+        200: { node: ChatNode, context: ChatNode[], totalTokens: int }
+        404: "Node not found"
+    
+    - path: /nodes/:id/branch
+      method: POST
+      auth: required
+      description: "Create a branch from existing node"
+      request:
+        body:
+          prompt: string
+          model?: string
+      responses:
+        201: { node: ChatNode, branchId: uuid }
+        404: "Node not found"
+    
+    - path: /sessions
+      method: GET
+      auth: required
+      description: "List user sessions"
+      request:
+        query:
+          page?: int
+          limit?: int
+          archived?: boolean
+      responses:
+        200: { sessions: Session[], total: int }
+    
+    - path: /sessions/:id
+      method: GET
+      auth: required
+      description: "Get session with all nodes"
+      responses:
+        200: { session: Session, nodes: ChatNode[], tree: TreeStructure }
+        404: "Session not found"
+    
+    - path: /sessions/:id/export
+      method: GET
+      auth: required
+      description: "Export session data"
+      request:
+        query:
+          format: "json" | "markdown" | "html"
+      responses:
+        200: { data: string, format: string }
+        404: "Session not found"
+    
+    - path: /models
+      method: GET
+      auth: optional
+      description: "List available models with pricing"
+      responses:
+        200: 
+          models:
+            - id: string
+              name: string
+              costPerThousandTokens: float
+              maxContextTokens: int
+              available: boolean
+    
+    - path: /usage
+      method: GET
+      auth: required
+      description: "Get user usage statistics"
+      request:
+        query:
+          period?: "day" | "week" | "month"
+      responses:
+        200:
+          tokensUsed: int
+          tokensRemaining: int
+          costUsd: float
+          quotaResetDate: date
+          usageByModel: object
+    
+    - path: /health
+      method: GET
+      auth: optional
+      description: "Health check endpoint"
+      responses:
+        200: { status: "healthy", services: object }
+        503: { status: "unhealthy", errors: string[] }
+
+model_router:
+  providers:
+    openai:
+      models: ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
+      base_url: "https://api.openai.com/v1"
+      retry_on_status: [429, 500, 502, 503]
+      timeout_ms: 30000
+    
+    anthropic:
+      models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]
+      base_url: "https://api.anthropic.com/v1"
+      retry_on_status: [429, 500, 502, 503]
+      timeout_ms: 30000
+    
+    google:
+      models: ["gemini-pro", "gemini-pro-vision"]
+      base_url: "https://generativelanguage.googleapis.com/v1"
+      retry_on_status: [429, 500, 502, 503]
+      timeout_ms: 30000
+  
+  fallback_chain:
+    - primary: "gpt-4o"
+      fallback: "gpt-3.5-turbo"
+    - primary: "claude-3-opus"
+      fallback: "claude-3-haiku"
+    - primary: "gemini-pro"
+      fallback: "gpt-3.5-turbo"
+
+frontend:
+  stack:
+    framework: Next.js 14
+    ui: React 18 + Tailwind CSS 3
+    visualization: React Flow 11
+    state: Zustand 4
+    forms: React Hook Form 7
+    validation: Zod 3
+    icons: Lucide React
+    animations: Framer Motion 10
+  
+  components:
+    core:
+      - ChatInterface
+      - ModelSelector
+      - NodeCard
+      - TreeCanvas
+      - BranchButton
+      - ContextPreview
+      - CostIndicator
+    
+    layout:
+      - AppShell
+      - Sidebar
+      - Header
+      - NavigationTabs
+    
+    auth:
+      - SignInForm
+      - SignUpForm
+      - PasswordReset
+      - ProfileSettings
+    
+    visualization:
+      - TreeView
+      - BranchComparison
+      - NodeDetails
+      - MiniMap
+    
+    utilities:
+      - ErrorBoundary
+      - LoadingStates
+      - ToastNotifications
+      - ConfirmDialog
+  
+  features:
+    real_time:
+      - streaming_responses: true
+      - optimistic_updates: true
+      - auto_save: true
+      - presence_indicators: false  # out of scope for MVP
+    
+    accessibility:
+      - wcag_compliance: "2.1 AA"
+      - keyboard_navigation: full
+      - screen_reader_support: true
+      - high_contrast_mode: true
+    
+    performance:
+      - code_splitting: true
+      - lazy_loading: true
+      - image_optimization: true
+      - bundle_size_budget_kb: 250
+
+backend:
+  runtime: Node.js 20 LTS
+  framework: Next.js 14 API Routes
+  language: TypeScript 5
+  
+  dependencies:
+    core:
+      - "@supabase/supabase-js": "^2"
+      - "openai": "^4"
+      - "@anthropic-ai/sdk": "^0.20"
+      - "@google-cloud/aiplatform": "^3"
+    
+    utilities:
+      - "zod": "^3"
+      - "uuid": "^9"
+      - "date-fns": "^3"
+      - "p-queue": "^7"
+      - "p-retry": "^5"
+    
+    monitoring:
+      - "@sentry/nextjs": "^7"
+      - "pino": "^8"
+      - "prometheus-client": "^15"
+  
+  env_secrets:
+    required:
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+      - GOOGLE_AI_API_KEY
+      - SENTRY_DSN
+    
+    optional:
+      - GRAFANA_API_KEY
+      - SLACK_WEBHOOK_URL
+      - RATE_LIMIT_REDIS_URL
+  
+  middleware:
+    - authentication: "Supabase Auth JWT verification"
+    - rate_limiting: "Token bucket algorithm"
+    - request_validation: "Zod schema validation"
+    - error_handling: "Global error boundary with Sentry"
+    - cors: "Configured for production domain"
+    - compression: "gzip for responses > 1kb"
+
+infrastructure:
+  hosting:
+    platform: Vercel
+    regions: ["us-east-1", "eu-west-1"]
+    environment: production
+  
+  database:
+    provider: Supabase
+    type: PostgreSQL 15
+    backup_schedule: daily
+    point_in_time_recovery: true
+  
+  caching:
+    provider: Vercel KV (Redis)
+    ttl_default_seconds: 300
+    max_memory_mb: 100
+  
+  cdn:
+    provider: Vercel Edge Network
+    cache_control: "public, max-age=3600"
+  
+  monitoring:
+    logs: Vercel Logs + Supabase Logs
+    metrics: Grafana Cloud
+    errors: Sentry
+    uptime: Better Uptime
+
+ci_cd:
+  platform: GitHub Actions
+  
+  workflows:
+    pull_request:
+      - lint
+      - type_check
+      - unit_tests
+      - build
+    
+    main_branch:
+      - lint
+      - type_check
+      - unit_tests
+      - integration_tests
+      - build
+      - deploy_preview
+    
+    release:
+      - full_test_suite
+      - security_scan
+      - build_production
+      - deploy_production
+      - smoke_tests
+      - notify_team
+  
+  testing:
+    unit:
+      framework: Jest
+      coverage_threshold: 80
+    
+    integration:
+      framework: Jest + Supertest
+      mock_external_apis: true
+    
+    e2e:
+      framework: Playwright
+      browsers: ["chromium", "firefox", "webkit"]
+      viewport_sizes: ["mobile", "tablet", "desktop"]
+    
+    performance:
+      tool: Lighthouse CI
+      thresholds:
+        performance: 90
+        accessibility: 95
+        best_practices: 90
+        seo: 90
+
+implementation_phases:
+  phase_1_foundation:  # Week 1-2
+    - database_schema_setup
+    - authentication_implementation
+    - basic_crud_operations
+    - single_model_integration
+    - simple_chat_ui
+  
+  phase_2_core:  # Week 3-4
+    - multi_model_routing
+    - context_reconstruction_logic
+    - caching_layer
+    - streaming_responses
+    - error_handling
+  
+  phase_3_visualization:  # Week 5-6
+    - react_flow_integration
+    - tree_navigation
+    - branch_comparison
+    - cost_tracking_ui
+    - export_functionality
+  
+  phase_4_polish:  # Week 7-8
+    - performance_optimization
+    - comprehensive_testing
+    - monitoring_setup
+    - documentation
+    - deployment_pipeline
+
+out_of_scope_for_mvp:
+  - real_time_collaboration
+  - voice_input_output
+  - custom_model_fine_tuning
+  - advanced_prompt_templates
+  - conversation_sharing
+  - team_workspaces
+  - oauth_providers
+  - mobile_native_apps
+  - offline_mode
+  - plugins_extensions
+  - automated_summarization
+  - semantic_search
+  - conversation_analytics
+  - batch_processing
+
+roadmap_post_mvp:
+  q1_2025:
+    - conversation_sharing_links
+    - team_collaboration_features
+    - oauth_authentication
+    - advanced_search_filtering
+  
+  q2_2025:
+    - mobile_pwa
+    - voice_interface
+    - custom_prompt_templates
+    - conversation_analytics_dashboard
+  
+  q3_2025:
+    - plugin_marketplace
+    - custom_model_integration
+    - batch_processing
+    - api_for_developers
+  
+  q4_2025:
+    - enterprise_features
+    - advanced_security_compliance
+    - white_label_options
+    - global_deployment
+
+success_metrics:
+  technical:
+    - api_response_time_p95: "< 500ms"
+    - llm_success_rate: "> 95%"
+    - cache_hit_ratio: "> 60%"
+    - error_rate: "< 1%"
+  
+  business:
+    - daily_active_users: 15
+    - average_session_duration_minutes: 20
+    - branches_per_session: 3
+    - user_retention_day_7: "40%"
+  
+  cost:
+    - cost_per_user_per_month: "< $2"
+    - infrastructure_cost_monthly: "< $50"
+    - total_monthly_cost: "< $100"
+
+risk_mitigation:
+  technical_risks:
+    - risk: "LLM API rate limits"
+      mitigation: "Queue management, retry logic, multiple API keys"
+    - risk: "Context length exceeding limits"
+      mitigation: "Smart truncation, summarization fallback"
+    - risk: "High latency in deep trees"
+      mitigation: "Caching, depth limits, async processing"
+  
+  business_risks:
+    - risk: "Cost overrun"
+      mitigation: "Hard limits, alerts, automatic model downgrade"
+    - risk: "Low user adoption"
+      mitigation: "User feedback loops, iterative improvements"
+  
+  security_risks:
+    - risk: "Prompt injection"
+      mitigation: "Input validation, output filtering, monitoring"
+    - risk: "Data leakage"
+      mitigation: "RLS, encryption, audit logs"
+
+documentation:
+  user_facing:
+    - getting_started_guide
+    - feature_tutorials
+    - faq
+    - troubleshooting
+  
+  technical:
+    - api_documentation
+    - architecture_diagrams
+    - deployment_guide
+    - contributing_guidelines
+  
+  internal:
+    - runbook
+    - incident_response_plan
+    - performance_benchmarks
+    - cost_analysis
