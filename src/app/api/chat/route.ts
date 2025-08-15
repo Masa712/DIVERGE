@@ -33,8 +33,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Calculate depth for the new node
+    let depth = 0
+    if (parentNodeId) {
+      const { data: parentNode } = await supabase
+        .from('chat_nodes')
+        .select('depth')
+        .eq('id', parentNodeId)
+        .single()
+      
+      if (parentNode) {
+        depth = parentNode.depth + 1
+      }
+    }
+
     // Create a new chat node in the database
-    const { data: chatNode, error: nodeError } = await supabase
+    const { data: chatNodeRaw, error: nodeError } = await supabase
       .from('chat_nodes')
       .insert({
         session_id: sessionId,
@@ -44,6 +58,7 @@ export async function POST(request: NextRequest) {
         status: 'streaming',
         temperature,
         max_tokens,
+        depth,
       })
       .select()
       .single()
@@ -54,6 +69,29 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create chat node' },
         { status: 500 }
       )
+    }
+
+    // Convert to camelCase for consistency
+    const chatNode = {
+      id: chatNodeRaw.id,
+      parentId: chatNodeRaw.parent_id,
+      sessionId: chatNodeRaw.session_id,
+      model: chatNodeRaw.model,
+      systemPrompt: chatNodeRaw.system_prompt,
+      prompt: chatNodeRaw.prompt,
+      response: chatNodeRaw.response,
+      status: chatNodeRaw.status,
+      errorMessage: chatNodeRaw.error_message,
+      depth: chatNodeRaw.depth,
+      promptTokens: chatNodeRaw.prompt_tokens || 0,
+      responseTokens: chatNodeRaw.response_tokens || 0,
+      costUsd: chatNodeRaw.cost_usd || 0,
+      temperature: chatNodeRaw.temperature,
+      maxTokens: chatNodeRaw.max_tokens,
+      topP: chatNodeRaw.top_p,
+      metadata: chatNodeRaw.metadata || {},
+      createdAt: new Date(chatNodeRaw.created_at),
+      updatedAt: new Date(chatNodeRaw.updated_at),
     }
 
     // Initialize OpenRouter client

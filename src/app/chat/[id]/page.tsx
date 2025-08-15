@@ -8,6 +8,7 @@ import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
 import { ChatMessages } from '@/components/chat/chat-messages'
 import { ChatInput } from '@/components/chat/chat-input'
 import { ModelSelector } from '@/components/chat/model-selector'
+import { ChatTreeView } from '@/components/tree/chat-tree-view'
 
 interface Props {
   params: { id: string }
@@ -22,6 +23,8 @@ export default function ChatSessionPage({ params }: Props) {
   const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o')
   const [loadingSession, setLoadingSession] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showTreeView, setShowTreeView] = useState(false)
+  const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -42,6 +45,10 @@ export default function ChatSessionPage({ params }: Props) {
         const { session, chatNodes } = await response.json()
         setSession(session)
         setChatNodes(chatNodes)
+        // Set current node to the last node
+        if (chatNodes.length > 0) {
+          setCurrentNodeId(chatNodes[chatNodes.length - 1].id)
+        }
       } else if (response.status === 404) {
         setError('Session not found')
       } else {
@@ -53,6 +60,41 @@ export default function ChatSessionPage({ params }: Props) {
     } finally {
       setLoadingSession(false)
     }
+  }
+
+  const handleBranchCreate = async (parentNodeId: string, branchPrompt: string) => {
+    if (!branchPrompt || !session) return
+
+    try {
+      const response = await fetch('/api/chat/branch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          parentNodeId,
+          sessionId: session.id,
+          prompt: branchPrompt,
+          model: selectedModel,
+        }),
+      })
+
+      if (response.ok) {
+        await fetchSession()
+        showError('Branch created successfully!')
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        showError(errorData.error || 'Failed to create branch')
+      }
+    } catch (error) {
+      console.error('Error creating branch:', error)
+      showError('Failed to create branch')
+    }
+  }
+
+  const handleNodeClick = (nodeId: string) => {
+    setCurrentNodeId(nodeId)
+    setShowTreeView(false)
   }
 
   const handleSendMessage = async (message: string) => {
@@ -151,16 +193,37 @@ export default function ChatSessionPage({ params }: Props) {
               </p>
             </div>
           </div>
-          <ModelSelector
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-            availableModels={AVAILABLE_MODELS}
-          />
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowTreeView(!showTreeView)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                showTreeView 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'bg-secondary hover:bg-secondary/80'
+              }`}
+            >
+              {showTreeView ? 'Chat View' : 'Tree View'}
+            </button>
+            <ModelSelector
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              availableModels={AVAILABLE_MODELS}
+            />
+          </div>
         </div>
       </header>
 
       <div className="flex-1 overflow-hidden">
-        <ChatMessages nodes={chatNodes} />
+        {showTreeView ? (
+          <ChatTreeView
+            nodes={chatNodes}
+            currentNodeId={currentNodeId}
+            onNodeClick={handleNodeClick}
+            onBranchCreate={handleBranchCreate}
+          />
+        ) : (
+          <ChatMessages nodes={chatNodes} />
+        )}
       </div>
 
       <div className="border-t p-4">
