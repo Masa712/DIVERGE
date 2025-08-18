@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
 import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
-import { ChatMessages } from '@/components/chat/chat-messages'
+
 import { ChatInput } from '@/components/chat/chat-input'
 import { ModelSelector } from '@/components/chat/model-selector'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
+import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 
 interface Props {
   params: { id: string }
@@ -23,8 +24,10 @@ export default function ChatSessionPage({ params }: Props) {
   const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o')
   const [loadingSession, setLoadingSession] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showTreeView, setShowTreeView] = useState(false)
+
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
+  const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -94,17 +97,34 @@ export default function ChatSessionPage({ params }: Props) {
 
   const handleNodeClick = (nodeId: string) => {
     setCurrentNodeId(nodeId)
-    setShowTreeView(false)
+    
+    // Find the clicked node and show its details in sidebar
+    const clickedNode = chatNodes.find(node => node.id === nodeId)
+    if (clickedNode) {
+      setSelectedNodeForDetail(clickedNode)
+      setIsSidebarOpen(true)
+    }
+  }
+
+  const handleCloseSidebar = () => {
+    setIsSidebarOpen(false)
+    setSelectedNodeForDetail(null)
   }
 
   const handleSendMessage = async (message: string) => {
     if (!session) return
 
     try {
-      // Find the last node to use as parent
-      const parentNode = chatNodes.length > 0 
-        ? chatNodes[chatNodes.length - 1] 
-        : null
+      // Use current selected node as parent, or the last node if none selected
+      let parentNode = null
+      if (currentNodeId) {
+        parentNode = chatNodes.find(node => node.id === currentNodeId)
+      } else if (chatNodes.length > 0) {
+        // Find the most recently created node as default parent
+        parentNode = chatNodes.reduce((latest, node) => 
+          new Date(node.createdAt) > new Date(latest.createdAt) ? node : latest
+        )
+      }
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -122,6 +142,15 @@ export default function ChatSessionPage({ params }: Props) {
       if (response.ok) {
         // Refresh the session data to get updated nodes
         await fetchSession()
+        // Set the new node as current (it will be the last one created)
+        const updatedResponse = await fetch(`/api/sessions/${session.id}`)
+        if (updatedResponse.ok) {
+          const { chatNodes: updatedNodes } = await updatedResponse.json()
+          if (updatedNodes.length > chatNodes.length) {
+            const newNode = updatedNodes[updatedNodes.length - 1]
+            setCurrentNodeId(newNode.id)
+          }
+        }
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || `HTTP ${response.status}: Failed to send message`
@@ -176,59 +205,71 @@ export default function ChatSessionPage({ params }: Props) {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="border-b px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push('/chat')}
-              className="rounded-md bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/80"
-            >
-              ← Back
-            </button>
-            <div>
-              <h1 className="font-semibold">{session.name}</h1>
-              <p className="text-sm text-muted-foreground">
-                {chatNodes.length} messages • ${(session.totalCostUsd || 0).toFixed(4)}
-              </p>
+    <div className="flex h-screen bg-background">
+      {/* Main Content */}
+      <div className={`flex flex-col flex-1 overflow-hidden transition-all duration-300 ${
+        isSidebarOpen ? 'mr-96' : ''
+      }`}>
+        <header className="border-b px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push('/chat')}
+                className="rounded-md bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/80"
+              >
+                ← Back
+              </button>
+              <div>
+                <h1 className="font-semibold">{session.name}</h1>
+                <p className="text-sm text-muted-foreground">
+                  {chatNodes.length} messages • ${(session.totalCostUsd || 0).toFixed(4)}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+                availableModels={AVAILABLE_MODELS}
+              />
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setShowTreeView(!showTreeView)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                showTreeView 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'bg-secondary hover:bg-secondary/80'
-              }`}
-            >
-              {showTreeView ? 'Chat View' : 'Tree View'}
-            </button>
-            <ModelSelector
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
-              availableModels={AVAILABLE_MODELS}
+        </header>
+
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <ChatTreeView
+              nodes={chatNodes}
+              currentNodeId={currentNodeId}
+              onNodeClick={handleNodeClick}
+              onBranchCreate={handleBranchCreate}
             />
           </div>
+          
+          <div className="border-t p-4 bg-background">
+            <div className="max-w-4xl mx-auto">
+              {currentNodeId && (
+                <div className="mb-3 text-sm text-muted-foreground">
+                  <span className="font-medium">Continuing from:</span>{' '}
+                  {(() => {
+                    const currentNode = chatNodes.find(n => n.id === currentNodeId)
+                    return currentNode ? currentNode.prompt.substring(0, 60) + '...' : 'Selected node'
+                  })()}
+                </div>
+              )}
+              <ChatInput onSendMessage={handleSendMessage} />
+            </div>
+          </div>
         </div>
-      </header>
-
-      <div className="flex-1 overflow-hidden">
-        {showTreeView ? (
-          <ChatTreeView
-            nodes={chatNodes}
-            currentNodeId={currentNodeId}
-            onNodeClick={handleNodeClick}
-            onBranchCreate={handleBranchCreate}
-          />
-        ) : (
-          <ChatMessages nodes={chatNodes} />
-        )}
       </div>
 
-      <div className="border-t p-4">
-        <ChatInput onSendMessage={handleSendMessage} />
-      </div>
+      {/* Node Detail Sidebar */}
+      <NodeDetailSidebar
+        node={selectedNodeForDetail}
+        allNodes={chatNodes}
+        isOpen={isSidebarOpen}
+        onClose={handleCloseSidebar}
+      />
     </div>
   )
 }

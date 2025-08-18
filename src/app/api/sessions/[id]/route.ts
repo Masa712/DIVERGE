@@ -76,3 +76,75 @@ export async function GET(
     )
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = createClient()
+    
+    // Check authentication
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const sessionId = params.id
+
+    // Verify session ownership
+    const { data: session, error: sessionError } = await supabase
+      .from('sessions')
+      .select('id, user_id')
+      .eq('id', sessionId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (sessionError) {
+      if (sessionError.code === 'PGRST116') {
+        return NextResponse.json(
+          { error: 'Session not found' },
+          { status: 404 }
+        )
+      }
+      throw sessionError
+    }
+
+    // Delete all chat nodes associated with the session
+    // (This will cascade due to foreign key constraints, but we'll be explicit)
+    const { error: nodesError } = await supabase
+      .from('chat_nodes')
+      .delete()
+      .eq('session_id', sessionId)
+
+    if (nodesError) {
+      console.error('Error deleting chat nodes:', nodesError)
+      // Continue with session deletion even if node deletion fails
+    }
+
+    // Delete the session
+    const { error: deleteError } = await supabase
+      .from('sessions')
+      .delete()
+      .eq('id', sessionId)
+      .eq('user_id', user.id)
+
+    if (deleteError) {
+      throw deleteError
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Session deleted successfully'
+    })
+  } catch (error) {
+    console.error('Error deleting session:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

@@ -251,7 +251,7 @@ export async function buildContextForNode(nodeId: string): Promise<Array<{ role:
       createdAt: new Date(node.created_at),
       updatedAt: new Date(node.updated_at),
     }))
-    .sort((a, b) => a.depth - b.depth)
+    .sort((a: ChatNode, b: ChatNode) => a.depth - b.depth)
   
   const context: Array<{ role: string; content: string }> = []
   

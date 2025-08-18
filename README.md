@@ -7,7 +7,7 @@ A production-ready chat application that enables users to branch conversations a
 - 🌳 **Tree-structured conversations** - Branch from any node to create parallel conversation threads
 - 🤖 **Multi-model support** - Switch between GPT-4o, Claude-3, Gemini-Pro per branch
 - ⚡ **Smart caching** - Context reconstruction with intelligent caching for performance
-- 📊 **Visual tree view** - Interactive conversation tree visualization with React Flow
+- 📊 **Tree-first interface** - All conversations displayed as interactive tree visualization with React Flow
 - 💰 **Cost control** - Token usage tracking and budget management
 - 🔒 **Secure** - Row-level security with Supabase Auth
 

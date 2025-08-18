@@ -24,7 +24,7 @@ export default function AuthPage() {
         setError('Check your email for confirmation link')
       } else {
         await signIn(email, password)
-        router.push('/dashboard')
+        router.push('/chat')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
