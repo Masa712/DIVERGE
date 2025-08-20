@@ -126,6 +126,8 @@ export default function ChatSessionPage({ params }: Props) {
         )
       }
 
+      console.log(`Frontend debug: parentNode=${parentNode?.id}, currentNodeId=${currentNodeId}`)
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -136,6 +138,7 @@ export default function ChatSessionPage({ params }: Props) {
           model: selectedModel,
           sessionId: session.id,
           parentNodeId: parentNode?.id,
+          useEnhancedContext: true, // Explicitly enable enhanced context
         }),
       })
 

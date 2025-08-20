@@ -103,10 +103,15 @@ export async function POST(request: NextRequest) {
     let finalMessages = messages
     let contextMetadata = null
     
+    console.log(`Debug: useEnhancedContext=${useEnhancedContext}, parentNodeId=${parentNodeId}`)
+    
     if (useEnhancedContext && parentNodeId) {
       try {
+        console.log(`Starting enhanced context building for parentNodeId: ${parentNodeId}`)
+        
         // Extract node references from user prompt
         const referencedNodes = extractNodeReferences(userPrompt)
+        console.log(`Extracted references:`, referencedNodes)
         
         // Build enhanced context
         const enhancedContext = await buildEnhancedContext(parentNodeId, {
@@ -129,6 +134,8 @@ export async function POST(request: NextRequest) {
         console.warn('Enhanced context failed, falling back to simple messages:', contextError)
         // Keep original messages as fallback
       }
+    } else {
+      console.log(`Enhanced context skipped - useEnhancedContext: ${useEnhancedContext}, parentNodeId: ${parentNodeId}`)
     }
 
     // Initialize OpenRouter client

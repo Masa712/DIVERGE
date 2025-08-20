@@ -32,6 +32,8 @@ export { extractNodeReferences } from '@/lib/utils/node-references'
 export async function getSiblingNodes(nodeId: string): Promise<ChatNode[]> {
   const supabase = createClient()
   
+  console.log(`🔍 Getting siblings for nodeId: ${nodeId}`)
+  
   // First, get the current node to find its parent
   const { data: currentNode, error: nodeError } = await supabase
     .from('chat_nodes')
@@ -40,8 +42,15 @@ export async function getSiblingNodes(nodeId: string): Promise<ChatNode[]> {
     .single()
     
   if (nodeError || !currentNode || !currentNode.parent_id) {
+    console.log(`❌ No parent found for node ${nodeId}:`, { 
+      nodeError: nodeError?.message, 
+      hasCurrentNode: !!currentNode, 
+      parentId: currentNode?.parent_id 
+    })
     return []
   }
+  
+  console.log(`📊 Current node parent_id: ${currentNode.parent_id}`)
   
   // Get all siblings (excluding current node)
   const { data: siblings, error: siblingsError } = await supabase
@@ -51,7 +60,14 @@ export async function getSiblingNodes(nodeId: string): Promise<ChatNode[]> {
     .neq('id', nodeId)
     .order('created_at', { ascending: true })
     
+  console.log(`🔎 Sibling query result:`, { 
+    siblingsCount: siblings?.length || 0, 
+    error: siblingsError?.message,
+    parentId: currentNode.parent_id 
+  })
+  
   if (siblingsError || !siblings) {
+    console.log(`❌ Siblings query failed:`, siblingsError?.message)
     return []
   }
   
@@ -205,8 +221,38 @@ export async function buildEnhancedContext(
   // 3. Include sibling context if requested and within token limit
   let siblingCount = 0
   if (includeSiblings && totalTokens < maxTokens * 0.8) {
-    const siblings = await getSiblingNodes(nodeId)
+    // Get siblings that have the same parent as nodeId (which is the parent node)
+    // We need to find all nodes that have nodeId as their parent
+    const { data: siblingNodes, error: siblingError } = await supabase
+      .from('chat_nodes')
+      .select('*')
+      .eq('parent_id', nodeId)
+      .order('created_at', { ascending: true })
+    
+    const siblings = siblingNodes ? siblingNodes.map((node: any) => ({
+      id: node.id,
+      parentId: node.parent_id,
+      sessionId: node.session_id,
+      model: node.model,
+      systemPrompt: node.system_prompt,
+      prompt: node.prompt,
+      response: node.response,
+      status: node.status,
+      errorMessage: node.error_message,
+      depth: node.depth,
+      promptTokens: node.prompt_tokens || 0,
+      responseTokens: node.response_tokens || 0,
+      costUsd: node.cost_usd || 0,
+      temperature: node.temperature,
+      maxTokens: node.max_tokens,
+      topP: node.top_p,
+      metadata: node.metadata || {},
+      createdAt: new Date(node.created_at),
+      updatedAt: new Date(node.updated_at),
+    })) : []
+    
     siblingCount = siblings.length
+    console.log(`🔍 Found ${siblings.length} existing children of parent ${nodeId}`)
     
     if (siblings.length > 0) {
       const siblingSummary = summarizeSiblings(siblings)
@@ -227,26 +273,44 @@ export async function buildEnhancedContext(
   
   // 4. Include explicitly referenced nodes
   if (includeReferences.length > 0) {
-    for (const refId of includeReferences) {
-      if (totalTokens >= maxTokens * 0.95) break
-      
-      const { data: refNode, error: refError } = await supabase
-        .from('chat_nodes')
-        .select('*')
-        .eq('id', refId)
-        .single()
+    // Get all nodes in the session to match short IDs
+    const { data: allNodes, error: allNodesError } = await supabase
+      .from('chat_nodes')
+      .select('*')
+      .eq('session_id', ancestors[0]?.sessionId || '')
+    
+    if (!allNodesError && allNodes) {
+      for (const refId of includeReferences) {
+        if (totalTokens >= maxTokens * 0.95) break
         
-      if (!refError && refNode) {
-        const summary = `Referenced context from ${refId.slice(-8)}: "${refNode.prompt.slice(0, 100)}..." → "${refNode.response?.slice(0, 100) || 'No response'}..."`
-        const summaryTokens = estimateTokens(summary)
+        // Find node by matching the last 8 characters of the ID
+        const refNode = allNodes.find(node => node.id.slice(-8) === refId)
         
-        if (totalTokens + summaryTokens < maxTokens) {
-          messages.push({
-            role: 'system',
-            content: summary
-          })
-          totalTokens += summaryTokens
-          includedNodes.push(refId)
+        if (refNode) {
+          console.log(`📎 Found referenced node: ${refNode.id} (${refId})`)
+          
+          // Create detailed context for the referenced node
+          const referenceContext = `
+REFERENCED CONVERSATION [${refId}]:
+User: "${refNode.prompt}"
+Assistant: "${refNode.response || 'No response yet'}"
+---`
+          
+          const summaryTokens = estimateTokens(referenceContext)
+          
+          if (totalTokens + summaryTokens < maxTokens) {
+            messages.push({
+              role: 'system',
+              content: referenceContext
+            })
+            totalTokens += summaryTokens
+            includedNodes.push(refNode.id)
+            console.log(`✅ Added reference context for ${refId}: ${summaryTokens} tokens`)
+          } else {
+            console.log(`⚠️ Skipping reference ${refId}: would exceed token limit`)
+          }
+        } else {
+          console.log(`❌ Referenced node ${refId} not found in session`)
         }
       }
     }

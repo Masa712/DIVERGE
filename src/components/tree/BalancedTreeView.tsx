@@ -71,7 +71,7 @@ export function CompactTreeView({
       return
     }
 
-    console.log(`🌳 CompactTreeView: Processing ${chatNodes.length} nodes`)
+//     console.log(`🌳 CompactTreeView: Processing ${chatNodes.length} nodes`)
 
     try {
       // Convert to tree nodes
@@ -80,7 +80,7 @@ export function CompactTreeView({
       // Calculate positions using compact layout
       const positions = layoutEngine.calculateLayout(treeNodes)
 
-      console.log(`📍 Calculated positions for ${positions.size} nodes`)
+//       console.log(`📍 Calculated positions for ${positions.size} nodes`)
 
       // Create React Flow nodes
       const reactFlowNodes: Node[] = []
@@ -147,7 +147,7 @@ export function CompactTreeView({
 
       // Debug information
       if (showDebugInfo) {
-        console.log('🔍 Compact Layout Debug Info:')
+//         console.log('🔍 Compact Layout Debug Info:')
         console.table(Array.from(positions.entries()).map(([id, pos]) => ({
           nodeId: id.slice(-8),
           x: Math.round(pos.x),

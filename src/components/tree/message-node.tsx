@@ -83,9 +83,21 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
           <span 
             className="text-xs font-mono bg-blue-100 text-blue-800 px-1 py-0.5 rounded cursor-pointer hover:bg-blue-200"
             title="Click to copy node reference"
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation()
-              navigator.clipboard.writeText(`@${node.id.slice(-8)}`)
+              try {
+                await navigator.clipboard.writeText(`@${node.id.slice(-8)}`)
+                // Visual feedback
+                const target = e.target as HTMLElement
+                const originalBg = target.className
+                target.className = originalBg.replace('bg-blue-100', 'bg-green-100').replace('text-blue-800', 'text-green-800')
+                setTimeout(() => {
+                  target.className = originalBg
+                }, 500)
+                console.log(`✅ Copied reference: @${node.id.slice(-8)}`)
+              } catch (err) {
+                console.error('Failed to copy to clipboard:', err)
+              }
             }}
           >
             #{node.id.slice(-8)}
