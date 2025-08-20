@@ -2,17 +2,26 @@
 
 import { useState, useRef, KeyboardEvent } from 'react'
 import { useError } from '@/components/providers/error-provider'
+import { extractNodeReferences } from '@/lib/utils/node-references'
+import { ChatNode } from '@/types'
 
 interface Props {
   onSendMessage: (message: string) => Promise<void>
   disabled?: boolean
+  availableNodes?: ChatNode[]
 }
 
-export function ChatInput({ onSendMessage, disabled = false }: Props) {
+export function ChatInput({ onSendMessage, disabled = false, availableNodes = [] }: Props) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { showError } = useError()
+
+  // Detect node references in current message
+  const detectedReferences = extractNodeReferences(message)
+  const hasValidReferences = detectedReferences.some(ref => 
+    availableNodes.some(node => node.id.includes(ref))
+  )
 
   const handleSubmit = async () => {
     if (!message.trim() || sending || disabled) return
@@ -52,9 +61,34 @@ export function ChatInput({ onSendMessage, disabled = false }: Props) {
   }
 
   return (
-    <div className="flex gap-2 items-end">
-      <div className="flex-1">
-        <textarea
+    <div className="space-y-2">
+      {/* Reference Helper */}
+      {detectedReferences.length > 0 && (
+        <div className="text-xs text-muted-foreground bg-muted p-2 rounded-lg">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">Detected references:</span>
+            {hasValidReferences ? (
+              <span className="text-green-600">✓ Valid references found</span>
+            ) : (
+              <span className="text-amber-600">⚠ Some references may not exist</span>
+            )}
+          </div>
+          <div className="mt-1">
+            {detectedReferences.map(ref => {
+              const matchingNode = availableNodes.find(node => node.id.includes(ref))
+              return (
+                <div key={ref} className="text-xs">
+                  • {ref}: {matchingNode ? `"${matchingNode.prompt.slice(0, 50)}..."` : 'Not found'}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 items-end">
+        <div className="flex-1">
+          <textarea
           ref={textareaRef}
           value={message}
           onChange={(e) => {
@@ -62,7 +96,7 @@ export function ChatInput({ onSendMessage, disabled = false }: Props) {
             adjustTextareaHeight()
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+          placeholder="Type your message... Use @node_abc123 or #abc123 to reference previous topics (Press Enter to send, Shift+Enter for new line)"
           disabled={sending || disabled}
           className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
           style={{ minHeight: '40px', maxHeight: '150px' }}
@@ -82,6 +116,7 @@ export function ChatInput({ onSendMessage, disabled = false }: Props) {
           'Send'
         )}
       </button>
+      </div>
     </div>
   )
 }

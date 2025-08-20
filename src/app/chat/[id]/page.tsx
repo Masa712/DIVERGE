@@ -257,7 +257,10 @@ export default function ChatSessionPage({ params }: Props) {
                   })()}
                 </div>
               )}
-              <ChatInput onSendMessage={handleSendMessage} />
+              <ChatInput 
+                onSendMessage={handleSendMessage} 
+                availableNodes={chatNodes}
+              />
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { OpenRouterClient } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
+import { buildEnhancedContext, extractNodeReferences } from '@/lib/db/enhanced-context'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,7 +24,8 @@ export async function POST(request: NextRequest) {
       temperature = 0.7, 
       max_tokens = 1000,
       sessionId,
-      parentNodeId
+      parentNodeId,
+      useEnhancedContext = true
     } = body
 
     if (!messages || !model) {
@@ -32,6 +34,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Extract user prompt for processing
+    const userPrompt = messages[messages.length - 1]?.content || ''
 
     // Calculate depth for the new node
     let depth = 0
@@ -54,7 +59,7 @@ export async function POST(request: NextRequest) {
         session_id: sessionId,
         parent_id: parentNodeId,
         model: model as ModelId,
-        prompt: messages[messages.length - 1].content,
+        prompt: userPrompt,
         status: 'streaming',
         temperature,
         max_tokens,
@@ -94,13 +99,45 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date(chatNodeRaw.updated_at),
     }
 
+    // Build context using enhanced context system if enabled and parentNodeId exists
+    let finalMessages = messages
+    let contextMetadata = null
+    
+    if (useEnhancedContext && parentNodeId) {
+      try {
+        // Extract node references from user prompt
+        const referencedNodes = extractNodeReferences(userPrompt)
+        
+        // Build enhanced context
+        const enhancedContext = await buildEnhancedContext(parentNodeId, {
+          includeSiblings: true,
+          maxTokens: 3000, // Leave room for new prompt and response
+          includeReferences: referencedNodes
+        })
+        
+        contextMetadata = enhancedContext.metadata
+        
+        // Combine enhanced context with new user message
+        finalMessages = [
+          ...enhancedContext.messages,
+          { role: 'user', content: userPrompt }
+        ]
+        
+        console.log(`Enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
+        
+      } catch (contextError) {
+        console.warn('Enhanced context failed, falling back to simple messages:', contextError)
+        // Keep original messages as fallback
+      }
+    }
+
     // Initialize OpenRouter client
     const client = new OpenRouterClient()
 
-    // Create completion
+    // Create completion with enhanced context
     const response = await client.createChatCompletion({
       model: model as ModelId,
-      messages,
+      messages: finalMessages,
       temperature,
       max_tokens,
       stream: false,
@@ -129,6 +166,7 @@ export async function POST(request: NextRequest) {
       id: chatNode.id,
       content: responseContent,
       usage,
+      contextMetadata,
     })
   } catch (error) {
     console.error('Chat API error:', error)

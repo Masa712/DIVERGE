@@ -74,14 +74,26 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
     >
       <Handle type="target" position={Position.Top} />
       
-      {/* Model Badge */}
+      {/* Model Badge and Node ID */}
       <div className="mb-2 flex items-center justify-between">
         <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium">
           {node.model.split('/')[1] || node.model}
         </span>
-        {node.depth > 0 && (
-          <span className="text-xs text-gray-500">Depth: {node.depth}</span>
-        )}
+        <div className="flex items-center gap-2">
+          <span 
+            className="text-xs font-mono bg-blue-100 text-blue-800 px-1 py-0.5 rounded cursor-pointer hover:bg-blue-200"
+            title="Click to copy node reference"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigator.clipboard.writeText(`@${node.id.slice(-8)}`)
+            }}
+          >
+            #{node.id.slice(-8)}
+          </span>
+          {node.depth > 0 && (
+            <span className="text-xs text-gray-500">D{node.depth}</span>
+          )}
+        </div>
       </div>
 
       {/* User Prompt */}

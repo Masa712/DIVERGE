@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createChatNode, getChatNodeById, buildContextForNode } from '@/lib/db/chat-nodes'
+import { buildEnhancedContext, extractNodeReferences } from '@/lib/db/enhanced-context'
 import { OpenRouterClient } from '@/lib/openrouter/client'
 import { ModelId } from '@/types'
 
@@ -13,7 +14,8 @@ export async function POST(request: NextRequest) {
       model,
       temperature = 0.7,
       maxTokens = 1000,
-      systemPrompt
+      systemPrompt,
+      useEnhancedContext = true
     } = body
 
     if (!parentNodeId || !sessionId || !prompt || !model) {
@@ -43,17 +45,58 @@ export async function POST(request: NextRequest) {
       maxTokens,
     })
 
-    // Build context from parent node path
-    const context = await buildContextForNode(parentNodeId)
+    // Build context using enhanced context system if enabled
+    let messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = []
+    let contextMetadata = null
     
-    // Add the new prompt to context with proper typing
-    const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
-      ...context.map(msg => ({
-        role: msg.role as 'user' | 'assistant' | 'system',
-        content: msg.content
-      })),
-      { role: 'user' as const, content: prompt }
-    ]
+    if (useEnhancedContext) {
+      try {
+        // Extract node references from prompt
+        const referencedNodes = extractNodeReferences(prompt)
+        
+        // Build enhanced context
+        const enhancedContext = await buildEnhancedContext(parentNodeId, {
+          includeSiblings: true,
+          maxTokens: 3000,
+          includeReferences: referencedNodes
+        })
+        
+        contextMetadata = enhancedContext.metadata
+        
+        // Convert to proper message format and add new prompt
+        messages = [
+          ...enhancedContext.messages.map(msg => ({
+            role: msg.role as 'user' | 'assistant' | 'system',
+            content: msg.content
+          })),
+          { role: 'user' as const, content: prompt }
+        ]
+        
+        console.log(`Branch enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
+        
+      } catch (contextError) {
+        console.warn('Enhanced context failed for branch, falling back to basic context:', contextError)
+        // Fallback to basic context
+        const basicContext = await buildContextForNode(parentNodeId)
+        messages = [
+          ...basicContext.map(msg => ({
+            role: msg.role as 'user' | 'assistant' | 'system',
+            content: msg.content
+          })),
+          { role: 'user' as const, content: prompt }
+        ]
+      }
+    } else {
+      // Use basic context
+      const basicContext = await buildContextForNode(parentNodeId)
+      messages = [
+        ...basicContext.map(msg => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content
+        })),
+        { role: 'user' as const, content: prompt }
+      ]
+    }
 
     // Initialize OpenRouter client
     const client = new OpenRouterClient()
@@ -86,6 +129,7 @@ export async function POST(request: NextRequest) {
         status: 'completed',
       },
       context: messages,
+      contextMetadata,
     })
   } catch (error) {
     console.error('Branch creation error:', error)

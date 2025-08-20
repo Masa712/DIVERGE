@@ -240,7 +240,10 @@ export default function ChatPage() {
                       })()}
                     </div>
                   )}
-                  <ChatInput onSendMessage={handleSendMessage} />
+                  <ChatInput 
+                    onSendMessage={handleSendMessage} 
+                    availableNodes={chatNodes}
+                  />
                 </div>
               </div>
             </div>
