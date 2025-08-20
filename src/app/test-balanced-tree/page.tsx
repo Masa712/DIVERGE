@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { BalancedTreeView, generateTestData } from '@/components/tree/BalancedTreeView'
+import { CompactTreeView, generateCompactTestData } from '@/components/tree/BalancedTreeView'
 import { ChatNode } from '@/types'
 
 export default function TestBalancedTreePage() {
-  const [testNodes] = useState<ChatNode[]>(() => generateTestData())
+  const [testNodes] = useState<ChatNode[]>(() => generateCompactTestData())
   const [currentNodeId, setCurrentNodeId] = useState<string>()
 
   const handleNodeClick = (nodeId: string) => {
@@ -23,10 +23,10 @@ export default function TestBalancedTreePage() {
       {/* Header */}
       <div className="bg-white border-b px-6 py-4">
         <h1 className="text-2xl font-bold text-gray-900">
-          Balanced Tree Layout Test
+          Compact Tree Layout Test
         </h1>
         <p className="text-gray-600 mt-1">
-          Testing unbalanced tree structures with different layout modes
+          Testing unbalanced tree structures with compact layout
         </p>
         
         {/* Test Case Info */}
@@ -39,7 +39,7 @@ export default function TestBalancedTreePage() {
             <li>• <strong>Child C:</strong> 財務管理について (孫ノードなし)</li>
           </ul>
           <div className="mt-2 text-xs text-blue-600">
-            This unbalanced structure tests the layout algorithm's ability to maintain visual symmetry.
+            This unbalanced structure tests the compact layout algorithm's efficiency.
           </div>
         </div>
 
@@ -55,7 +55,7 @@ export default function TestBalancedTreePage() {
 
       {/* Tree View */}
       <div className="flex-1">
-        <BalancedTreeView
+        <CompactTreeView
           nodes={testNodes}
           currentNodeId={currentNodeId}
           onNodeClick={handleNodeClick}
@@ -67,9 +67,8 @@ export default function TestBalancedTreePage() {
       <div className="bg-gray-50 border-t px-6 py-3">
         <div className="text-sm text-gray-600">
           <strong>Instructions:</strong> 
-          Use the layout mode buttons to test different algorithms. 
-          Try "Symmetric" for balanced spacing, "Compact" for minimal width, 
-          or "Distributed" for equal spacing. Enable debug info to see coordinate details.
+          Click on nodes to select them and see the compact layout in action. 
+          Enable debug info to see coordinate details and layout calculations.
         </div>
       </div>
     </div>

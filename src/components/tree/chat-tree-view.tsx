@@ -17,7 +17,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import { ChatNode } from '@/types'
 import { MessageNode } from './message-node'
-import { BalancedTreeView } from './BalancedTreeView'
+import { CompactTreeView } from './BalancedTreeView'
 
 interface Props {
   nodes: ChatNode[]
@@ -38,7 +38,7 @@ export function ChatTreeView({
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [useBalancedLayout, setUseBalancedLayout] = useState(false)
+  const [useCompactLayout, setUseCompactLayout] = useState(true)
 
   // Convert chat nodes to React Flow nodes and edges with improved layout
   useEffect(() => {
@@ -698,10 +698,10 @@ export function ChatTreeView({
     }
   }, [onNodeClick])
 
-  // Render balanced layout if enabled
-  if (useBalancedLayout) {
+  // Render compact layout if enabled (default)
+  if (useCompactLayout) {
     return (
-      <BalancedTreeView
+      <CompactTreeView
         nodes={chatNodes}
         currentNodeId={currentNodeId}
         onNodeClick={onNodeClick}
@@ -751,9 +751,9 @@ export function ChatTreeView({
             <div className="text-sm font-medium text-gray-700">Layout Engine</div>
             <div className="flex flex-col space-y-1">
               <button
-                onClick={() => setUseBalancedLayout(false)}
+                onClick={() => setUseCompactLayout(false)}
                 className={`px-3 py-1 text-xs rounded transition-colors ${
-                  !useBalancedLayout
+                  !useCompactLayout
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
@@ -761,14 +761,14 @@ export function ChatTreeView({
                 Legacy
               </button>
               <button
-                onClick={() => setUseBalancedLayout(true)}
+                onClick={() => setUseCompactLayout(true)}
                 className={`px-3 py-1 text-xs rounded transition-colors ${
-                  useBalancedLayout
+                  useCompactLayout
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                Balanced ✨
+                Compact ✨
               </button>
             </div>
           </div>

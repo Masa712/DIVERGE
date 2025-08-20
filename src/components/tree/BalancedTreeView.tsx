@@ -18,7 +18,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import { ChatNode } from '@/types'
 import { MessageNode } from './message-node'
-import { SymmetricTreeLayout, LayoutMode, TreeNode } from './SymmetricTreeLayout'
+import { CompactTreeLayout, TreeNode } from './CompactTreeLayout'
 
 interface Props {
   nodes: ChatNode[]
@@ -31,31 +31,14 @@ const nodeTypes = {
   message: MessageNode,
 }
 
-const LAYOUT_CONFIGS = {
-  symmetric: {
-    mode: 'symmetric' as LayoutMode,
-    horizontalSpacing: 350,
-    verticalSpacing: 400,
-    nodeWidth: 280,
-    minSubtreeSpacing: 200,
-  },
-  compact: {
-    mode: 'compact' as LayoutMode,
-    horizontalSpacing: 250,
-    verticalSpacing: 350,
-    nodeWidth: 280,
-    minSubtreeSpacing: 150,
-  },
-  distributed: {
-    mode: 'distributed' as LayoutMode,
-    horizontalSpacing: 450,
-    verticalSpacing: 450,
-    nodeWidth: 280,
-    minSubtreeSpacing: 300,
-  },
+const COMPACT_LAYOUT_CONFIG = {
+  horizontalSpacing: 250,
+  verticalSpacing: 350,
+  nodeWidth: 280,
+  minSubtreeSpacing: 150,
 }
 
-export function BalancedTreeView({ 
+export function CompactTreeView({ 
   nodes: chatNodes, 
   currentNodeId, 
   onNodeClick, 
@@ -63,13 +46,12 @@ export function BalancedTreeView({
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('symmetric')
   const [showDebugInfo, setShowDebugInfo] = useState(false)
 
   // Initialize layout engine
   const layoutEngine = useMemo(() => {
-    return new SymmetricTreeLayout(LAYOUT_CONFIGS[layoutMode])
-  }, [layoutMode])
+    return new CompactTreeLayout(COMPACT_LAYOUT_CONFIG)
+  }, [])
 
   // Convert ChatNodes to TreeNodes
   const convertToTreeNodes = useCallback((chatNodes: ChatNode[]): TreeNode[] => {
@@ -89,14 +71,13 @@ export function BalancedTreeView({
       return
     }
 
-    console.log(`🌳 BalancedTreeView: Processing ${chatNodes.length} nodes in ${layoutMode} mode`)
+    console.log(`🌳 CompactTreeView: Processing ${chatNodes.length} nodes`)
 
     try {
       // Convert to tree nodes
       const treeNodes = convertToTreeNodes(chatNodes)
       
-      // Calculate positions using symmetric layout
-      layoutEngine.setLayoutMode(layoutMode)
+      // Calculate positions using compact layout
       const positions = layoutEngine.calculateLayout(treeNodes)
 
       console.log(`📍 Calculated positions for ${positions.size} nodes`)
@@ -122,7 +103,6 @@ export function BalancedTreeView({
             node: chatNode,
             isCurrentNode,
             subtreeWidth,
-            layoutMode,
             onNodeClick: onNodeClick,
             onBranchCreate,
           },
@@ -167,7 +147,7 @@ export function BalancedTreeView({
 
       // Debug information
       if (showDebugInfo) {
-        console.log('🔍 Layout Debug Info:')
+        console.log('🔍 Compact Layout Debug Info:')
         console.table(Array.from(positions.entries()).map(([id, pos]) => ({
           nodeId: id.slice(-8),
           x: Math.round(pos.x),
@@ -177,8 +157,7 @@ export function BalancedTreeView({
         })))
 
         // Make debug data globally accessible
-        ;(window as any).balancedTreeDebugData = {
-          layoutMode,
+        ;(window as any).compactTreeDebugData = {
           positions: Array.from(positions.entries()),
           nodeCount: reactFlowNodes.length,
           edgeCount: reactFlowEdges.length,
@@ -191,7 +170,7 @@ export function BalancedTreeView({
       setNodes([])
       setEdges([])
     }
-  }, [chatNodes, currentNodeId, layoutMode, layoutEngine, convertToTreeNodes, onNodeClick, onBranchCreate, showDebugInfo])
+  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, onNodeClick, onBranchCreate, showDebugInfo])
 
   // Check if a node is in the current path
   const isCurrentPath = useCallback((nodeId: string, currentNodeId: string | undefined, nodes: ChatNode[]): boolean => {
@@ -212,10 +191,7 @@ export function BalancedTreeView({
     return currentPath.has(nodeId)
   }, [])
 
-  const handleLayoutModeChange = useCallback((newMode: LayoutMode) => {
-    console.log(`🔄 Switching layout mode: ${layoutMode} → ${newMode}`)
-    setLayoutMode(newMode)
-  }, [layoutMode])
+
 
   const fitViewOptions = useMemo(() => ({
     padding: 0.2,
@@ -251,61 +227,28 @@ export function BalancedTreeView({
           position="top-right"
         />
         
-        {/* Layout Control Panel */}
-        <Panel position="top-left" className="bg-white rounded-lg shadow-lg p-4 border">
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Layout Mode
-              </label>
-              <div className="grid grid-cols-1 gap-2">
-                {Object.keys(LAYOUT_CONFIGS).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => handleLayoutModeChange(mode as LayoutMode)}
-                    className={`px-3 py-2 text-sm rounded-md transition-colors ${
-                      layoutMode === mode
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Debug Control Panel */}
+        <Panel position="top-left" className="bg-white rounded-lg shadow-lg p-3 border">
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-gray-700">Compact Layout</div>
             
-            <div className="border-t pt-3">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={showDebugInfo}
-                  onChange={(e) => setShowDebugInfo(e.target.checked)}
-                  className="rounded"
-                />
-                <span className="text-sm text-gray-600">Debug Info</span>
-              </label>
-            </div>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={showDebugInfo}
+                onChange={(e) => setShowDebugInfo(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-600">Debug Info</span>
+            </label>
             
             {showDebugInfo && (
-              <div className="text-xs text-gray-500 space-y-1">
+              <div className="text-xs text-gray-500 space-y-1 border-t pt-2">
                 <div>Nodes: {nodes.length}</div>
                 <div>Edges: {edges.length}</div>
-                <div>Mode: {layoutMode}</div>
+                <div>Layout: Compact</div>
               </div>
             )}
-          </div>
-        </Panel>
-        
-        {/* Layout Mode Descriptions */}
-        <Panel position="bottom-left" className="bg-white rounded-lg shadow-lg p-3 border max-w-sm">
-          <div className="text-xs text-gray-600">
-            <div className="font-medium mb-1">Current: {layoutMode.charAt(0).toUpperCase() + layoutMode.slice(1)}</div>
-            <div>
-              {layoutMode === 'symmetric' && 'Balanced spacing based on subtree size'}
-              {layoutMode === 'compact' && 'Minimal spacing for dense layouts'}
-              {layoutMode === 'distributed' && 'Equal spacing for uniform appearance'}
-            </div>
           </div>
         </Panel>
       </ReactFlow>
@@ -314,7 +257,7 @@ export function BalancedTreeView({
 }
 
 // Test data generator for development
-export function generateTestData(): ChatNode[] {
+export function generateCompactTestData(): ChatNode[] {
   const nodes: ChatNode[] = []
   
   // Root node
