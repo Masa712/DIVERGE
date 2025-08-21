@@ -5,6 +5,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { ChatNode } from '@/types'
+import { getCachedSiblingNodes, resolveNodeReferences } from './enhanced-context-cache'
 
 export interface ContextScope {
   ancestors: ChatNode[]      // Direct ancestor chain
@@ -140,6 +141,7 @@ export async function buildEnhancedContext(
     includeReferences?: string[]
   } = {}
 ): Promise<EnhancedContext> {
+  const startTime = performance.now()
   const {
     includeSiblings = true,
     maxTokens = 4000,
@@ -151,7 +153,7 @@ export async function buildEnhancedContext(
   let totalTokens = 0
   const includedNodes: string[] = []
   
-  // 1. Get ancestor chain (existing logic)
+  // 1. Get ancestor chain (existing logic) - this is already efficient
   const { data: ancestorData, error: ancestorError } = await supabase.rpc(
     'get_node_ancestors',
     { node_id: nodeId }
@@ -190,6 +192,8 @@ export async function buildEnhancedContext(
     }))
     .sort((a: ChatNode, b: ChatNode) => a.depth - b.depth)
   
+  const sessionId = ancestors[0]?.sessionId || ''
+  
   // 2. Build base context from ancestors
   for (const node of ancestors) {
     // System prompt for root node
@@ -218,18 +222,13 @@ export async function buildEnhancedContext(
     }
   }
   
-  // 3. Include sibling context if requested and within token limit
+  // 3. Include sibling context if requested and within token limit (OPTIMIZED)
   let siblingCount = 0
   if (includeSiblings && totalTokens < maxTokens * 0.8) {
-    // Get siblings that have the same parent as nodeId (which is the parent node)
-    // We need to find all nodes that have nodeId as their parent
-    const { data: siblingNodes, error: siblingError } = await supabase
-      .from('chat_nodes')
-      .select('*')
-      .eq('parent_id', nodeId)
-      .order('created_at', { ascending: true })
+    // PERFORMANCE OPTIMIZATION: Direct sibling query instead of full session scan
+    const siblingNodes = await getCachedSiblingNodes(nodeId, sessionId)
     
-    const siblings = siblingNodes ? siblingNodes.map((node: any) => ({
+    const siblings = siblingNodes.map((node: any) => ({
       id: node.id,
       parentId: node.parent_id,
       sessionId: node.session_id,
@@ -249,7 +248,7 @@ export async function buildEnhancedContext(
       metadata: node.metadata || {},
       createdAt: new Date(node.created_at),
       updatedAt: new Date(node.updated_at),
-    })) : []
+    }))
     
     siblingCount = siblings.length
     console.log(`🔍 Found ${siblings.length} existing children of parent ${nodeId}`)
@@ -271,50 +270,40 @@ export async function buildEnhancedContext(
     }
   }
   
-  // 4. Include explicitly referenced nodes
+  // 4. Include explicitly referenced nodes (OPTIMIZED WITH CACHE)
   if (includeReferences.length > 0) {
-    // Get all nodes in the session to match short IDs
-    const { data: allNodes, error: allNodesError } = await supabase
-      .from('chat_nodes')
-      .select('*')
-      .eq('session_id', ancestors[0]?.sessionId || '')
+    const resolvedRefs = await resolveNodeReferences(sessionId, includeReferences)
     
-    if (!allNodesError && allNodes) {
-      for (const refId of includeReferences) {
-        if (totalTokens >= maxTokens * 0.95) break
-        
-        // Find node by matching the last 8 characters of the ID
-        const refNode = allNodes.find(node => node.id.slice(-8) === refId)
-        
-        if (refNode) {
-          console.log(`📎 Found referenced node: ${refNode.id} (${refId})`)
-          
-          // Create detailed context for the referenced node
-          const referenceContext = `
+    for (const { refId, node: refNode } of resolvedRefs) {
+      if (!refNode || totalTokens >= maxTokens * 0.95) break
+      
+      console.log(`📎 Found referenced node: ${refNode.id} (${refId})`)
+      
+      // Create detailed context for the referenced node
+      const referenceContext = `
 REFERENCED CONVERSATION [${refId}]:
 User: "${refNode.prompt}"
 Assistant: "${refNode.response || 'No response yet'}"
 ---`
-          
-          const summaryTokens = estimateTokens(referenceContext)
-          
-          if (totalTokens + summaryTokens < maxTokens) {
-            messages.push({
-              role: 'system',
-              content: referenceContext
-            })
-            totalTokens += summaryTokens
-            includedNodes.push(refNode.id)
-            console.log(`✅ Added reference context for ${refId}: ${summaryTokens} tokens`)
-          } else {
-            console.log(`⚠️ Skipping reference ${refId}: would exceed token limit`)
-          }
-        } else {
-          console.log(`❌ Referenced node ${refId} not found in session`)
-        }
+      
+      const summaryTokens = estimateTokens(referenceContext)
+      
+      if (totalTokens + summaryTokens < maxTokens) {
+        messages.push({
+          role: 'system',
+          content: referenceContext
+        })
+        totalTokens += summaryTokens
+        includedNodes.push(refNode.id)
+        console.log(`✅ Added reference context for ${refId}: ${summaryTokens} tokens`)
+      } else {
+        console.log(`⚠️ Skipping reference ${refId}: would exceed token limit`)
       }
     }
   }
+  
+  const endTime = performance.now()
+  console.log(`⚡ Enhanced context built in ${Math.round(endTime - startTime)}ms`)
   
   return {
     messages,

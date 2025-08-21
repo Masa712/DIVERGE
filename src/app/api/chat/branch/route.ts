@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createChatNode, getChatNodeById, buildContextForNode } from '@/lib/db/chat-nodes'
 import { buildEnhancedContext, extractNodeReferences } from '@/lib/db/enhanced-context'
+import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 import { OpenRouterClient } from '@/lib/openrouter/client'
 import { ModelId } from '@/types'
 
@@ -121,6 +122,9 @@ export async function POST(request: NextRequest) {
       responseTokens: usage?.completion_tokens || 0,
       costUsd: calculateCost(model, usage),
     })
+
+    // Clear session cache since new node was added
+    clearSessionCache(sessionId)
 
     return NextResponse.json({
       node: {

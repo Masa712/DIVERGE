@@ -3,6 +3,7 @@ import { OpenRouterClient } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
 import { buildEnhancedContext, extractNodeReferences } from '@/lib/db/enhanced-context'
+import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 
 export async function POST(request: NextRequest) {
   try {
@@ -167,6 +168,9 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('Error updating chat node:', updateError)
+    } else {
+      // Clear session cache since new node was added
+      clearSessionCache(sessionId)
     }
 
     return NextResponse.json({
