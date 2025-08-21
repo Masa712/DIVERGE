@@ -97,7 +97,8 @@ async function runPerformanceComparison(sessionId: string, nodeId: string, nodeC
     await buildEnhancedContext(nodeId, {
       includeSiblings: true,
       maxTokens: 3000,
-      includeReferences: [] // No references for first test
+      includeReferences: [], // No references for first test
+      model: 'gpt-4o' // NEW: Model awareness for accurate testing
     })
   } catch (error) {
     console.warn('❌ Context building failed, using fallback data')
@@ -127,7 +128,8 @@ async function runPerformanceComparison(sessionId: string, nodeId: string, nodeC
     await buildEnhancedContext(nodeId, {
       includeSiblings: true,
       maxTokens: 3000,
-      includeReferences: []
+      includeReferences: [],
+      model: 'gpt-4o'
     })
   } catch (error) {
     console.warn('❌ Cache warmup failed')
@@ -140,7 +142,8 @@ async function runPerformanceComparison(sessionId: string, nodeId: string, nodeC
     await buildEnhancedContext(nodeId, {
       includeSiblings: true,
       maxTokens: 3000,
-      includeReferences: []
+      includeReferences: [],
+      model: 'gpt-4o'
     })
   } catch (error) {
     console.warn('❌ Cached context building failed')

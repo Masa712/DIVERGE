@@ -11,6 +11,10 @@ interface PerformanceMetrics {
   referencesResolved: number
   sessionId: string
   timestamp: number
+  // NEW: Token accuracy metrics
+  tokenAccuracy?: number
+  estimatedTokens?: number
+  accurateTokens?: number
 }
 
 interface PerformanceTestResult {
@@ -99,7 +103,7 @@ export function PerformanceDashboard() {
         </CardHeader>
         <CardContent>
           {realTimeMetrics.length > 0 ? (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-5 gap-4">
               {realTimeMetrics.slice(-1).map((metric, index) => (
                 <div key={index} className="space-y-2">
                   <div className="text-center">
@@ -125,6 +129,17 @@ export function PerformanceDashboard() {
                       {metric.referencesResolved}
                     </div>
                     <div className="text-sm text-gray-600">References Resolved</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-teal-600">
+                      {metric.tokenAccuracy ? formatPercent(metric.tokenAccuracy * 100) : 'N/A'}
+                    </div>
+                    <div className="text-sm text-gray-600">Token Accuracy</div>
+                    {metric.estimatedTokens && metric.accurateTokens && (
+                      <div className="text-xs text-gray-500">
+                        Est: {metric.estimatedTokens} | Actual: {metric.accurateTokens}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

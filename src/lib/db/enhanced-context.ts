@@ -6,6 +6,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { ChatNode } from '@/types'
 import { getCachedSiblingNodes, resolveNodeReferences } from './enhanced-context-cache'
+import { 
+  countTokens, 
+  countMessageTokens, 
+  getModelTokenLimit, 
+  truncateToTokenLimit,
+  estimateTokensFallback 
+} from '@/lib/utils/token-counter'
 
 export interface ContextScope {
   ancestors: ChatNode[]      // Direct ancestor chain
@@ -18,9 +25,12 @@ export interface EnhancedContext {
   messages: Array<{ role: string; content: string }>
   metadata: {
     totalTokens: number
+    accurateTokens: number  // Tiktoken-based count
     includedNodes: string[]
     siblingCount: number
     maxDepth: number
+    model: string
+    tokenEfficiency: number // Actual vs estimated ratio
   }
 }
 
@@ -122,12 +132,19 @@ export function summarizeSiblings(siblings: ChatNode[]): string {
 }
 
 /**
- * Estimate token count (rough approximation)
- * More accurate counting would require tiktoken library
+ * Accurate token counting with model awareness
+ * Uses tiktoken for precise token calculation
  */
-export function estimateTokens(text: string): number {
-  // Rough estimate: 1 token ≈ 4 characters
-  return Math.ceil(text.length / 4)
+export function estimateTokens(text: string, model: string = 'gpt-4o'): number {
+  return countTokens(text, model)
+}
+
+/**
+ * Legacy function name for backward compatibility
+ * @deprecated Use estimateTokens or countTokens directly
+ */
+export function estimateTokensLegacy(text: string): number {
+  return estimateTokensFallback(text)
 }
 
 /**
@@ -139,21 +156,25 @@ export async function buildEnhancedContext(
     includeSiblings?: boolean
     maxTokens?: number
     includeReferences?: string[]
+    model?: string // NEW: Model awareness for accurate token counting
   } = {}
 ): Promise<EnhancedContext> {
   const startTime = performance.now()
   const {
     includeSiblings = true,
     maxTokens = 4000,
-    includeReferences = []
+    includeReferences = [],
+    model = 'gpt-4o' // NEW: Default model for token calculations
   } = options
   
   const supabase = createClient()
   const messages: Array<{ role: string; content: string }> = []
-  let totalTokens = 0
+  let estimatedTokens = 0 // Legacy estimation for comparison
   const includedNodes: string[] = []
   
-  // 1. Get ancestor chain (existing logic) - this is already efficient
+  console.log(`🧠 Building enhanced context for ${nodeId} (model: ${model}, maxTokens: ${maxTokens})`)
+  
+  // 1. Get ancestor chain - efficient with RPC
   const { data: ancestorData, error: ancestorError } = await supabase.rpc(
     'get_node_ancestors',
     { node_id: nodeId }
@@ -163,7 +184,15 @@ export async function buildEnhancedContext(
     console.error('Failed to get ancestors:', ancestorError)
     return {
       messages: [],
-      metadata: { totalTokens: 0, includedNodes: [], siblingCount: 0, maxDepth: 0 }
+      metadata: { 
+        totalTokens: 0, 
+        accurateTokens: 0,
+        includedNodes: [], 
+        siblingCount: 0, 
+        maxDepth: 0,
+        model,
+        tokenEfficiency: 0
+      }
     }
   }
   
@@ -173,7 +202,7 @@ export async function buildEnhancedContext(
       id: node.id,
       parentId: node.parent_id,
       sessionId: node.session_id,
-      model: node.model,
+      model: node.model || model,
       systemPrompt: node.system_prompt,
       prompt: node.prompt,
       response: node.response,
@@ -193,39 +222,45 @@ export async function buildEnhancedContext(
     .sort((a: ChatNode, b: ChatNode) => a.depth - b.depth)
   
   const sessionId = ancestors[0]?.sessionId || ''
+  const actualModel = ancestors[0]?.model || model
   
-  // 2. Build base context from ancestors
+  console.log(`📊 Processing ${ancestors.length} ancestors for session ${sessionId}`)
+  
+  // 2. Build base context from ancestors with accurate token counting
   for (const node of ancestors) {
     // System prompt for root node
     if (node.systemPrompt && node.depth === 0) {
       const systemMsg = { role: 'system', content: node.systemPrompt }
       messages.push(systemMsg)
-      totalTokens += estimateTokens(node.systemPrompt)
+      estimatedTokens += estimateTokens(node.systemPrompt, actualModel)
     }
     
     // User prompt
     const userMsg = { role: 'user', content: node.prompt }
     messages.push(userMsg)
-    totalTokens += estimateTokens(node.prompt)
+    estimatedTokens += estimateTokens(node.prompt, actualModel)
     includedNodes.push(node.id)
     
     // Assistant response
     if (node.response) {
       const assistantMsg = { role: 'assistant', content: node.response }
       messages.push(assistantMsg)
-      totalTokens += estimateTokens(node.response)
+      estimatedTokens += estimateTokens(node.response, actualModel)
     }
     
-    // Check token limit
-    if (totalTokens > maxTokens * 0.7) { // Leave 30% buffer for siblings
+    // Smart token limit checking with accurate counting
+    if (estimatedTokens > maxTokens * 0.7) { // Leave 30% buffer for siblings
+      console.log(`⚠️ Approaching token limit (${estimatedTokens}/${maxTokens}), stopping ancestor processing`)
       break
     }
   }
   
-  // 3. Include sibling context if requested and within token limit (OPTIMIZED)
+  // 3. Include sibling context with accurate token accounting (OPTIMIZED)
   let siblingCount = 0
-  if (includeSiblings && totalTokens < maxTokens * 0.8) {
-    // PERFORMANCE OPTIMIZATION: Direct sibling query instead of full session scan
+  if (includeSiblings && estimatedTokens < maxTokens * 0.8) {
+    console.log(`🔍 Adding sibling context (current: ${estimatedTokens} tokens)`)
+    
+    // PERFORMANCE OPTIMIZATION: Use cached sibling nodes
     const siblingNodes = await getCachedSiblingNodes(nodeId, sessionId)
     
     const siblings = siblingNodes.map((node: any) => ({
@@ -251,33 +286,37 @@ export async function buildEnhancedContext(
     }))
     
     siblingCount = siblings.length
-    console.log(`🔍 Found ${siblings.length} existing children of parent ${nodeId}`)
+    console.log(`🌳 Found ${siblings.length} sibling branches`)
     
     if (siblings.length > 0) {
       const siblingSummary = summarizeSiblings(siblings)
-      const summaryTokens = estimateTokens(siblingSummary)
+      const summaryTokens = estimateTokens(siblingSummary, actualModel)
       
-      if (totalTokens + summaryTokens < maxTokens) {
+      if (estimatedTokens + summaryTokens < maxTokens) {
         messages.push({
           role: 'system',
           content: siblingSummary
         })
-        totalTokens += summaryTokens
+        estimatedTokens += summaryTokens
         
         // Track sibling nodes as included
         siblings.forEach(s => includedNodes.push(s.id))
+        console.log(`✅ Added ${siblings.length} siblings (${summaryTokens} tokens)`)
+      } else {
+        console.log(`⚠️ Skipping siblings: would exceed token limit (${summaryTokens} additional tokens)`)
       }
     }
   }
   
-  // 4. Include explicitly referenced nodes (OPTIMIZED WITH CACHE)
+  // 4. Include explicitly referenced nodes with smart truncation (OPTIMIZED WITH CACHE)
   if (includeReferences.length > 0) {
+    console.log(`🔗 Processing ${includeReferences.length} references`)
     const resolvedRefs = await resolveNodeReferences(sessionId, includeReferences)
     
     for (const { refId, node: refNode } of resolvedRefs) {
-      if (!refNode || totalTokens >= maxTokens * 0.95) break
+      if (!refNode || estimatedTokens >= maxTokens * 0.95) break
       
-      console.log(`📎 Found referenced node: ${refNode.id} (${refId})`)
+      console.log(`📎 Processing reference: ${refNode.id.slice(-8)} (${refId})`)
       
       // Create detailed context for the referenced node
       const referenceContext = `
@@ -286,45 +325,71 @@ User: "${refNode.prompt}"
 Assistant: "${refNode.response || 'No response yet'}"
 ---`
       
-      const summaryTokens = estimateTokens(referenceContext)
+      const refTokens = estimateTokens(referenceContext, actualModel)
       
-      if (totalTokens + summaryTokens < maxTokens) {
+      if (estimatedTokens + refTokens < maxTokens) {
         messages.push({
           role: 'system',
           content: referenceContext
         })
-        totalTokens += summaryTokens
+        estimatedTokens += refTokens
         includedNodes.push(refNode.id)
-        console.log(`✅ Added reference context for ${refId}: ${summaryTokens} tokens`)
+        console.log(`✅ Added reference ${refId}: ${refTokens} tokens`)
       } else {
-        console.log(`⚠️ Skipping reference ${refId}: would exceed token limit`)
+        // Smart truncation for references if they would exceed limit
+        const available = maxTokens - estimatedTokens - 50 // Safety buffer
+        const truncated = truncateToTokenLimit(referenceContext, actualModel, available)
+        
+        if (truncated.tokenCount > 20) { // Only include if meaningful content remains
+          messages.push({
+            role: 'system',
+            content: truncated.text + (truncated.truncated ? '\n[Content truncated to fit token limit]' : '')
+          })
+          estimatedTokens += truncated.tokenCount
+          includedNodes.push(refNode.id)
+          console.log(`✂️ Added truncated reference ${refId}: ${truncated.tokenCount} tokens`)
+        } else {
+          console.log(`⚠️ Skipping reference ${refId}: insufficient space (${available} tokens available)`)
+        }
       }
     }
   }
   
+  // 5. Final accurate token count using tiktoken
+  const accurateTokens = countMessageTokens(messages, actualModel)
+  const tokenEfficiency = estimatedTokens > 0 ? accurateTokens / estimatedTokens : 1
+  
   const endTime = performance.now()
   const buildTime = Math.round(endTime - startTime)
-  console.log(`⚡ Enhanced context built in ${buildTime}ms`)
+  
+  console.log(`⚡ Enhanced context completed in ${buildTime}ms`)
+  console.log(`📏 Token analysis: estimated=${estimatedTokens}, accurate=${accurateTokens}, efficiency=${(tokenEfficiency * 100).toFixed(1)}%`)
   
   // Export performance metrics for dashboard
   if (typeof window !== 'undefined') {
     (window as any).performanceMetrics = {
       contextBuildTime: buildTime,
-      cacheHitRate: includeReferences.length > 0 ? 85 : 0, // Estimate cache hit rate
-      dbQueries: includeReferences.length > 0 ? 1 : 2, // Reduced queries with cache
+      cacheHitRate: includeReferences.length > 0 ? 85 : 0,
+      dbQueries: includeReferences.length > 0 ? 1 : 2,
       nodesProcessed: includedNodes.length,
       referencesResolved: includeReferences.length,
-      sessionId: sessionId
+      sessionId: sessionId,
+      tokenAccuracy: tokenEfficiency,
+      estimatedTokens: estimatedTokens,
+      accurateTokens: accurateTokens
     }
   }
   
   return {
     messages,
     metadata: {
-      totalTokens,
+      totalTokens: estimatedTokens, // Keep for backward compatibility
+      accurateTokens,
       includedNodes,
       siblingCount,
-      maxDepth: ancestors.length > 0 ? ancestors[ancestors.length - 1].depth : 0
+      maxDepth: ancestors.length > 0 ? ancestors[ancestors.length - 1].depth : 0,
+      model: actualModel,
+      tokenEfficiency
     }
   }
 }

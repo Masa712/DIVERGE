@@ -55,11 +55,12 @@ export async function POST(request: NextRequest) {
         // Extract node references from prompt
         const referencedNodes = extractNodeReferences(prompt)
         
-        // Build enhanced context
+        // Build enhanced context with model awareness
         const enhancedContext = await buildEnhancedContext(parentNodeId, {
           includeSiblings: true,
           maxTokens: 3000,
-          includeReferences: referencedNodes
+          includeReferences: referencedNodes,
+          model: model // NEW: Pass model for accurate token counting
         })
         
         contextMetadata = enhancedContext.metadata
