@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createChatNode, getChatNodeById, buildContextForNode } from '@/lib/db/chat-nodes'
-import { buildEnhancedContext, extractNodeReferences } from '@/lib/db/enhanced-context'
+import { buildEnhancedContext, buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
 import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 import { OpenRouterClient } from '@/lib/openrouter/client'
 import { ModelId } from '@/types'
@@ -55,12 +55,12 @@ export async function POST(request: NextRequest) {
         // Extract node references from prompt
         const referencedNodes = extractNodeReferences(prompt)
         
-        // Build enhanced context with model awareness
-        const enhancedContext = await buildEnhancedContext(parentNodeId, {
+        // Build enhanced context with intelligent strategy selection
+        const enhancedContext = await buildContextWithStrategy(parentNodeId, prompt, {
           includeSiblings: true,
           maxTokens: 3000,
           includeReferences: referencedNodes,
-          model: model // NEW: Pass model for accurate token counting
+          model: model // Pass model for accurate token counting
         })
         
         contextMetadata = enhancedContext.metadata

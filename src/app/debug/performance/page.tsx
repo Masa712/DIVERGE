@@ -1,6 +1,7 @@
 'use client'
 
 import { PerformanceDashboard } from '@/components/debug/PerformanceDashboard'
+import { ContextStrategyDashboard } from '@/components/debug/ContextStrategyDashboard'
 
 export default function PerformanceDebugPage() {
   return (
@@ -24,6 +25,10 @@ export default function PerformanceDebugPage() {
         </div>
         
         <PerformanceDashboard />
+        
+        <div className="mt-8">
+          <ContextStrategyDashboard />
+        </div>
         
         <div className="mt-8 bg-white rounded-lg shadow-sm border p-6">
           <h3 className="text-lg font-semibold mb-4">📋 Test Instructions</h3>

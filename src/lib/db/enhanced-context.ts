@@ -394,5 +394,65 @@ Assistant: "${refNode.response || 'No response yet'}"
   }
 }
 
+/**
+ * Flexible context builder - automatically chooses optimal strategy
+ */
+export async function buildContextWithStrategy(
+  nodeId: string,
+  userPrompt: string,
+  options: {
+    includeSiblings?: boolean
+    maxTokens?: number
+    includeReferences?: string[]
+    model?: string
+    strategy?: string
+    priority?: string
+  } = {}
+): Promise<EnhancedContext> {
+  // Import flexible context builder
+  const { buildFlexibleEnhancedContext } = await import('./flexible-context')
+  const { inferOptimalStrategy, getDefaultPriority } = await import('./context-strategies')
+  
+  // Convert options to flexible format
+  const strategy = (options.strategy as any) || inferOptimalStrategy(userPrompt)
+  const priority = (options.priority as any) || getDefaultPriority(strategy)
+  
+  const flexibleOptions = {
+    strategy,
+    priority,
+    maxTokens: options.maxTokens || 4000,
+    model: options.model || 'gpt-4o',
+    includeReferences: options.includeReferences || [],
+    adaptiveTokens: true,
+  }
+  
+  console.log(`🧠 Using intelligent context strategy: ${strategy} (${priority} priority)`)
+  
+  try {
+    const flexibleResult = await buildFlexibleEnhancedContext(nodeId, userPrompt, flexibleOptions)
+    
+    // Convert to standard EnhancedContext format for backward compatibility
+    return {
+      messages: flexibleResult.messages,
+      metadata: {
+        totalTokens: flexibleResult.metadata.totalTokens,
+        accurateTokens: flexibleResult.metadata.accurateTokens,
+        includedNodes: flexibleResult.metadata.includedNodes,
+        siblingCount: flexibleResult.metadata.siblingCount,
+        maxDepth: flexibleResult.metadata.maxDepth,
+        model: flexibleResult.metadata.model,
+        tokenEfficiency: flexibleResult.metadata.tokenEfficiency,
+        // Additional flexible metadata available but not breaking changes
+        ...(flexibleResult.metadata.strategy && { strategy: flexibleResult.metadata.strategy }),
+        ...(flexibleResult.metadata.adaptiveAdjustments && { adaptiveAdjustments: flexibleResult.metadata.adaptiveAdjustments })
+      }
+    }
+  } catch (error) {
+    console.warn('Flexible context failed, falling back to standard:', error)
+    // Fallback to original method
+    return buildEnhancedContext(nodeId, options)
+  }
+}
+
 // Re-export from utils for backward compatibility
 export { getShortNodeId, formatNodeReference } from '@/lib/utils/node-references'

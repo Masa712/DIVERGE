@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { OpenRouterClient } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
-import { buildEnhancedContext, extractNodeReferences } from '@/lib/db/enhanced-context'
+import { buildEnhancedContext, buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
 import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 
 export async function POST(request: NextRequest) {
@@ -114,12 +114,12 @@ export async function POST(request: NextRequest) {
         const referencedNodes = extractNodeReferences(userPrompt)
         console.log(`Extracted references:`, referencedNodes)
         
-        // Build enhanced context with model awareness
-        const enhancedContext = await buildEnhancedContext(parentNodeId, {
+        // Build enhanced context with intelligent strategy selection
+        const enhancedContext = await buildContextWithStrategy(parentNodeId, userPrompt, {
           includeSiblings: true,
           maxTokens: 3000, // Leave room for new prompt and response
           includeReferences: referencedNodes,
-          model: model // NEW: Pass model for accurate token counting
+          model: model // Pass model for accurate token counting
         })
         
         contextMetadata = enhancedContext.metadata
