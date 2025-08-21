@@ -2,6 +2,7 @@
 
 import { PerformanceDashboard } from '@/components/debug/PerformanceDashboard'
 import { ContextStrategyDashboard } from '@/components/debug/ContextStrategyDashboard'
+import { ScalabilityDashboard } from '@/components/debug/ScalabilityDashboard'
 
 export default function PerformanceDebugPage() {
   return (
@@ -28,6 +29,10 @@ export default function PerformanceDebugPage() {
         
         <div className="mt-8">
           <ContextStrategyDashboard />
+        </div>
+        
+        <div className="mt-8">
+          <ScalabilityDashboard />
         </div>
         
         <div className="mt-8 bg-white rounded-lg shadow-sm border p-6">
