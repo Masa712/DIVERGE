@@ -9,10 +9,8 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   Controls,
-  MiniMap,
   Background,
   BackgroundVariant,
-  Panel,
   MarkerType,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
@@ -25,6 +23,7 @@ interface Props {
   currentNodeId?: string
   onNodeClick?: (nodeId: string) => void
   onBranchCreate?: (parentNodeId: string, prompt: string) => void
+  onNodeIdClick?: (nodeReference: string) => void
 }
 
 const nodeTypes = {
@@ -42,11 +41,11 @@ export function CompactTreeView({
   nodes: chatNodes, 
   currentNodeId, 
   onNodeClick, 
-  onBranchCreate 
+  onBranchCreate,
+  onNodeIdClick
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const [showDebugInfo, setShowDebugInfo] = useState(false)
 
   // Initialize layout engine
   const layoutEngine = useMemo(() => {
@@ -145,32 +144,12 @@ export function CompactTreeView({
       setNodes(reactFlowNodes)
       setEdges(reactFlowEdges)
 
-      // Debug information
-      if (showDebugInfo) {
-//         console.log('🔍 Compact Layout Debug Info:')
-        console.table(Array.from(positions.entries()).map(([id, pos]) => ({
-          nodeId: id.slice(-8),
-          x: Math.round(pos.x),
-          y: Math.round(pos.y),
-          subtreeWidth: Math.round(pos.subtreeWidth),
-          prompt: nodeMap.get(id)?.prompt?.slice(0, 30) + '...' || 'N/A'
-        })))
-
-        // Make debug data globally accessible
-        ;(window as any).compactTreeDebugData = {
-          positions: Array.from(positions.entries()),
-          nodeCount: reactFlowNodes.length,
-          edgeCount: reactFlowEdges.length,
-          config: layoutEngine.getConfig(),
-        }
-      }
-
     } catch (error) {
       console.error('❌ Error in BalancedTreeView layout calculation:', error)
       setNodes([])
       setEdges([])
     }
-  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, onNodeClick, onBranchCreate, showDebugInfo])
+  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, onNodeClick, onBranchCreate, onNodeIdClick])
 
   // Check if a node is in the current path
   const isCurrentPath = useCallback((nodeId: string, currentNodeId: string | undefined, nodes: ChatNode[]): boolean => {
@@ -219,38 +198,6 @@ export function CompactTreeView({
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
         <Controls showInteractive={false} />
-        <MiniMap 
-          nodeStrokeColor="#374151"
-          nodeColor="#f3f4f6"
-          nodeBorderRadius={8}
-          maskColor="rgba(0,0,0,0.1)"
-          position="top-right"
-        />
-        
-        {/* Debug Control Panel */}
-        <Panel position="top-left" className="bg-white rounded-lg shadow-lg p-3 border">
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-gray-700">Compact Layout</div>
-            
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={showDebugInfo}
-                onChange={(e) => setShowDebugInfo(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm text-gray-600">Debug Info</span>
-            </label>
-            
-            {showDebugInfo && (
-              <div className="text-xs text-gray-500 space-y-1 border-t pt-2">
-                <div>Nodes: {nodes.length}</div>
-                <div>Edges: {edges.length}</div>
-                <div>Layout: Compact</div>
-              </div>
-            )}
-          </div>
-        </Panel>
       </ReactFlow>
     </div>
   )

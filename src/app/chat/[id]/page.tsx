@@ -28,6 +28,8 @@ export default function ChatSessionPage({ params }: Props) {
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [insertTextFunction, setInsertTextFunction] = useState<((text: string) => void) | null>(null)
+  const [isInputFocused, setIsInputFocused] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -109,6 +111,18 @@ export default function ChatSessionPage({ params }: Props) {
   const handleCloseSidebar = () => {
     setIsSidebarOpen(false)
     setSelectedNodeForDetail(null)
+  }
+
+  const handleNodeIdClick = (nodeReference: string) => {
+    console.log('🔍 Node ID clicked:', nodeReference, 'Input focused:', isInputFocused, 'Insert function:', !!insertTextFunction)
+    if (isInputFocused && insertTextFunction) {
+      insertTextFunction(nodeReference + ' ')
+    } else {
+      // Copy to clipboard as fallback
+      navigator.clipboard.writeText(nodeReference)
+        .then(() => console.log('📋 Copied to clipboard:', nodeReference))
+        .catch(err => console.error('Failed to copy:', err))
+    }
   }
 
   const handleSendMessage = async (message: string) => {
@@ -246,6 +260,7 @@ export default function ChatSessionPage({ params }: Props) {
               currentNodeId={currentNodeId}
               onNodeClick={handleNodeClick}
               onBranchCreate={handleBranchCreate}
+              onNodeIdClick={handleNodeIdClick}
             />
           </div>
           
@@ -263,6 +278,8 @@ export default function ChatSessionPage({ params }: Props) {
               <ChatInput 
                 onSendMessage={handleSendMessage} 
                 availableNodes={chatNodes}
+                onInputMount={setInsertTextFunction}
+                onFocusChange={setIsInputFocused}
               />
             </div>
           </div>

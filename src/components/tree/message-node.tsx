@@ -82,21 +82,83 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
         <div className="flex items-center gap-2">
           <span 
             className="text-xs font-mono bg-blue-100 text-blue-800 px-1 py-0.5 rounded cursor-pointer hover:bg-blue-200"
-            title="Click to copy node reference"
+            title="Click to copy node reference or insert into input"
+            onMouseDown={(e) => {
+              // Prevent focus loss from textarea
+              e.preventDefault()
+              e.stopPropagation()
+            }}
             onClick={async (e) => {
               e.stopPropagation()
-              try {
-                await navigator.clipboard.writeText(`@${node.id.slice(-8)}`)
-                // Visual feedback
+              const nodeRef = `@${node.id.slice(-8)}`
+              
+              // Try to find the textarea element
+              const textarea = document.querySelector('textarea[placeholder*="Type your message"]') as HTMLTextAreaElement
+              
+              // Check if textarea was recently focused (within last 100ms) or is currently focused
+              const wasFocused = textarea && (
+                document.activeElement === textarea || 
+                textarea.dataset.wasFocused === 'true'
+              )
+              
+              console.log('🔍 Checking focus:', {
+                activeElement: document.activeElement?.tagName,
+                textareaFound: !!textarea,
+                wasFocused
+              })
+              
+              if (textarea && wasFocused) {
+                // Insert directly into the textarea
+                const start = textarea.selectionStart
+                const end = textarea.selectionEnd
+                const currentValue = textarea.value
+                const newValue = currentValue.slice(0, start) + nodeRef + ' ' + currentValue.slice(end)
+                
+                // Update the textarea value
+                textarea.value = newValue
+                
+                // Trigger React's onChange event
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                  window.HTMLTextAreaElement.prototype,
+                  'value'
+                )?.set
+                if (nativeInputValueSetter) {
+                  nativeInputValueSetter.call(textarea, newValue)
+                }
+                const inputEvent = new Event('input', { bubbles: true })
+                textarea.dispatchEvent(inputEvent)
+                
+                // Set cursor position after inserted text
+                setTimeout(() => {
+                  textarea.focus()
+                  const newCursorPos = start + nodeRef.length + 1
+                  textarea.setSelectionRange(newCursorPos, newCursorPos)
+                }, 0)
+                
+                // Visual feedback for insertion
                 const target = e.target as HTMLElement
                 const originalBg = target.className
-                target.className = originalBg.replace('bg-blue-100', 'bg-green-100').replace('text-blue-800', 'text-green-800')
+                target.className = originalBg.replace('bg-blue-100', 'bg-purple-100').replace('text-blue-800', 'text-purple-800')
                 setTimeout(() => {
                   target.className = originalBg
                 }, 500)
-                console.log(`✅ Copied reference: @${node.id.slice(-8)}`)
-              } catch (err) {
-                console.error('Failed to copy to clipboard:', err)
+                
+                console.log(`✅ Inserted reference: ${nodeRef}`)
+              } else {
+                // Copy to clipboard
+                try {
+                  await navigator.clipboard.writeText(nodeRef)
+                  // Visual feedback for copy
+                  const target = e.target as HTMLElement
+                  const originalBg = target.className
+                  target.className = originalBg.replace('bg-blue-100', 'bg-green-100').replace('text-blue-800', 'text-green-800')
+                  setTimeout(() => {
+                    target.className = originalBg
+                  }, 500)
+                  console.log(`📋 Copied reference: ${nodeRef}`)
+                } catch (err) {
+                  console.error('Failed to copy to clipboard:', err)
+                }
               }
             }}
           >

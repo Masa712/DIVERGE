@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
 import { useError } from '@/components/providers/error-provider'
 import { extractNodeReferences } from '@/lib/utils/node-references'
 import { ChatNode } from '@/types'
@@ -9,9 +9,11 @@ interface Props {
   onSendMessage: (message: string) => Promise<void>
   disabled?: boolean
   availableNodes?: ChatNode[]
+  onInputMount?: (insertFunction: (text: string) => void) => void
+  onFocusChange?: (focused: boolean) => void
 }
 
-export function ChatInput({ onSendMessage, disabled = false, availableNodes = [] }: Props) {
+export function ChatInput({ onSendMessage, disabled = false, availableNodes = [], onInputMount, onFocusChange }: Props) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -60,6 +62,41 @@ export function ChatInput({ onSendMessage, disabled = false, availableNodes = []
     }
   }
 
+  // Function to insert text at cursor position
+  const insertAtCursor = useCallback((text: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    
+    // Get the current value directly from the textarea to avoid stale closure
+    const currentValue = textarea.value
+    
+    // Insert the text at cursor position
+    const newValue = currentValue.slice(0, start) + text + currentValue.slice(end)
+    setMessage(newValue)
+    
+    // Update textarea value directly
+    textarea.value = newValue
+    
+    // Set cursor position after inserted text
+    setTimeout(() => {
+      textarea.focus()
+      const newCursorPos = start + text.length
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+      adjustTextareaHeight()
+    }, 0)
+  }, [])
+
+  // Register the insert function when component mounts
+  useEffect(() => {
+    if (onInputMount) {
+      console.log('📝 Registering insert function for node ID clicks')
+      onInputMount(insertAtCursor)
+    }
+  }, [onInputMount, insertAtCursor])
+
   return (
     <div className="space-y-2">
       {/* Reference Helper */}
@@ -96,6 +133,24 @@ export function ChatInput({ onSendMessage, disabled = false, availableNodes = []
             adjustTextareaHeight()
           }}
           onKeyDown={handleKeyDown}
+          onFocus={(e) => {
+            console.log('📝 Textarea focused')
+            // Mark textarea as focused for node ID click detection
+            e.currentTarget.dataset.wasFocused = 'true'
+            onFocusChange?.(true)
+          }}
+          onBlur={(e) => {
+            console.log('📝 Textarea blurred')
+            // Keep the focused state briefly to allow node ID clicks
+            const textarea = e.currentTarget
+            setTimeout(() => {
+              // Check if textarea still exists in DOM
+              if (textarea && textarea.dataset) {
+                textarea.dataset.wasFocused = 'false'
+              }
+            }, 200)
+            onFocusChange?.(false)
+          }}
           placeholder="Type your message... Use @node_abc123 or #abc123 to reference previous topics (Press Enter to send, Shift+Enter for new line)"
           disabled={sending || disabled}
           className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
