@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { ChatNode } from '@/types'
 
@@ -8,14 +8,10 @@ interface MessageNodeData {
   node: ChatNode
   isCurrentNode: boolean
   onNodeClick?: (nodeId: string) => void
-  onBranchCreate?: (parentNodeId: string, prompt: string) => void
 }
 
 export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
-  const { node, isCurrentNode, onNodeClick, onBranchCreate } = data
-  const [showBranchInput, setShowBranchInput] = useState(false)
-  const [branchPrompt, setBranchPrompt] = useState('')
-  const [isCreatingBranch, setIsCreatingBranch] = useState(false)
+  const { node, isCurrentNode, onNodeClick } = data
   
   const getStatusColor = () => {
     switch (node.status) {
@@ -37,31 +33,6 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
     return text.substring(0, maxLength) + '...'
   }
 
-  const handleBranchSubmit = () => {
-    if (!branchPrompt.trim() || !onBranchCreate || isCreatingBranch) return
-    
-    setIsCreatingBranch(true)
-    try {
-      onBranchCreate(node.id, branchPrompt.trim())
-      setBranchPrompt('')
-      setShowBranchInput(false)
-    } catch (error) {
-      console.error('Failed to create branch:', error)
-    } finally {
-      setIsCreatingBranch(false)
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleBranchSubmit()
-    }
-    if (e.key === 'Escape') {
-      setShowBranchInput(false)
-      setBranchPrompt('')
-    }
-  }
 
   return (
     <div
@@ -196,53 +167,6 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
         )}
       </div>
 
-      {/* Branch Input Field */}
-      {showBranchInput && onBranchCreate && (
-        <div className="mt-3 border-t pt-3" onClick={(e) => e.stopPropagation()}>
-          <textarea
-            value={branchPrompt}
-            onChange={(e) => setBranchPrompt(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter alternative prompt..."
-            className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
-            rows={2}
-            autoFocus
-            disabled={isCreatingBranch}
-          />
-          <div className="mt-1 flex gap-1">
-            <button
-              onClick={handleBranchSubmit}
-              disabled={!branchPrompt.trim() || isCreatingBranch}
-              className="flex-1 rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {isCreatingBranch ? 'Creating...' : 'Branch'}
-            </button>
-            <button
-              onClick={() => {
-                setShowBranchInput(false)
-                setBranchPrompt('')
-              }}
-              disabled={isCreatingBranch}
-              className="rounded bg-gray-200 px-2 py-1 text-xs font-medium hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Branch Button - only show when not showing input */}
-      {!showBranchInput && onBranchCreate && node.status === 'completed' && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            setShowBranchInput(true)
-          }}
-          className="mt-2 w-full rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Branch from here
-        </button>
-      )}
 
       <Handle type="source" position={Position.Bottom} />
     </div>

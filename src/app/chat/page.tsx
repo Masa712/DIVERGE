@@ -70,36 +70,6 @@ export default function ChatPage() {
     setIsSidebarOpen(false)
   }
 
-  const handleBranchCreate = async (parentNodeId: string, branchPrompt: string) => {
-    if (!branchPrompt || !currentSession) return
-
-    try {
-      const response = await fetch('/api/chat/branch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          parentNodeId,
-          sessionId: currentSession.id,
-          prompt: branchPrompt,
-          model: selectedModel,
-        }),
-      })
-
-      if (response.ok) {
-        await fetchSession(currentSession.id)
-        showError('Branch created successfully!')
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        showError(errorData.error || 'Failed to create branch')
-      }
-    } catch (error) {
-      console.error('Error creating branch:', error)
-      showError('Failed to create branch')
-    }
-  }
-
   const handleNodeClick = (nodeId: string) => {
     setCurrentNodeId(nodeId)
     
@@ -228,7 +198,6 @@ export default function ChatPage() {
                   nodes={chatNodes}
                   currentNodeId={currentNodeId}
                   onNodeClick={handleNodeClick}
-                  onBranchCreate={handleBranchCreate}
                 />
               </div>
               

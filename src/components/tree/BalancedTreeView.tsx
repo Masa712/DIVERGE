@@ -22,7 +22,6 @@ interface Props {
   nodes: ChatNode[]
   currentNodeId?: string
   onNodeClick?: (nodeId: string) => void
-  onBranchCreate?: (parentNodeId: string, prompt: string) => void
   onNodeIdClick?: (nodeReference: string) => void
 }
 
@@ -41,7 +40,6 @@ export function CompactTreeView({
   nodes: chatNodes, 
   currentNodeId, 
   onNodeClick, 
-  onBranchCreate,
   onNodeIdClick
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
@@ -103,7 +101,6 @@ export function CompactTreeView({
             isCurrentNode,
             subtreeWidth,
             onNodeClick: onNodeClick,
-            onBranchCreate,
           },
           draggable: false,
           selectable: true,
@@ -149,7 +146,7 @@ export function CompactTreeView({
       setNodes([])
       setEdges([])
     }
-  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, onNodeClick, onBranchCreate, onNodeIdClick])
+  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, onNodeClick, onNodeIdClick])
 
   // Check if a node is in the current path
   const isCurrentPath = useCallback((nodeId: string, currentNodeId: string | undefined, nodes: ChatNode[]): boolean => {

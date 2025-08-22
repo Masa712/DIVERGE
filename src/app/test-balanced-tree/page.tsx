@@ -13,10 +13,6 @@ export default function TestBalancedTreePage() {
     console.log('Node clicked:', nodeId)
   }
 
-  const handleBranchCreate = (parentNodeId: string, prompt: string) => {
-    console.log('Branch create:', { parentNodeId, prompt })
-    // In a real app, this would create a new node
-  }
 
   return (
     <div className="h-screen w-full flex flex-col">
@@ -59,7 +55,6 @@ export default function TestBalancedTreePage() {
           nodes={testNodes}
           currentNodeId={currentNodeId}
           onNodeClick={handleNodeClick}
-          onBranchCreate={handleBranchCreate}
         />
       </div>
 
