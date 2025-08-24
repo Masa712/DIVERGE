@@ -23,6 +23,7 @@ interface Props {
   currentNodeId?: string
   onNodeClick?: (nodeId: string) => void
   onNodeIdClick?: (nodeReference: string) => void
+  onBackgroundClick?: () => void
 }
 
 const nodeTypes = {
@@ -40,7 +41,8 @@ export function CompactTreeView({
   nodes: chatNodes, 
   currentNodeId, 
   onNodeClick, 
-  onNodeIdClick
+  onNodeIdClick,
+  onBackgroundClick
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -192,6 +194,7 @@ export function CompactTreeView({
         minZoom={0.1}
         maxZoom={2}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        onPaneClick={onBackgroundClick}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
         <Controls showInteractive={false} />

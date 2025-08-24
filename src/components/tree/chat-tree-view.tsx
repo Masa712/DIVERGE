@@ -8,13 +8,15 @@ interface Props {
   currentNodeId?: string
   onNodeClick?: (nodeId: string) => void
   onNodeIdClick?: (nodeReference: string) => void
+  onBackgroundClick?: () => void
 }
 
 export function ChatTreeView({ 
   nodes: chatNodes, 
   currentNodeId, 
   onNodeClick, 
-  onNodeIdClick
+  onNodeIdClick,
+  onBackgroundClick
 }: Props) {
   // Always use CompactTreeView - simplified implementation
   return (
@@ -23,6 +25,7 @@ export function ChatTreeView({
       currentNodeId={currentNodeId}
       onNodeClick={onNodeClick}
       onNodeIdClick={onNodeIdClick}
+      onBackgroundClick={onBackgroundClick}
     />
   )
 }

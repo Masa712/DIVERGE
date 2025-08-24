@@ -169,49 +169,39 @@ export default function ChatPage() {
       />
 
       {/* Main Content */}
-      <div className={`flex flex-col flex-1 overflow-hidden transition-all duration-300 ${
-        isSidebarOpen ? 'mr-96' : ''
-      }`}>
+      <div className="flex flex-col flex-1 overflow-hidden">
         {currentSession ? (
           <>
-            <header className="border-b px-4 py-3 bg-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="font-semibold text-gray-900">{currentSession.name}</h1>
-                  <p className="text-sm text-muted-foreground">
-                    {chatNodes.length} messages • ${(currentSession.totalCostUsd || 0).toFixed(4)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <ModelSelector
-                    selectedModel={selectedModel}
-                    onModelChange={setSelectedModel}
-                    availableModels={AVAILABLE_MODELS}
-                  />
-                </div>
-              </div>
-            </header>
-
             <div className="flex flex-col flex-1 overflow-hidden">
               <div className="flex-1 overflow-hidden">
                 <ChatTreeView
                   nodes={chatNodes}
                   currentNodeId={currentNodeId}
                   onNodeClick={handleNodeClick}
+                  onBackgroundClick={handleCloseSidebar}
                 />
               </div>
               
               <div className="border-t p-4 bg-background">
                 <div className="max-w-4xl mx-auto">
-                  {currentNodeId && (
-                    <div className="mb-3 text-sm text-muted-foreground">
-                      <span className="font-medium">Continuing from:</span>{' '}
-                      {(() => {
-                        const currentNode = chatNodes.find(n => n.id === currentNodeId)
-                        return currentNode ? currentNode.prompt.substring(0, 60) + '...' : 'Selected node'
-                      })()}
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between mb-3">
+                    {currentNodeId ? (
+                      <div className="text-sm text-muted-foreground">
+                        <span className="font-medium">Continuing from:</span>{' '}
+                        {(() => {
+                          const currentNode = chatNodes.find(n => n.id === currentNodeId)
+                          return currentNode ? currentNode.prompt.substring(0, 60) + '...' : 'Selected node'
+                        })()}
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+                    <ModelSelector
+                      selectedModel={selectedModel}
+                      onModelChange={setSelectedModel}
+                      availableModels={AVAILABLE_MODELS}
+                    />
+                  </div>
                   <ChatInput 
                     onSendMessage={handleSendMessage} 
                     availableNodes={chatNodes}
@@ -240,6 +230,7 @@ export default function ChatPage() {
         allNodes={chatNodes}
         isOpen={isSidebarOpen}
         onClose={handleCloseSidebar}
+        session={currentSession}
       />
     </div>
   )

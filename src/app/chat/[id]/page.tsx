@@ -194,35 +194,7 @@ export default function ChatSessionPage({ params }: Props) {
   return (
     <div className="flex h-screen bg-background">
       {/* Main Content */}
-      <div className={`flex flex-col flex-1 overflow-hidden transition-all duration-300 ${
-        isSidebarOpen ? 'mr-96' : ''
-      }`}>
-        <header className="border-b px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push('/chat')}
-                className="rounded-md bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/80"
-              >
-                ← Back
-              </button>
-              <div>
-                <h1 className="font-semibold">{session.name}</h1>
-                <p className="text-sm text-muted-foreground">
-                  {chatNodes.length} messages • ${(session.totalCostUsd || 0).toFixed(4)}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <ModelSelector
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-                availableModels={AVAILABLE_MODELS}
-              />
-            </div>
-          </div>
-        </header>
-
+      <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-hidden">
             <ChatTreeView
@@ -230,20 +202,36 @@ export default function ChatSessionPage({ params }: Props) {
               currentNodeId={currentNodeId}
               onNodeClick={handleNodeClick}
               onNodeIdClick={handleNodeIdClick}
+              onBackgroundClick={handleCloseSidebar}
             />
           </div>
           
           <div className="border-t p-4 bg-background">
             <div className="max-w-4xl mx-auto">
-              {currentNodeId && (
-                <div className="mb-3 text-sm text-muted-foreground">
-                  <span className="font-medium">Continuing from:</span>{' '}
-                  {(() => {
-                    const currentNode = chatNodes.find(n => n.id === currentNodeId)
-                    return currentNode ? currentNode.prompt.substring(0, 60) + '...' : 'Selected node'
-                  })()}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => router.push('/chat')}
+                    className="rounded-md bg-secondary px-3 py-1.5 text-sm font-medium hover:bg-secondary/80"
+                  >
+                    ← Back
+                  </button>
+                  {currentNodeId && (
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium">Continuing from:</span>{' '}
+                      {(() => {
+                        const currentNode = chatNodes.find(n => n.id === currentNodeId)
+                        return currentNode ? currentNode.prompt.substring(0, 60) + '...' : 'Selected node'
+                      })()}
+                    </div>
+                  )}
                 </div>
-              )}
+                <ModelSelector
+                  selectedModel={selectedModel}
+                  onModelChange={setSelectedModel}
+                  availableModels={AVAILABLE_MODELS}
+                />
+              </div>
               <ChatInput 
                 onSendMessage={handleSendMessage} 
                 availableNodes={chatNodes}
@@ -261,6 +249,7 @@ export default function ChatSessionPage({ params }: Props) {
         allNodes={chatNodes}
         isOpen={isSidebarOpen}
         onClose={handleCloseSidebar}
+        session={session}
       />
     </div>
   )

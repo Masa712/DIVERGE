@@ -160,7 +160,7 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
   // If collapsed, show minimal icon-only version
   if (isCollapsed) {
     return (
-      <aside className="fixed left-[60px] top-[50px] bottom-[50px] w-16 z-50 flex flex-col glass-test glass-blur border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-2xl">
+      <aside className="fixed left-[30px] top-[25px] bottom-[25px] w-16 z-50 flex flex-col glass-test glass-blur border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem]">
         {/* Toggle Button */}
         <div className="p-3 border-b border-white/10">
           <button
@@ -212,7 +212,7 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
       {!isMobileOpen && (
         <button
           onClick={() => setIsMobileOpen(true)}
-          className="fixed left-[60px] top-[50px] z-40 p-3 glass-test glass-blur border border-white/20 rounded-xl shadow-lg lg:hidden"
+          className="fixed left-[30px] top-[25px] z-40 p-3 glass-test glass-blur border border-white/20 rounded-xl shadow-lg lg:hidden"
         >
           <Menu className="w-5 h-5 text-gray-700" />
         </button>
@@ -228,13 +228,13 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
 
       {/* Glass Morphism Floating Sidebar */}
       <aside className={`
-        fixed left-[60px] top-[50px] bottom-[50px] w-[350px] md:w-[350px] lg:w-[350px] z-50
+        fixed left-[30px] top-[25px] bottom-[25px] w-[350px] md:w-[350px] lg:w-[350px] z-50
         flex flex-col
         glass-test glass-blur
         border border-white/20
-        shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-2xl
+        shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem]
         transform transition-transform duration-300 ease-in-out
-        ${isMobileOpen ? 'translate-x-0' : '-translate-x-[calc(350px+60px)] lg:translate-x-0'}
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-[calc(350px+30px)] lg:translate-x-0'}
       `}>
         {/* Header - Logo */}
         <div className="px-6 pt-9 pb-6 border-b border-white/10 relative">
