@@ -27,6 +27,8 @@ interface Props {
   isRightSidebarOpen?: boolean
   isLeftSidebarCollapsed?: boolean
   rightSidebarWidth?: number
+  onLeftSidebarAutoCollapse?: (collapsed: boolean) => void
+  isLeftSidebarMobileOpen?: boolean
 }
 
 export function GlassmorphismChatInput({ 
@@ -41,12 +43,15 @@ export function GlassmorphismChatInput({
   currentNodePrompt,
   isRightSidebarOpen = false,
   isLeftSidebarCollapsed = false,
-  rightSidebarWidth = 400
+  rightSidebarWidth = 400,
+  onLeftSidebarAutoCollapse,
+  isLeftSidebarMobileOpen = false
 }: Props) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { showError } = useError()
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024)
 
   // Detect node references in current message
   const detectedReferences = extractNodeReferences(message)
@@ -125,6 +130,48 @@ export function GlassmorphismChatInput({
   useEffect(() => {
     adjustTextareaHeight()
   }, [message])
+
+  // Track window width for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Simple auto-collapse based on breakpoints instead of complex width calculations
+  useEffect(() => {
+    if (!onLeftSidebarAutoCollapse || typeof window === 'undefined') return
+
+    const handleResize = () => {
+      const screenWidth = window.innerWidth
+      
+      // Only auto-collapse when right sidebar is open and screen gets smaller
+      if (isRightSidebarOpen && screenWidth < 1400 && !isLeftSidebarCollapsed) {
+        console.log('🔄 Auto-collapsing left sidebar at breakpoint:', screenWidth, 'px')
+        onLeftSidebarAutoCollapse(true)
+      }
+    }
+
+    // Check immediately
+    handleResize()
+    
+    // Listen for resize events with debouncing
+    let timeoutId: NodeJS.Timeout
+    const debouncedResize = () => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(handleResize, 200)
+    }
+    
+    window.addEventListener('resize', debouncedResize)
+    
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', debouncedResize)
+    }
+  }, [isRightSidebarOpen, isLeftSidebarCollapsed, onLeftSidebarAutoCollapse])
 
   // Dynamic placeholder based on context
   const placeholder = "Type your message... Use @node_abc123 or #abc123 to reference previous topics"
@@ -253,6 +300,12 @@ export function GlassmorphismChatInput({
       containerClassName: containerClassName,
       rightOffset: rightOffset
     })
+  }
+
+  // Hide input area on mobile/tablet when any sidebar is open
+  const shouldHideOnMobile = windowWidth < 1024
+  if (shouldHideOnMobile && (isRightSidebarOpen || isLeftSidebarMobileOpen)) {
+    return null
   }
 
   return (

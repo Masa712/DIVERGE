@@ -26,6 +26,7 @@ export default function ChatPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
+  const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -69,6 +70,10 @@ export default function ChatPage() {
     setCurrentNodeId(undefined)
     setSelectedNodeForDetail(null)
     setIsSidebarOpen(false)
+  }
+
+  const handleLeftSidebarAutoCollapse = (collapsed: boolean) => {
+    setIsLeftSidebarCollapsed(collapsed)
   }
 
   const handleNodeClick = (nodeId: string) => {
@@ -167,6 +172,7 @@ export default function ChatPage() {
         onNewSession={handleNewSession}
         isCollapsed={isLeftSidebarCollapsed}
         onToggleCollapse={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
+        onMobileOpenChange={setIsLeftSidebarMobileOpen}
       />
 
       {/* Main Content */}
@@ -198,6 +204,8 @@ export default function ChatPage() {
               isRightSidebarOpen={isSidebarOpen}
               isLeftSidebarCollapsed={isLeftSidebarCollapsed}
               rightSidebarWidth={rightSidebarWidth}
+              onLeftSidebarAutoCollapse={handleLeftSidebarAutoCollapse}
+              isLeftSidebarMobileOpen={isLeftSidebarMobileOpen}
             />
           </>
         ) : (

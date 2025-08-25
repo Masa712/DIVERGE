@@ -23,9 +23,10 @@ interface Props {
   onNewSession: () => void
   isCollapsed: boolean
   onToggleCollapse: () => void
+  onMobileOpenChange?: (isOpen: boolean) => void
 }
 
-export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, isCollapsed, onToggleCollapse }: Props) {
+export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, isCollapsed, onToggleCollapse, onMobileOpenChange }: Props) {
   const { user, signOut } = useAuth()
   const { showError } = useError()
   const router = useRouter()
@@ -34,6 +35,11 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
   const [showDashboard, setShowDashboard] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+
+  // Notify parent of mobile open state changes
+  useEffect(() => {
+    onMobileOpenChange?.(isMobileOpen)
+  }, [isMobileOpen, onMobileOpenChange])
   const [dashboardData, setDashboardData] = useState({
     totalSessions: 0,
     totalCost: 0,
@@ -185,9 +191,9 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
         {!isMobileOpen && (
           <button
             onClick={() => setIsMobileOpen(true)}
-            className="fixed left-[30px] top-[25px] z-40 p-3 glass-test glass-blur border border-white/20 rounded-xl shadow-lg lg:hidden"
+            className="fixed left-[30px] top-[25px] z-40 p-3 lg:hidden hover:bg-black/10 rounded-lg transition-colors"
           >
-            <Menu className="w-5 h-5 text-gray-700" />
+            <Menu className="w-6 h-6 text-gray-700" />
           </button>
         )}
 
@@ -448,9 +454,9 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
       {!isMobileOpen && (
         <button
           onClick={() => setIsMobileOpen(true)}
-          className="fixed left-[30px] top-[25px] z-40 p-3 glass-test glass-blur border border-white/20 rounded-xl shadow-lg lg:hidden"
+          className="fixed left-[30px] top-[25px] z-40 p-3 lg:hidden hover:bg-black/10 rounded-lg transition-colors"
         >
-          <Menu className="w-5 h-5 text-gray-700" />
+          <Menu className="w-6 h-6 text-gray-700" />
         </button>
       )}
 
