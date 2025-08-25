@@ -26,6 +26,7 @@ interface Props {
   // Sidebar state
   isRightSidebarOpen?: boolean
   isLeftSidebarCollapsed?: boolean
+  rightSidebarWidth?: number
 }
 
 export function GlassmorphismChatInput({ 
@@ -39,7 +40,8 @@ export function GlassmorphismChatInput({
   currentNodeId,
   currentNodePrompt,
   isRightSidebarOpen = false,
-  isLeftSidebarCollapsed = false
+  isLeftSidebarCollapsed = false,
+  rightSidebarWidth = 400
 }: Props) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -230,25 +232,25 @@ export function GlassmorphismChatInput({
   
   // Calculate container positioning based on sidebar state
   // Left sidebar: 30px (left margin) + 350px (width) = 380px total (expanded), 30px + 64px = 94px total (collapsed)
-  // Right sidebar: 400px (width) + 30px (right margin) = 430px from right edge
+  // Right sidebar: dynamic width + 30px (right margin) + 30px (padding) = rightSidebarWidth + 60px from right edge
+  const rightOffset = rightSidebarWidth + 60 // sidebar width + 30px margin + 30px padding
+  
   const containerClassName = isRightSidebarOpen 
     ? `fixed bottom-6 z-40
-       ${isLeftSidebarCollapsed ? 'lg:left-[124px]' : 'lg:left-[410px]'} lg:right-[460px]
-       md:left-6 md:right-[390px]
-       left-6 right-6`
-    : "fixed bottom-6 z-40 w-full" // Right sidebar hidden: use separate positioning for responsive centering
-
-  // Debug logging
-  console.log('🔍 GlassmorphismChatInput render:', {
-    isRightSidebarOpen,
-    isLeftSidebarCollapsed,
-    screenWidth: typeof window !== 'undefined' ? window.innerWidth : 'unknown',
-    calculatedLeftPosition: isLeftSidebarCollapsed ? '124px' : '410px',
-    containerClassName: containerClassName
-  })
+       ${isLeftSidebarCollapsed ? 'lg:left-[124px]' : 'lg:left-[410px]'}
+       md:left-6
+       left-6`
+    : "fixed bottom-6 z-40" // Right sidebar hidden: use separate positioning for responsive centering
 
   return (
-    <div className={containerClassName}>
+    <div 
+      className={containerClassName}
+      style={isRightSidebarOpen && typeof window !== 'undefined' && window.innerWidth >= 1024 ? {
+        right: `${rightOffset}px`
+      } : isRightSidebarOpen ? {
+        right: '390px' // Fixed width for tablet/mobile
+      } : undefined}
+    >
       {/* Inner container for responsive centering when right sidebar is hidden */}
       {!isRightSidebarOpen && (
         <>
@@ -266,8 +268,8 @@ export function GlassmorphismChatInput({
           </div>
 
           {/* Tablet/Mobile Layout (<1024px): Full width centered */}
-          <div className="block lg:hidden w-full px-[30px]">
-            <div className="w-full max-w-4xl mx-auto">
+          <div className="block lg:hidden px-[30px]">
+            <div className="max-w-4xl mx-auto">
               <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
                 {renderInputContent()}
               </div>

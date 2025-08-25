@@ -30,6 +30,7 @@ export default function ChatSessionPage({ params }: Props) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [insertTextFunction, setInsertTextFunction] = useState<((text: string) => void) | null>(null)
   const [isInputFocused, setIsInputFocused] = useState(false)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -223,6 +224,7 @@ export default function ChatSessionPage({ params }: Props) {
         })()}
         isRightSidebarOpen={isSidebarOpen}
         isLeftSidebarCollapsed={true}
+        rightSidebarWidth={rightSidebarWidth}
       />
 
       {/* Node Detail Sidebar */}
@@ -232,6 +234,7 @@ export default function ChatSessionPage({ params }: Props) {
         isOpen={isSidebarOpen}
         onClose={handleCloseSidebar}
         session={session}
+        onWidthChange={setRightSidebarWidth}
       />
     </div>
   )

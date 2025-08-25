@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Copy, User, Bot, Settings, ChevronLeft, ChevronRight, ArrowUp } from 'lucide-react'
 import { ChatNode } from '@/types'
 
@@ -11,11 +11,15 @@ interface Props {
   onClose: () => void
   session?: { id: string; name: string } | null
   onModelChange?: (nodeId: string, model: string) => void
+  onWidthChange?: (width: number) => void
 }
 
-export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange }: Props) {
+export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange }: Props) {
   const [currentNodeIndex, setCurrentNodeIndex] = useState(0)
   const [nodeChain, setNodeChain] = useState<ChatNode[]>([])
+  const [width, setWidth] = useState(400) // Default width 400px (min 400px)
+  const [isResizing, setIsResizing] = useState(false)
+  const sidebarRef = useRef<HTMLDivElement>(null)
 
   // Build the parent chain when node changes
   useEffect(() => {
@@ -40,6 +44,48 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   }, [node, allNodes])
 
   const currentDisplayNode = nodeChain[currentNodeIndex]
+
+  // Resize handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }, [])
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing || typeof window === 'undefined') return
+    
+    // Calculate width based on sidebar's right edge position (fixed at 30px from screen right)
+    const sidebarRightEdge = window.innerWidth - 30
+    const newWidth = Math.max(400, Math.min(800, sidebarRightEdge - e.clientX))
+    
+    setWidth(newWidth)
+    onWidthChange?.(newWidth)
+  }, [isResizing, onWidthChange])
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false)
+  }, [])
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'ew-resize'
+      document.body.style.userSelect = 'none'
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp])
+
+  // Notify parent of width changes
+  useEffect(() => {
+    onWidthChange?.(width)
+  }, [width, onWidthChange])
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -97,18 +143,31 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
       )}
 
       {/* Responsive Right Sidebar */}
-      <div className={`
-        fixed z-50 flex flex-col glass-test glass-blur border border-white/20 
-        shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem] 
-        transition-all duration-300 origin-right
-        lg:right-[30px] lg:top-[25px] lg:bottom-[25px] lg:w-[400px]
-        md:right-[20px] md:top-[20px] md:bottom-[20px] md:w-[350px]
-        right-0 top-0 bottom-0 w-full max-w-[90vw] sm:max-w-[400px] sm:right-[20px] sm:top-[20px] sm:bottom-[20px]
-        ${isOpen 
-          ? 'opacity-100 scale-100 pointer-events-auto translate-x-0' 
-          : 'opacity-0 scale-95 pointer-events-none lg:translate-x-0 translate-x-full'
-        }
-      `}>
+      <div 
+        ref={sidebarRef}
+        className={`
+          fixed z-50 flex flex-col glass-test glass-blur border border-white/20 
+          shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem] 
+          origin-right
+          lg:right-[30px] lg:top-[25px] lg:bottom-[25px]
+          md:right-[20px] md:top-[20px] md:bottom-[20px]
+          right-0 top-0 bottom-0 sm:right-[20px] sm:top-[20px] sm:bottom-[20px]
+          ${isOpen 
+            ? 'opacity-100 scale-100 pointer-events-auto translate-x-0' 
+            : 'opacity-0 scale-95 pointer-events-none lg:translate-x-0 translate-x-full'
+          }
+        `}
+        style={{
+          width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${width}px` : undefined,
+          maxWidth: typeof window !== 'undefined' && window.innerWidth < 1024 ? '90vw' : undefined,
+          transition: isResizing ? 'none' : 'opacity 300ms, transform 300ms, scale 300ms',
+        }}
+      >
+        {/* Invisible resize area - Left edge (no visual indicator) */}
+        <div 
+          className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hidden lg:block z-10"
+          onMouseDown={handleMouseDown}
+        />
       
       {/* Header - Session Title */}
       <div className="px-6 pt-9 pb-4 border-b border-white/10">

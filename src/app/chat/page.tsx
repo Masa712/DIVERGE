@@ -25,6 +25,7 @@ export default function ChatPage() {
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -196,6 +197,7 @@ export default function ChatPage() {
               })()}
               isRightSidebarOpen={isSidebarOpen}
               isLeftSidebarCollapsed={isLeftSidebarCollapsed}
+              rightSidebarWidth={rightSidebarWidth}
             />
           </>
         ) : (
@@ -219,6 +221,7 @@ export default function ChatPage() {
         isOpen={isSidebarOpen}
         onClose={handleCloseSidebar}
         session={currentSession}
+        onWidthChange={setRightSidebarWidth}
       />
     </div>
   )
