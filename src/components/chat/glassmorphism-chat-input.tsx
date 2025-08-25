@@ -237,18 +237,29 @@ export function GlassmorphismChatInput({
   
   const containerClassName = isRightSidebarOpen 
     ? `fixed bottom-6 z-40
-       ${isLeftSidebarCollapsed ? 'lg:left-[124px]' : 'lg:left-[410px]'}
-       md:left-6
-       left-6`
-    : "fixed bottom-6 z-40" // Right sidebar hidden: use separate positioning for responsive centering
+       left-1/2 -translate-x-1/2
+       md:left-1/2 md:-translate-x-1/2
+       ${isLeftSidebarCollapsed ? 'lg:left-[124px]' : 'lg:left-[410px]'} lg:translate-x-0`
+    : "fixed bottom-6 z-40 w-full" // Right sidebar hidden: use separate positioning for responsive centering
+
+  // Debug logging
+  if (typeof window !== 'undefined') {
+    console.log('🔍 GlassmorphismChatInput render:', {
+      isRightSidebarOpen,
+      isLeftSidebarCollapsed,
+      screenWidth: window.innerWidth,
+      isTablet: window.innerWidth >= 768 && window.innerWidth < 1024,
+      isMobile: window.innerWidth < 768,
+      containerClassName: containerClassName,
+      rightOffset: rightOffset
+    })
+  }
 
   return (
     <div 
       className={containerClassName}
       style={isRightSidebarOpen && typeof window !== 'undefined' && window.innerWidth >= 1024 ? {
         right: `${rightOffset}px`
-      } : isRightSidebarOpen ? {
-        right: '390px' // Fixed width for tablet/mobile
       } : undefined}
     >
       {/* Inner container for responsive centering when right sidebar is hidden */}
@@ -280,14 +291,23 @@ export function GlassmorphismChatInput({
       
       {/* Direct container when right sidebar is visible */}
       {isRightSidebarOpen && (
-        <div className="px-[30px]">
-          <div className="max-w-4xl mx-auto">
+        <>
+          {/* Desktop Layout */}
+          <div className="hidden lg:block w-full px-[30px]">
+            <div className="max-w-4xl mx-auto">
+              <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
+                {renderInputContent()}
+              </div>
+            </div>
+          </div>
+          
+          {/* Tablet/Mobile Layout - Centered */}
+          <div className="block lg:hidden w-[90vw] max-w-4xl px-[30px]">
             <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
-              {/* Content will be rendered here for right sidebar visible case */}
               {renderInputContent()}
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
