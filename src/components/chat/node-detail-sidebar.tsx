@@ -148,19 +148,25 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
         className={`
           fixed z-50 flex flex-col glass-test glass-blur border border-white/20 
           shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem] 
-          origin-right
-          lg:right-[30px] lg:top-[25px] lg:bottom-[25px]
-          md:right-[20px] md:top-[20px] md:bottom-[20px]
-          right-0 top-0 bottom-0 sm:right-[20px] sm:top-[20px] sm:bottom-[20px]
+          transition-all duration-300
+          
+          /* Desktop positioning - Override mobile styles */
+          lg:right-[30px] lg:top-[25px] lg:bottom-[25px] lg:left-auto lg:w-auto lg:h-auto lg:max-h-none lg:max-w-none lg:translate-x-0 lg:translate-y-0
+          
+          /* Tablet/Mobile centered positioning */
+          left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
+          w-[90vw] max-w-[400px] h-[85vh] max-h-[700px]
+          md:w-[80vw] md:max-w-[400px] md:h-[80vh]
+          
+          /* Show/hide states */
           ${isOpen 
-            ? 'opacity-100 scale-100 pointer-events-auto translate-x-0' 
-            : 'opacity-0 scale-95 pointer-events-none lg:translate-x-0 translate-x-full'
+            ? 'scale-100 opacity-100 pointer-events-auto' 
+            : 'scale-95 opacity-0 pointer-events-none'
           }
         `}
         style={{
           width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${width}px` : undefined,
-          maxWidth: typeof window !== 'undefined' && window.innerWidth < 1024 ? '90vw' : undefined,
-          transition: isResizing ? 'none' : 'opacity 300ms, transform 300ms, scale 300ms',
+          transition: isResizing ? 'none' : undefined,
         }}
       >
         {/* Invisible resize area - Left edge (no visual indicator) */}
