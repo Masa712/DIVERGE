@@ -87,14 +87,28 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   if (!isOpen || !currentDisplayNode) return null
 
   return (
-    <div className={`fixed right-[30px] top-[25px] bottom-[25px] w-[400px] z-50 
-      flex flex-col glass-test glass-blur border border-white/20 
-      shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem] 
-      transition-all duration-300 origin-right ${
-        isOpen 
-          ? 'opacity-100 scale-100 pointer-events-auto' 
-          : 'opacity-0 scale-95 pointer-events-none'
-      }`}>
+    <div>
+      {/* Mobile/Tablet Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      {/* Responsive Right Sidebar */}
+      <div className={`
+        fixed z-50 flex flex-col glass-test glass-blur border border-white/20 
+        shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem] 
+        transition-all duration-300 origin-right
+        lg:right-[30px] lg:top-[25px] lg:bottom-[25px] lg:w-[400px]
+        md:right-[20px] md:top-[20px] md:bottom-[20px] md:w-[350px]
+        right-0 top-0 bottom-0 w-full max-w-[90vw] sm:max-w-[400px] sm:right-[20px] sm:top-[20px] sm:bottom-[20px]
+        ${isOpen 
+          ? 'opacity-100 scale-100 pointer-events-auto translate-x-0' 
+          : 'opacity-0 scale-95 pointer-events-none lg:translate-x-0 translate-x-full'
+        }
+      `}>
       
       {/* Header - Session Title */}
       <div className="px-6 pt-9 pb-4 border-b border-white/10">
@@ -289,6 +303,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
         <div className="text-xs text-gray-500 font-mono text-center">
           ID: {currentDisplayNode.id}
         </div>
+      </div>
       </div>
     </div>
   )

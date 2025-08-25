@@ -148,6 +148,26 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
     }
   }
 
+  const confirmDelete = async () => {
+    if (!sessionToDelete) return
+    
+    try {
+      const response = await fetch(`/api/sessions/${sessionToDelete}`, {
+        method: 'DELETE',
+      })
+      
+      if (response.ok) {
+        setSessions(sessions.filter(s => s.id !== sessionToDelete))
+        setSessionToDelete(null)
+      } else {
+        showError('Failed to delete session')
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error)
+      showError('Failed to delete session')
+    }
+  }
+
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString('ja-JP', {
       month: 'short',
@@ -160,7 +180,216 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
   // If collapsed, show minimal icon-only version
   if (isCollapsed) {
     return (
-      <aside className="fixed left-[30px] top-[25px] bottom-[25px] w-16 z-50 flex flex-col glass-test glass-blur border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem]">
+      <div>
+        {/* Mobile Toggle Button - Show when collapsed */}
+        {!isMobileOpen && (
+          <button
+            onClick={() => setIsMobileOpen(true)}
+            className="fixed left-[30px] top-[25px] z-40 p-3 glass-test glass-blur border border-white/20 rounded-xl shadow-lg lg:hidden"
+          >
+            <Menu className="w-5 h-5 text-gray-700" />
+          </button>
+        )}
+
+        {/* Mobile Overlay */}
+        {isMobileOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsMobileOpen(false)}
+          />
+        )}
+
+        {/* Mobile Sidebar when opened - Mobile/Tablet only */}
+        <aside className={`
+          fixed left-[30px] top-[25px] bottom-[25px] w-[350px] md:w-[350px] z-50
+          flex flex-col
+          glass-test glass-blur
+          border border-white/20
+          shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem]
+          transform transition-transform duration-300 ease-in-out
+          ${isMobileOpen ? 'translate-x-0' : '-translate-x-[calc(350px+30px)]'}
+          lg:hidden
+        `}>
+          {/* Header - Logo */}
+          <div className="px-6 pt-9 pb-6 border-b border-white/10 relative">
+            {/* Logo - Centered */}
+            <div className="text-center">
+              <h1 className="text-4xl font-bold text-gray-900">
+                Diverge
+              </h1>
+            </div>
+            
+            {/* Controls - Positioned absolutely */}
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center space-x-2">
+              {/* Collapse Button - Desktop Only */}
+              <button
+                onClick={onToggleCollapse}
+                className="p-2 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 hidden lg:block"
+                title="Collapse sidebar"
+              >
+                <Menu className="w-4 h-4" />
+              </button>
+              
+              {/* Close Button - Mobile Only */}
+              <button
+                onClick={() => setIsMobileOpen(false)}
+                className="p-2 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 lg:hidden"
+                title="Close sidebar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 overflow-y-auto">
+            {/* New Session Button */}
+            <div className="p-6">
+              <button
+                onClick={handleCreateSession}
+                className="w-full p-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] flex items-center justify-center space-x-2"
+              >
+                <PlusIcon className="w-5 h-5" />
+                <span className="font-medium">New Chat</span>
+              </button>
+            </div>
+
+            {/* Sessions List */}
+            <div className="px-6 pb-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Recent Sessions</h3>
+              {loading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-12 bg-white/10 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No chat sessions yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {sessions.map((session) => (
+                    <div key={session.id} className="relative">
+                      <button
+                        onClick={() => onSessionSelect(session.id)}
+                        className={`w-full p-3 rounded-lg text-left transition-all duration-200 group ${
+                          currentSessionId === session.id
+                            ? 'bg-white/20 shadow-lg'
+                            : 'hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-medium truncate ${
+                              currentSessionId === session.id ? 'text-gray-900' : 'text-gray-700'
+                            }`}>
+                              {session.name}
+                            </h4>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {formatDate(session.updatedAt)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSessionToDelete(session.id)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 hover:text-red-600 transition-all duration-200"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Section */}
+          <div className="p-6 border-t border-white/10">
+            {showDashboard ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/10 rounded-lg p-3">
+                    <div className="text-xs text-gray-600">Sessions</div>
+                    <div className="text-lg font-semibold text-gray-900">{dashboardData.totalSessions}</div>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-3">
+                    <div className="text-xs text-gray-600">Cost</div>
+                    <div className="text-lg font-semibold text-gray-900">${dashboardData.totalCost.toFixed(3)}</div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/10 rounded-lg p-3">
+                    <div className="text-xs text-gray-600">Tokens</div>
+                    <div className="text-lg font-semibold text-gray-900">{dashboardData.totalTokens.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-3">
+                    <div className="text-xs text-gray-600">Monthly</div>
+                    <div className="text-lg font-semibold text-gray-900">${dashboardData.monthlyUsage.toFixed(2)}</div>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={() => setShowDashboard(false)}
+                  className="w-full p-2 text-xs text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  Hide Dashboard
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowDashboard(true)}
+                  className="w-full p-3 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 flex items-center space-x-2"
+                >
+                  <Activity className="w-4 h-4" />
+                  <span className="text-sm">Dashboard</span>
+                </button>
+                
+                <button
+                  onClick={handleSignOut}
+                  className="w-full p-3 rounded-lg text-gray-600 hover:bg-red-500/20 hover:text-red-600 transition-all duration-200 flex items-center space-x-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-sm">Sign Out</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Delete Confirmation Modal */}
+          {sessionToDelete && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+              <div className="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-2xl">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Session</h3>
+                <p className="text-gray-600 mb-6">Are you sure you want to delete this chat session? This action cannot be undone.</p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setSessionToDelete(null)}
+                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="flex-1 px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* Desktop Collapsed Sidebar */}
+        <aside className="fixed left-[30px] top-[25px] bottom-[25px] w-16 z-50 flex flex-col glass-test glass-blur border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[2rem] hidden lg:flex">
         {/* Toggle Button */}
         <div className="p-3 border-b border-white/10">
           <button
@@ -203,6 +432,7 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
           </button>
         </div>
       </aside>
+      </div>
     )
   }
 

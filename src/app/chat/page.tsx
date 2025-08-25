@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
 import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
-import { ChatInput } from '@/components/chat/chat-input'
-import { ModelSelector } from '@/components/chat/model-selector'
+import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-input'
+
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { LeftSidebar } from '@/components/layout/left-sidebar'
@@ -181,34 +181,22 @@ export default function ChatPage() {
                   onBackgroundClick={handleCloseSidebar}
                 />
               </div>
-              
-              <div className="border-t p-4 bg-background">
-                <div className="max-w-4xl mx-auto">
-                  <div className="flex items-center justify-between mb-3">
-                    {currentNodeId ? (
-                      <div className="text-sm text-muted-foreground">
-                        <span className="font-medium">Continuing from:</span>{' '}
-                        {(() => {
-                          const currentNode = chatNodes.find(n => n.id === currentNodeId)
-                          return currentNode ? currentNode.prompt.substring(0, 60) + '...' : 'Selected node'
-                        })()}
-                      </div>
-                    ) : (
-                      <div />
-                    )}
-                    <ModelSelector
-                      selectedModel={selectedModel}
-                      onModelChange={setSelectedModel}
-                      availableModels={AVAILABLE_MODELS}
-                    />
-                  </div>
-                  <ChatInput 
-                    onSendMessage={handleSendMessage} 
-                    availableNodes={chatNodes}
-                  />
-                </div>
-              </div>
             </div>
+
+            {/* Glassmorphism Chat Input - Floating */}
+            <GlassmorphismChatInput 
+              onSendMessage={handleSendMessage} 
+              availableNodes={chatNodes}
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              currentNodeId={currentNodeId}
+              currentNodePrompt={(() => {
+                const currentNode = chatNodes.find(n => n.id === currentNodeId)
+                return currentNode ? currentNode.prompt : undefined
+              })()}
+              isRightSidebarOpen={isSidebarOpen}
+              isLeftSidebarCollapsed={isLeftSidebarCollapsed}
+            />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">

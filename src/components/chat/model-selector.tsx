@@ -6,10 +6,27 @@ interface Props {
   selectedModel: ModelId
   onModelChange: (model: ModelId) => void
   availableModels: ModelConfig[]
+  compact?: boolean
 }
 
-export function ModelSelector({ selectedModel, onModelChange, availableModels }: Props) {
+export function ModelSelector({ selectedModel, onModelChange, availableModels, compact = false }: Props) {
   const selectedModelConfig = availableModels.find(m => m.id === selectedModel)
+
+  if (compact) {
+    return (
+      <select
+        value={selectedModel}
+        onChange={(e) => onModelChange(e.target.value as ModelId)}
+        className="rounded-lg bg-white/10 border border-white/20 px-2 py-1 text-xs text-gray-700 focus:bg-white/20 focus:border-white/30 focus:outline-none transition-all duration-200"
+      >
+        {availableModels.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.name}
+          </option>
+        ))}
+      </select>
+    )
+  }
 
   return (
     <div className="space-y-2">
