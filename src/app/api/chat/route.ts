@@ -7,71 +7,93 @@ import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 import { isRedisAvailable } from '@/lib/redis/client'
 import { getRedisEnhancedContextCache } from '@/lib/db/redis-enhanced-context-cache'
 import { getParentNodeDepth, createChatNode, updateChatNodeResponse } from '@/lib/db/pooled-operations'
+import { 
+  withErrorHandler, 
+  createAppError, 
+  ErrorCategory, 
+  classifyDatabaseError,
+  withRetry 
+} from '@/lib/errors/error-handler'
+import { recordError } from '@/lib/errors/error-monitoring'
 
-export async function POST(request: NextRequest) {
-  try {
-    const supabase = createClient()
-    
-    // Check authentication
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+export const POST = withErrorHandler(async (request: NextRequest) => {
+  const supabase = createClient()
+  
+  // Check authentication
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw createAppError(
+      'User authentication required',
+      ErrorCategory.AUTHENTICATION
+    )
+  }
 
-    const body = await request.json()
-    const { 
-      messages, 
-      model, 
-      temperature = 0.7, 
-      max_tokens = 1000,
-      sessionId,
-      parentNodeId,
-      useEnhancedContext = true
-    } = body
+  const body = await request.json()
+  const { 
+    messages, 
+    model, 
+    temperature = 0.7, 
+    max_tokens = 1000,
+    sessionId,
+    parentNodeId,
+    useEnhancedContext = true
+  } = body
 
-    if (!messages || !model) {
-      return NextResponse.json(
-        { error: 'Messages and model are required' },
-        { status: 400 }
-      )
-    }
+  if (!messages || !model) {
+    throw createAppError(
+      'Messages and model parameters are required',
+      ErrorCategory.VALIDATION,
+      {
+        userMessage: 'Please provide both messages and model selection.',
+        context: { hasMessages: !!messages, hasModel: !!model }
+      }
+    )
+  }
 
     // Extract user prompt for processing
     const userPrompt = messages[messages.length - 1]?.content || ''
 
-    // Calculate depth for the new node using pooled connection
-    let depth = 0
-    if (parentNodeId) {
-      try {
-        const parentDepth = await getParentNodeDepth(parentNodeId)
-        depth = parentDepth + 1
-      } catch (error) {
-        console.warn('Failed to get parent depth, using 0:', error)
-      }
-    }
-
-    // Create a new chat node using pooled connection
-    let chatNodeRaw
+  // Calculate depth for the new node using pooled connection with retry
+  let depth = 0
+  if (parentNodeId) {
     try {
-      chatNodeRaw = await createChatNode({
-        sessionId,
-        parentId: parentNodeId,
-        model: model as ModelId,
-        prompt: userPrompt,
-        temperature,
-        maxTokens: max_tokens,
-        depth,
-      })
-    } catch (nodeError) {
-      console.error('Error creating chat node:', nodeError)
-      return NextResponse.json(
-        { error: 'Failed to create chat node' },
-        { status: 500 }
-      )
+      depth = await withRetry(async () => {
+        const parentDepth = await getParentNodeDepth(parentNodeId)
+        return parentDepth + 1
+      }, { maxAttempts: 2 })
+    } catch (error) {
+      // Log but don't fail - use depth 0 as fallback
+      console.warn('Failed to get parent depth, using 0:', error)
+      recordError(createAppError(
+        'Failed to retrieve parent node depth',
+        classifyDatabaseError(error),
+        { context: { parentNodeId }, cause: error as Error }
+      ))
     }
+  }
+
+  // Create a new chat node using pooled connection with retry
+  const chatNodeRaw = await withRetry(async () => {
+    return await createChatNode({
+      sessionId,
+      parentId: parentNodeId,
+      model: model as ModelId,
+      prompt: userPrompt,
+      temperature,
+      maxTokens: max_tokens,
+      depth,
+    })
+  }, { maxAttempts: 3 }).catch(error => {
+    throw createAppError(
+      'Failed to create chat node in database',
+      classifyDatabaseError(error),
+      {
+        userMessage: 'Unable to save your message. Please try again.',
+        context: { sessionId, parentNodeId, model },
+        cause: error as Error
+      }
+    )
+  })
 
     // Convert to camelCase for consistency
     const chatNode = {
@@ -129,6 +151,17 @@ export async function POST(request: NextRequest) {
         console.log(`Enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
         
       } catch (contextError) {
+        // Log but don't fail - enhanced context is optional
+        recordError(createAppError(
+          'Enhanced context building failed',
+          ErrorCategory.INTERNAL,
+          {
+            userMessage: 'Using simplified context for this message.',
+            context: { parentNodeId, useEnhancedContext },
+            cause: contextError as Error,
+            severity: 'medium' as any
+          }
+        ))
         console.warn('Enhanced context failed, falling back to simple messages:', contextError)
         // Keep original messages as fallback
       }
@@ -136,59 +169,75 @@ export async function POST(request: NextRequest) {
       console.log(`Enhanced context skipped - useEnhancedContext: ${useEnhancedContext}, parentNodeId: ${parentNodeId}`)
     }
 
-    // Initialize OpenRouter client
-    const client = new OpenRouterClient()
-
-    // Create completion with enhanced context
-    const response = await client.createChatCompletion({
+  // Initialize OpenRouter client and create completion with retry
+  const client = new OpenRouterClient()
+  const response = await withRetry(async () => {
+    return await client.createChatCompletion({
       model: model as ModelId,
       messages: finalMessages,
       temperature,
       max_tokens,
       stream: false,
     })
+  }, { maxAttempts: 2 }).catch(error => {
+    throw createAppError(
+      'AI service request failed',
+      ErrorCategory.EXTERNAL_API,
+      {
+        userMessage: 'The AI service is temporarily unavailable. Please try again in a moment.',
+        context: { model, messageCount: finalMessages.length },
+        cause: error as Error
+      }
+    )
+  })
 
     const responseContent = response.choices[0]?.message?.content || ''
     const usage = response.usage
 
-    // Update chat node with response using pooled connection
-    try {
+  // Update chat node with response using pooled connection with retry
+  try {
+    await withRetry(async () => {
       await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
-      
-      // Clear session cache since new node was added
-      // Use Redis cache if available, otherwise fall back to local cache
-      const redisIsAvailable = await isRedisAvailable()
-      if (redisIsAvailable) {
-        const redisCache = getRedisEnhancedContextCache()
-        await redisCache.clearSessionCache(sessionId)
-        // Also add the new node to cache
-        await redisCache.addNode(sessionId, {
-          ...chatNode,
-          response: responseContent,
-          status: 'completed',
-          createdAt: chatNode.createdAt.toISOString(),
-          updatedAt: chatNode.updatedAt.toISOString(),
-        })
-      } else {
-        await clearSessionCache(sessionId)
-      }
-    } catch (updateError) {
-      console.error('Error updating chat node:', updateError)
-      // Continue execution even if update fails
+    }, { maxAttempts: 3 })
+    
+    // Clear session cache since new node was added
+    // Use Redis cache if available, otherwise fall back to local cache
+    const redisIsAvailable = await isRedisAvailable()
+    if (redisIsAvailable) {
+      const redisCache = getRedisEnhancedContextCache()
+      await redisCache.clearSessionCache(sessionId)
+      // Also add the new node to cache
+      await redisCache.addNode(sessionId, {
+        ...chatNode,
+        response: responseContent,
+        status: 'completed',
+        createdAt: chatNode.createdAt.toISOString(),
+        updatedAt: chatNode.updatedAt.toISOString(),
+      })
+    } else {
+      await clearSessionCache(sessionId)
     }
+  } catch (updateError) {
+    // Log error but don't fail the request - user got their response
+    recordError(createAppError(
+      'Failed to update chat node with response',
+      classifyDatabaseError(updateError),
+      {
+        context: { chatNodeId: chatNode.id, sessionId },
+        cause: updateError as Error,
+        severity: 'medium' as any
+      }
+    ))
+  }
 
-    return NextResponse.json({
+  return NextResponse.json({
+    success: true,
+    data: {
       id: chatNode.id,
       content: responseContent,
       usage,
       contextMetadata,
-    })
-  } catch (error) {
-    console.error('Chat API error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
+    }
+  })
+})
 

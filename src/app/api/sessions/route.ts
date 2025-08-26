@@ -1,28 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getChatSessionsPooled, createChatSessionPooled } from '@/lib/db/pooled-operations'
+import { 
+  withErrorHandler, 
+  createAppError, 
+  ErrorCategory, 
+  classifyDatabaseError,
+  withRetry 
+} from '@/lib/errors/error-handler'
 
-export async function GET(request: NextRequest) {
-  try {
-    const supabase = createClient()
-    
-    // Check authentication
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+export const GET = withErrorHandler(async (request: NextRequest) => {
+  const supabase = createClient()
+  
+  // Check authentication
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw createAppError(
+      'User authentication required',
+      ErrorCategory.AUTHENTICATION
+    )
+  }
 
-    const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
-    const archived = searchParams.get('archived') === 'true'
+  const { searchParams } = new URL(request.url)
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')))
+  const archived = searchParams.get('archived') === 'true'
 
-    const offset = (page - 1) * limit
+  const offset = (page - 1) * limit
 
-    // Get sessions for the user
-    let query = supabase
+  // Get sessions for the user with retry
+  const { data: sessionsRaw, error } = await withRetry(async () => {
+    const query = supabase
       .from('sessions')
       .select('*')
       .eq('user_id', user.id)
@@ -30,11 +38,26 @@ export async function GET(request: NextRequest) {
       .order('last_accessed_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    const { data: sessionsRaw, error } = await query
+    return await query
+  }).catch(error => {
+    throw createAppError(
+      'Failed to fetch sessions from database',
+      classifyDatabaseError(error),
+      {
+        userMessage: 'Unable to load your sessions. Please try again.',
+        context: { userId: user.id, page, limit, archived },
+        cause: error as Error
+      }
+    )
+  })
 
-    if (error) {
-      throw error
-    }
+  if (error) {
+    throw createAppError(
+      'Database query failed',
+      classifyDatabaseError(error),
+      { cause: error }
+    )
+  }
 
     // Convert to camelCase
     const sessions = (sessionsRaw || []).map(session => ({
@@ -53,65 +76,99 @@ export async function GET(request: NextRequest) {
       lastAccessedAt: new Date(session.last_accessed_at),
     }))
 
-    // Get total count for pagination
-    const { count } = await supabase
+  // Get total count for pagination with retry
+  const { count } = await withRetry(async () => {
+    return await supabase
       .from('sessions')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('is_archived', archived)
+  }).catch(error => {
+    throw createAppError(
+      'Failed to get sessions count',
+      classifyDatabaseError(error),
+      { context: { userId: user.id, archived } }
+    )
+  })
 
-    return NextResponse.json({
+  return NextResponse.json({
+    success: true,
+    data: {
       sessions,
       total: count || 0,
       page,
       limit,
-    })
-  } catch (error) {
-    console.error('Error fetching sessions:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+    }
+  })
+})
+
+export const POST = withErrorHandler(async (request: NextRequest) => {
+  const supabase = createClient()
+  
+  // Check authentication
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw createAppError(
+      'User authentication required',
+      ErrorCategory.AUTHENTICATION
     )
   }
-}
 
-export async function POST(request: NextRequest) {
-  try {
-    const supabase = createClient()
-    
-    // Check authentication
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+  const body = await request.json()
+  const { name, description } = body
 
-    const body = await request.json()
-    const { name, description } = body
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    throw createAppError(
+      'Session name is required and cannot be empty',
+      ErrorCategory.VALIDATION,
+      {
+        userMessage: 'Please provide a valid session name.',
+        context: { providedName: name }
+      }
+    )
+  }
 
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Session name is required' },
-        { status: 400 }
-      )
-    }
+  if (name.length > 100) {
+    throw createAppError(
+      'Session name is too long',
+      ErrorCategory.VALIDATION,
+      {
+        userMessage: 'Session name must be 100 characters or less.',
+        context: { nameLength: name.length }
+      }
+    )
+  }
 
-    // Create new session
-    const { data: sessionRaw, error } = await supabase
+  // Create new session with retry
+  const { data: sessionRaw, error } = await withRetry(async () => {
+    return await supabase
       .from('sessions')
       .insert({
-        name,
-        description,
+        name: name.trim(),
+        description: description?.trim() || null,
         user_id: user.id,
       })
       .select()
       .single()
+  }).catch(error => {
+    throw createAppError(
+      'Failed to create session in database',
+      classifyDatabaseError(error),
+      {
+        userMessage: 'Unable to create your session. Please try again.',
+        context: { name, userId: user.id },
+        cause: error as Error
+      }
+    )
+  })
 
-    if (error) {
-      throw error
-    }
+  if (error) {
+    throw createAppError(
+      'Session creation failed',
+      classifyDatabaseError(error),
+      { cause: error }
+    )
+  }
 
     // Convert to camelCase
     const session = {
@@ -130,14 +187,10 @@ export async function POST(request: NextRequest) {
       lastAccessedAt: new Date(sessionRaw.last_accessed_at),
     }
 
-    return NextResponse.json({
+  return NextResponse.json({
+    success: true,
+    data: {
       session,
-    })
-  } catch (error) {
-    console.error('Error creating session:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
+    }
+  })
+})

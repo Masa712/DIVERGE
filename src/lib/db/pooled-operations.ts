@@ -6,20 +6,40 @@
 import { withPooledConnection } from '@/lib/supabase/connection-pool'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ModelId } from '@/types'
+import { createAppError, classifyDatabaseError, ErrorCategory } from '@/lib/errors/error-handler'
 
 /**
  * Get parent node depth using pooled connection
  */
 export async function getParentNodeDepth(parentNodeId: string): Promise<number> {
-  return await withPooledConnection(async (supabase) => {
-    const { data: parentNode } = await supabase
-      .from('chat_nodes')
-      .select('depth')
-      .eq('id', parentNodeId)
-      .single()
-    
-    return parentNode?.depth || 0
-  }, `depth_${parentNodeId}`)
+  try {
+    return await withPooledConnection(async (supabase) => {
+      const { data: parentNode, error } = await supabase
+        .from('chat_nodes')
+        .select('depth')
+        .eq('id', parentNodeId)
+        .single()
+      
+      if (error) {
+        throw createAppError(
+          'Failed to retrieve parent node depth',
+          classifyDatabaseError(error),
+          { context: { parentNodeId }, cause: error }
+        )
+      }
+      
+      return parentNode?.depth || 0
+    }, `depth_${parentNodeId}`)
+  } catch (error) {
+    if (error && typeof error === 'object' && 'category' in error) {
+      throw error // Re-throw AppError
+    }
+    throw createAppError(
+      'Connection pool error while getting parent depth',
+      ErrorCategory.DATABASE,
+      { context: { parentNodeId }, cause: error as Error }
+    )
+  }
 }
 
 /**
@@ -34,28 +54,43 @@ export async function createChatNode(nodeData: {
   maxTokens: number
   depth: number
 }): Promise<any> {
-  return await withPooledConnection(async (supabase) => {
-    const { data: chatNodeRaw, error: nodeError } = await supabase
-      .from('chat_nodes')
-      .insert({
-        session_id: nodeData.sessionId,
-        parent_id: nodeData.parentId,
-        model: nodeData.model,
-        prompt: nodeData.prompt,
-        status: 'streaming',
-        temperature: nodeData.temperature,
-        max_tokens: nodeData.maxTokens,
-        depth: nodeData.depth,
-      })
-      .select()
-      .single()
+  try {
+    return await withPooledConnection(async (supabase) => {
+      const { data: chatNodeRaw, error: nodeError } = await supabase
+        .from('chat_nodes')
+        .insert({
+          session_id: nodeData.sessionId,
+          parent_id: nodeData.parentId,
+          model: nodeData.model,
+          prompt: nodeData.prompt,
+          status: 'streaming',
+          temperature: nodeData.temperature,
+          max_tokens: nodeData.maxTokens,
+          depth: nodeData.depth,
+        })
+        .select()
+        .single()
 
-    if (nodeError) {
-      throw nodeError
+      if (nodeError) {
+        throw createAppError(
+          'Failed to create chat node in database',
+          classifyDatabaseError(nodeError),
+          { context: nodeData, cause: nodeError }
+        )
+      }
+
+      return chatNodeRaw
+    }, `create_${nodeData.sessionId}`)
+  } catch (error) {
+    if (error && typeof error === 'object' && 'category' in error) {
+      throw error // Re-throw AppError
     }
-
-    return chatNodeRaw
-  }, `create_${nodeData.sessionId}`)
+    throw createAppError(
+      'Connection pool error while creating chat node',
+      ErrorCategory.DATABASE,
+      { context: nodeData, cause: error as Error }
+    )
+  }
 }
 
 /**
@@ -67,22 +102,37 @@ export async function updateChatNodeResponse(
   usage: { prompt_tokens: number; completion_tokens: number } | undefined,
   model: string
 ): Promise<void> {
-  return await withPooledConnection(async (supabase) => {
-    const { error: updateError } = await supabase
-      .from('chat_nodes')
-      .update({
-        response,
-        status: 'completed',
-        prompt_tokens: usage?.prompt_tokens || 0,
-        response_tokens: usage?.completion_tokens || 0,
-        cost_usd: calculateCost(model, usage),
-      })
-      .eq('id', nodeId)
+  try {
+    return await withPooledConnection(async (supabase) => {
+      const { error: updateError } = await supabase
+        .from('chat_nodes')
+        .update({
+          response,
+          status: 'completed',
+          prompt_tokens: usage?.prompt_tokens || 0,
+          response_tokens: usage?.completion_tokens || 0,
+          cost_usd: calculateCost(model, usage),
+        })
+        .eq('id', nodeId)
 
-    if (updateError) {
-      throw updateError
+      if (updateError) {
+        throw createAppError(
+          'Failed to update chat node response',
+          classifyDatabaseError(updateError),
+          { context: { nodeId, model, hasUsage: !!usage }, cause: updateError }
+        )
+      }
+    }, `update_${nodeId}`)
+  } catch (error) {
+    if (error && typeof error === 'object' && 'category' in error) {
+      throw error // Re-throw AppError
     }
-  }, `update_${nodeId}`)
+    throw createAppError(
+      'Connection pool error while updating chat node',
+      ErrorCategory.DATABASE,
+      { context: { nodeId, model }, cause: error as Error }
+    )
+  }
 }
 
 /**
