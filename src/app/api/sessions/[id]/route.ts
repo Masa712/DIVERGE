@@ -1,42 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionChatNodes } from '@/lib/db/chat-nodes'
+import { 
+  withErrorHandler, 
+  createAppError, 
+  ErrorCategory, 
+  classifyDatabaseError 
+} from '@/lib/errors/error-handler'
+import { executeOptimizedQuery, chatNodesLoader } from '@/lib/db/query-optimizer'
 
-export async function GET(
+export const GET = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
-  try {
-    const supabase = createClient()
-    
-    // Check authentication
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+) => {
+  const supabase = createClient()
+  
+  // Check authentication
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw createAppError(
+      'User authentication required',
+      ErrorCategory.AUTHENTICATION
+    )
+  }
 
-    const sessionId = params.id
+  const sessionId = params.id
 
-    // Get session information
-    const { data: sessionRaw, error: sessionError } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('id', sessionId)
-      .eq('user_id', user.id)
-      .single()
+  // Get session information with optimized query and selective fields
+  const sessionRaw = await executeOptimizedQuery(
+    `session_${sessionId}_${user.id}`,
+    async (supabase) => {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select(`
+          id,
+          name,
+          description,
+          user_id,
+          root_node_id,
+          total_cost_usd,
+          total_tokens,
+          node_count,
+          max_depth,
+          is_archived,
+          created_at,
+          updated_at,
+          last_accessed_at
+        `)
+        .eq('id', sessionId)
+        .eq('user_id', user.id)
+        .single()
 
-    if (sessionError) {
-      if (sessionError.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Session not found' },
-          { status: 404 }
+      if (error) {
+        if (error.code === 'PGRST116') {
+          throw createAppError(
+            'Session not found',
+            ErrorCategory.NOT_FOUND,
+            { context: { sessionId, userId: user.id } }
+          )
+        }
+        throw createAppError(
+          'Failed to fetch session',
+          classifyDatabaseError(error),
+          { context: { sessionId, userId: user.id }, cause: error }
         )
       }
-      throw sessionError
-    }
+
+      return data
+    },
+    { poolKey: `session_${sessionId}`, cacheTTL: 60000 } // 1 minute cache
+  )
 
     // Convert session to camelCase
     const session = {
@@ -55,96 +88,135 @@ export async function GET(
       lastAccessedAt: new Date(sessionRaw.last_accessed_at),
     }
 
-    // Get chat nodes for this session
-    const chatNodes = await getSessionChatNodes(sessionId)
+  // Get chat nodes using batch loader to prevent N+1 queries
+  const chatNodesRaw = await chatNodesLoader.load(sessionId)
 
-    // Update last accessed time
-    await supabase
+  // Convert chat nodes to camelCase
+  const chatNodes = chatNodesRaw.map(node => ({
+    id: node.id,
+    sessionId: node.session_id,
+    parentId: node.parent_id,
+    model: node.model,
+    prompt: node.prompt,
+    response: node.response,
+    status: node.status,
+    depth: node.depth,
+    promptTokens: node.prompt_tokens || 0,
+    responseTokens: node.response_tokens || 0,
+    costUsd: node.cost_usd || 0,
+    temperature: node.temperature,
+    maxTokens: node.max_tokens,
+    createdAt: new Date(node.created_at),
+    updatedAt: new Date(node.updated_at),
+  }))
+
+  // Update last accessed time asynchronously (don't wait)
+  Promise.resolve(
+    supabase
       .from('sessions')
       .update({ last_accessed_at: new Date().toISOString() })
       .eq('id', sessionId)
+  ).then(() => {
+    console.log(`📈 Updated last access time for session: ${sessionId}`)
+  }).catch(error => {
+    console.warn('Failed to update last access time:', error)
+  })
 
-    return NextResponse.json({
+  return NextResponse.json({
+    success: true,
+    data: {
       session,
       chatNodes,
-    })
-  } catch (error) {
-    console.error('Error fetching session:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
+    }
+  })
+})
 
-export async function DELETE(
+export const DELETE = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
-) {
-  try {
-    const supabase = createClient()
-    
-    // Check authentication
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    const sessionId = params.id
-
-    // Verify session ownership
-    const { data: session, error: sessionError } = await supabase
-      .from('sessions')
-      .select('id, user_id')
-      .eq('id', sessionId)
-      .eq('user_id', user.id)
-      .single()
-
-    if (sessionError) {
-      if (sessionError.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Session not found' },
-          { status: 404 }
-        )
-      }
-      throw sessionError
-    }
-
-    // Delete all chat nodes associated with the session
-    // (This will cascade due to foreign key constraints, but we'll be explicit)
-    const { error: nodesError } = await supabase
-      .from('chat_nodes')
-      .delete()
-      .eq('session_id', sessionId)
-
-    if (nodesError) {
-      console.error('Error deleting chat nodes:', nodesError)
-      // Continue with session deletion even if node deletion fails
-    }
-
-    // Delete the session
-    const { error: deleteError } = await supabase
-      .from('sessions')
-      .delete()
-      .eq('id', sessionId)
-      .eq('user_id', user.id)
-
-    if (deleteError) {
-      throw deleteError
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Session deleted successfully'
-    })
-  } catch (error) {
-    console.error('Error deleting session:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+) => {
+  const supabase = createClient()
+  
+  // Check authentication
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw createAppError(
+      'User authentication required',
+      ErrorCategory.AUTHENTICATION
     )
   }
-}
+
+  const sessionId = params.id
+
+  // Verify session ownership with optimized query
+  await executeOptimizedQuery(
+    `session_ownership_${sessionId}_${user.id}`,
+    async (supabase) => {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('id, user_id')
+        .eq('id', sessionId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          throw createAppError(
+            'Session not found',
+            ErrorCategory.NOT_FOUND,
+            { context: { sessionId, userId: user.id } }
+          )
+        }
+        throw createAppError(
+          'Failed to verify session ownership',
+          classifyDatabaseError(error),
+          { context: { sessionId, userId: user.id }, cause: error }
+        )
+      }
+
+      return data
+    },
+    { poolKey: `verify_${sessionId}`, cacheTTL: 10000 } // 10 second cache
+  )
+
+  // Execute optimized batch delete operation
+  await executeOptimizedQuery(
+    `delete_session_${sessionId}`,
+    async (supabase) => {
+      // Use a transaction-like approach: delete nodes first, then session
+      const { error: nodesError } = await supabase
+        .from('chat_nodes')
+        .delete()
+        .eq('session_id', sessionId)
+
+      if (nodesError) {
+        console.warn('Error deleting chat nodes (continuing):', nodesError)
+        // Continue with session deletion even if node deletion fails
+      }
+
+      const { error: deleteError } = await supabase
+        .from('sessions')
+        .delete()
+        .eq('id', sessionId)
+        .eq('user_id', user.id)
+
+      if (deleteError) {
+        throw createAppError(
+          'Failed to delete session',
+          classifyDatabaseError(deleteError),
+          { context: { sessionId, userId: user.id }, cause: deleteError }
+        )
+      }
+
+      return { deleted: true }
+    },
+    { poolKey: `delete_${sessionId}`, skipCache: true } // Don't cache delete operations
+  )
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      message: 'Session deleted successfully'
+    }
+  })
+})

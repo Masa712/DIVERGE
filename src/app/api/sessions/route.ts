@@ -8,6 +8,7 @@ import {
   classifyDatabaseError,
   withRetry 
 } from '@/lib/errors/error-handler'
+import { loadOptimizedSessions, executeOptimizedQuery } from '@/lib/db/query-optimizer'
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const supabase = createClient()
@@ -28,36 +29,13 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
   const offset = (page - 1) * limit
 
-  // Get sessions for the user with retry
-  const { data: sessionsRaw, error } = await withRetry(async () => {
-    const query = supabase
-      .from('sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_archived', archived)
-      .order('last_accessed_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-
-    return await query
-  }).catch(error => {
-    throw createAppError(
-      'Failed to fetch sessions from database',
-      classifyDatabaseError(error),
-      {
-        userMessage: 'Unable to load your sessions. Please try again.',
-        context: { userId: user.id, page, limit, archived },
-        cause: error as Error
-      }
-    )
+  // Get sessions using optimized query with selective field loading
+  const sessionsRaw = await loadOptimizedSessions(user.id, {
+    includeNodeCount: true,
+    limit,
+    offset,
+    archived
   })
-
-  if (error) {
-    throw createAppError(
-      'Database query failed',
-      classifyDatabaseError(error),
-      { cause: error }
-    )
-  }
 
     // Convert to camelCase
     const sessions = (sessionsRaw || []).map(session => ({
@@ -76,20 +54,28 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       lastAccessedAt: new Date(session.last_accessed_at),
     }))
 
-  // Get total count for pagination with retry
-  const { count } = await withRetry(async () => {
-    return await supabase
-      .from('sessions')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('is_archived', archived)
-  }).catch(error => {
-    throw createAppError(
-      'Failed to get sessions count',
-      classifyDatabaseError(error),
-      { context: { userId: user.id, archived } }
-    )
-  })
+  // Get total count for pagination with optimized caching
+  const { count } = await executeOptimizedQuery(
+    `sessions_count_${user.id}_${archived}`,
+    async (supabase) => {
+      const result = await supabase
+        .from('sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_archived', archived)
+      
+      if (result.error) {
+        throw createAppError(
+          'Failed to get sessions count',
+          classifyDatabaseError(result.error),
+          { context: { userId: user.id, archived }, cause: result.error }
+        )
+      }
+      
+      return result
+    },
+    { poolKey: `count_${user.id}`, cacheTTL: 120000 } // 2 minute cache
+  )
 
   return NextResponse.json({
     success: true,
@@ -139,36 +125,50 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     )
   }
 
-  // Create new session with retry
-  const { data: sessionRaw, error } = await withRetry(async () => {
-    return await supabase
-      .from('sessions')
-      .insert({
-        name: name.trim(),
-        description: description?.trim() || null,
-        user_id: user.id,
-      })
-      .select()
-      .single()
-  }).catch(error => {
-    throw createAppError(
-      'Failed to create session in database',
-      classifyDatabaseError(error),
-      {
-        userMessage: 'Unable to create your session. Please try again.',
-        context: { name, userId: user.id },
-        cause: error as Error
+  // Create new session with optimized insert operation
+  const sessionRaw = await executeOptimizedQuery(
+    `create_session_${user.id}_${Date.now()}`, // Unique cache key
+    async (supabase) => {
+      const { data, error } = await supabase
+        .from('sessions')
+        .insert({
+          name: name.trim(),
+          description: description?.trim() || null,
+          user_id: user.id,
+        })
+        .select(`
+          id,
+          name,
+          description,
+          user_id,
+          root_node_id,
+          total_cost_usd,
+          total_tokens,
+          node_count,
+          max_depth,
+          is_archived,
+          created_at,
+          updated_at,
+          last_accessed_at
+        `)
+        .single()
+      
+      if (error) {
+        throw createAppError(
+          'Failed to create session in database',
+          classifyDatabaseError(error),
+          {
+            userMessage: 'Unable to create your session. Please try again.',
+            context: { name, userId: user.id },
+            cause: error
+          }
+        )
       }
-    )
-  })
-
-  if (error) {
-    throw createAppError(
-      'Session creation failed',
-      classifyDatabaseError(error),
-      { cause: error }
-    )
-  }
+      
+      return data
+    },
+    { poolKey: `create_${user.id}`, skipCache: true } // Don't cache create operations
+  )
 
     // Convert to camelCase
     const session = {
