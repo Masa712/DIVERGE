@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { OpenRouterClient } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
-import { buildEnhancedContext, buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
+import { buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
 import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 import { isRedisAvailable } from '@/lib/redis/client'
 import { getRedisEnhancedContextCache } from '@/lib/db/redis-enhanced-context-cache'
+import { getParentNodeDepth, createChatNode, updateChatNodeResponse } from '@/lib/db/pooled-operations'
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,37 +42,30 @@ export async function POST(request: NextRequest) {
     // Extract user prompt for processing
     const userPrompt = messages[messages.length - 1]?.content || ''
 
-    // Calculate depth for the new node
+    // Calculate depth for the new node using pooled connection
     let depth = 0
     if (parentNodeId) {
-      const { data: parentNode } = await supabase
-        .from('chat_nodes')
-        .select('depth')
-        .eq('id', parentNodeId)
-        .single()
-      
-      if (parentNode) {
-        depth = parentNode.depth + 1
+      try {
+        const parentDepth = await getParentNodeDepth(parentNodeId)
+        depth = parentDepth + 1
+      } catch (error) {
+        console.warn('Failed to get parent depth, using 0:', error)
       }
     }
 
-    // Create a new chat node in the database
-    const { data: chatNodeRaw, error: nodeError } = await supabase
-      .from('chat_nodes')
-      .insert({
-        session_id: sessionId,
-        parent_id: parentNodeId,
+    // Create a new chat node using pooled connection
+    let chatNodeRaw
+    try {
+      chatNodeRaw = await createChatNode({
+        sessionId,
+        parentId: parentNodeId,
         model: model as ModelId,
         prompt: userPrompt,
-        status: 'streaming',
         temperature,
-        max_tokens,
+        maxTokens: max_tokens,
         depth,
       })
-      .select()
-      .single()
-
-    if (nodeError) {
+    } catch (nodeError) {
       console.error('Error creating chat node:', nodeError)
       return NextResponse.json(
         { error: 'Failed to create chat node' },
@@ -157,21 +151,10 @@ export async function POST(request: NextRequest) {
     const responseContent = response.choices[0]?.message?.content || ''
     const usage = response.usage
 
-    // Update chat node with response
-    const { error: updateError } = await supabase
-      .from('chat_nodes')
-      .update({
-        response: responseContent,
-        status: 'completed',
-        prompt_tokens: usage?.prompt_tokens || 0,
-        response_tokens: usage?.completion_tokens || 0,
-        cost_usd: calculateCost(model, usage),
-      })
-      .eq('id', chatNode.id)
-
-    if (updateError) {
-      console.error('Error updating chat node:', updateError)
-    } else {
+    // Update chat node with response using pooled connection
+    try {
+      await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
+      
       // Clear session cache since new node was added
       // Use Redis cache if available, otherwise fall back to local cache
       const redisIsAvailable = await isRedisAvailable()
@@ -189,6 +172,9 @@ export async function POST(request: NextRequest) {
       } else {
         await clearSessionCache(sessionId)
       }
+    } catch (updateError) {
+      console.error('Error updating chat node:', updateError)
+      // Continue execution even if update fails
     }
 
     return NextResponse.json({
@@ -206,24 +192,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper function to calculate cost based on model and usage
-function calculateCost(model: string, usage?: { prompt_tokens: number; completion_tokens: number }) {
-  if (!usage) return 0
-
-  // Cost per million tokens (you can import this from types/index.ts)
-  const costMap: Record<string, { input: number; output: number }> = {
-    'openai/gpt-4o': { input: 5, output: 15 },
-    'openai/gpt-4-turbo': { input: 10, output: 30 },
-    'openai/gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-    'anthropic/claude-3.5-sonnet': { input: 3, output: 15 },
-    'anthropic/claude-3-opus': { input: 15, output: 75 },
-    'google/gemini-pro': { input: 0.5, output: 1.5 },
-    'meta-llama/llama-3.1-70b-instruct': { input: 0.8, output: 0.8 },
-  }
-
-  const modelCost = costMap[model] || { input: 1, output: 1 }
-  const inputCost = (usage.prompt_tokens / 1_000_000) * modelCost.input
-  const outputCost = (usage.completion_tokens / 1_000_000) * modelCost.output
-  
-  return inputCost + outputCost
-}

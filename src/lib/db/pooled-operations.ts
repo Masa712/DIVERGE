@@ -1,0 +1,221 @@
+/**
+ * Pooled database operations for high-frequency queries
+ * Uses connection pooling to optimize database access performance
+ */
+
+import { withPooledConnection } from '@/lib/supabase/connection-pool'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ModelId } from '@/types'
+
+/**
+ * Get parent node depth using pooled connection
+ */
+export async function getParentNodeDepth(parentNodeId: string): Promise<number> {
+  return await withPooledConnection(async (supabase) => {
+    const { data: parentNode } = await supabase
+      .from('chat_nodes')
+      .select('depth')
+      .eq('id', parentNodeId)
+      .single()
+    
+    return parentNode?.depth || 0
+  }, `depth_${parentNodeId}`)
+}
+
+/**
+ * Create chat node using pooled connection
+ */
+export async function createChatNode(nodeData: {
+  sessionId: string
+  parentId: string | null
+  model: ModelId
+  prompt: string
+  temperature: number
+  maxTokens: number
+  depth: number
+}): Promise<any> {
+  return await withPooledConnection(async (supabase) => {
+    const { data: chatNodeRaw, error: nodeError } = await supabase
+      .from('chat_nodes')
+      .insert({
+        session_id: nodeData.sessionId,
+        parent_id: nodeData.parentId,
+        model: nodeData.model,
+        prompt: nodeData.prompt,
+        status: 'streaming',
+        temperature: nodeData.temperature,
+        max_tokens: nodeData.maxTokens,
+        depth: nodeData.depth,
+      })
+      .select()
+      .single()
+
+    if (nodeError) {
+      throw nodeError
+    }
+
+    return chatNodeRaw
+  }, `create_${nodeData.sessionId}`)
+}
+
+/**
+ * Update chat node with response using pooled connection
+ */
+export async function updateChatNodeResponse(
+  nodeId: string,
+  response: string,
+  usage: { prompt_tokens: number; completion_tokens: number } | undefined,
+  model: string
+): Promise<void> {
+  return await withPooledConnection(async (supabase) => {
+    const { error: updateError } = await supabase
+      .from('chat_nodes')
+      .update({
+        response,
+        status: 'completed',
+        prompt_tokens: usage?.prompt_tokens || 0,
+        response_tokens: usage?.completion_tokens || 0,
+        cost_usd: calculateCost(model, usage),
+      })
+      .eq('id', nodeId)
+
+    if (updateError) {
+      throw updateError
+    }
+  }, `update_${nodeId}`)
+}
+
+/**
+ * Get session nodes using pooled connection
+ */
+export async function getSessionNodesPooled(sessionId: string): Promise<any[]> {
+  return await withPooledConnection(async (supabase) => {
+    const { data: nodes, error } = await supabase
+      .from('chat_nodes')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      throw error
+    }
+
+    return nodes || []
+  }, `session_${sessionId}`)
+}
+
+/**
+ * Get chat sessions using pooled connection
+ */
+export async function getChatSessionsPooled(userId: string): Promise<any[]> {
+  return await withPooledConnection(async (supabase) => {
+    const { data: sessions, error } = await supabase
+      .from('chat_sessions')
+      .select(`
+        id,
+        name,
+        created_at,
+        updated_at,
+        chat_nodes(count)
+      `)
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      throw error
+    }
+
+    return sessions || []
+  }, `sessions_${userId}`)
+}
+
+/**
+ * Create chat session using pooled connection
+ */
+export async function createChatSessionPooled(name: string, userId: string): Promise<any> {
+  return await withPooledConnection(async (supabase) => {
+    const { data: session, error } = await supabase
+      .from('chat_sessions')
+      .insert({
+        name,
+        user_id: userId,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      throw error
+    }
+
+    return session
+  }, `create_session_${userId}`)
+}
+
+/**
+ * Delete chat session using pooled connection
+ */
+export async function deleteChatSessionPooled(sessionId: string, userId: string): Promise<void> {
+  return await withPooledConnection(async (supabase) => {
+    // First delete all nodes in the session
+    const { error: nodesError } = await supabase
+      .from('chat_nodes')
+      .delete()
+      .eq('session_id', sessionId)
+
+    if (nodesError) {
+      throw nodesError
+    }
+
+    // Then delete the session
+    const { error: sessionError } = await supabase
+      .from('chat_sessions')
+      .delete()
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+
+    if (sessionError) {
+      throw sessionError
+    }
+  }, `delete_${sessionId}`)
+}
+
+/**
+ * Batch get multiple nodes by IDs using pooled connection
+ */
+export async function getNodesByIdsPooled(nodeIds: string[]): Promise<any[]> {
+  if (nodeIds.length === 0) return []
+
+  return await withPooledConnection(async (supabase) => {
+    const { data: nodes, error } = await supabase
+      .from('chat_nodes')
+      .select('*')
+      .in('id', nodeIds)
+
+    if (error) {
+      throw error
+    }
+
+    return nodes || []
+  }, 'batch_nodes')
+}
+
+// Helper function to calculate cost (keeping existing logic)
+function calculateCost(model: string, usage?: { prompt_tokens: number; completion_tokens: number }) {
+  if (!usage) return 0
+
+  const costMap: Record<string, { input: number; output: number }> = {
+    'openai/gpt-4o': { input: 5, output: 15 },
+    'openai/gpt-4-turbo': { input: 10, output: 30 },
+    'openai/gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+    'anthropic/claude-3.5-sonnet': { input: 3, output: 15 },
+    'anthropic/claude-3-opus': { input: 15, output: 75 },
+    'google/gemini-pro': { input: 0.5, output: 1.5 },
+    'meta-llama/llama-3.1-70b-instruct': { input: 0.8, output: 0.8 },
+  }
+
+  const modelCost = costMap[model] || { input: 1, output: 1 }
+  const inputCost = (usage.prompt_tokens / 1_000_000) * modelCost.input
+  const outputCost = (usage.completion_tokens / 1_000_000) * modelCost.output
+  
+  return inputCost + outputCost
+}
