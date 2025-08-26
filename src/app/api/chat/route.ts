@@ -15,9 +15,13 @@ import {
   withRetry 
 } from '@/lib/errors/error-handler'
 import { recordError } from '@/lib/errors/error-monitoring'
+import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
+  const stopTimer = performanceMonitor.startTimer('chat_api_total')
+  
+  try {
+    const supabase = createClient()
   
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
@@ -122,15 +126,19 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     let finalMessages = messages
     let contextMetadata = null
     
-    console.log(`Debug: useEnhancedContext=${useEnhancedContext}, parentNodeId=${parentNodeId}`)
+    // Debug: Enhanced context evaluation
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🧠 Enhanced context: ${useEnhancedContext}, parent: ${parentNodeId ? 'present' : 'none'}`)
+    }
     
     if (useEnhancedContext && parentNodeId) {
       try {
-        console.log(`Starting enhanced context building for parentNodeId: ${parentNodeId}`)
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🚀 Building enhanced context for: ${parentNodeId}`)
+        }
         
         // Extract node references from user prompt
         const referencedNodes = extractNodeReferences(userPrompt)
-        console.log(`Extracted references:`, referencedNodes)
         
         // Build enhanced context with intelligent strategy selection
         const enhancedContext = await buildContextWithStrategy(parentNodeId, userPrompt, {
@@ -148,7 +156,9 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
           { role: 'user', content: userPrompt }
         ]
         
-        console.log(`Enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
+        }
         
       } catch (contextError) {
         // Log but don't fail - enhanced context is optional
@@ -165,23 +175,30 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         console.warn('Enhanced context failed, falling back to simple messages:', contextError)
         // Keep original messages as fallback
       }
-    } else {
-      console.log(`Enhanced context skipped - useEnhancedContext: ${useEnhancedContext}, parentNodeId: ${parentNodeId}`)
+    } else if (process.env.NODE_ENV === 'development') {
+      console.log(`⏩ Enhanced context skipped - useEnhancedContext: ${useEnhancedContext}, parentNodeId: ${parentNodeId}`)
     }
 
-  // Initialize OpenRouter client and create completion with retry
+  // Initialize OpenRouter client and create completion with timeout and retry
   const client = new OpenRouterClient()
-  const response = await withRetry(async () => {
-    return await client.createChatCompletion({
-      model: model as ModelId,
-      messages: finalMessages,
-      temperature,
-      max_tokens,
-      stream: false,
-    })
-  }, { maxAttempts: 2 }).catch(error => {
+  const aiTimer = performanceMonitor.startTimer('openrouter_api')
+  
+  const response = await withTimeout(
+    withRetry(async () => {
+      return await client.createChatCompletion({
+        model: model as ModelId,
+        messages: finalMessages,
+        temperature,
+        max_tokens,
+        stream: false,
+      })
+    }, { maxAttempts: 2 }),
+    30000, // 30 second timeout
+    'OpenRouter API call'
+  ).catch(error => {
+    aiTimer()
     throw createAppError(
-      'AI service request failed',
+      'AI service request failed or timed out',
       ErrorCategory.EXTERNAL_API,
       {
         userMessage: 'The AI service is temporarily unavailable. Please try again in a moment.',
@@ -190,6 +207,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       }
     )
   })
+  
+  aiTimer()
 
     const responseContent = response.choices[0]?.message?.content || ''
     const usage = response.usage
@@ -230,14 +249,17 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     ))
   }
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      id: chatNode.id,
-      content: responseContent,
-      usage,
-      contextMetadata,
-    }
-  })
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: chatNode.id,
+        content: responseContent,
+        usage,
+        contextMetadata,
+      }
+    })
+  } finally {
+    stopTimer()
+  }
 })
 

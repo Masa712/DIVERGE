@@ -39,11 +39,12 @@ export default function ChatPage() {
     try {
       const response = await fetch(`/api/sessions/${sessionId}`)
       if (response.ok) {
-        const { session, chatNodes } = await response.json()
+        const { data } = await response.json()
+        const { session, chatNodes } = data
         setCurrentSession(session)
-        setChatNodes(chatNodes)
+        setChatNodes(chatNodes || [])
         // Set current node to the last node
-        if (chatNodes.length > 0) {
+        if (chatNodes && chatNodes.length > 0) {
           setCurrentNodeId(chatNodes[chatNodes.length - 1].id)
         }
       } else if (response.status === 404) {
@@ -100,7 +101,7 @@ export default function ChatPage() {
       let parentNode = null
       if (currentNodeId) {
         parentNode = chatNodes.find(node => node.id === currentNodeId)
-      } else if (chatNodes.length > 0) {
+      } else if (chatNodes && chatNodes.length > 0) {
         // Find the most recently created node as default parent
         parentNode = chatNodes.reduce((latest, node) => 
           new Date(node.createdAt) > new Date(latest.createdAt) ? node : latest
@@ -129,8 +130,9 @@ export default function ChatPage() {
         // Set the new node as current (it will be the last one created)
         const updatedResponse = await fetch(`/api/sessions/${currentSession.id}`)
         if (updatedResponse.ok) {
-          const { chatNodes: updatedNodes } = await updatedResponse.json()
-          if (updatedNodes.length > chatNodes.length) {
+          const { data } = await updatedResponse.json()
+          const { chatNodes: updatedNodes } = data
+          if (updatedNodes && updatedNodes.length > (chatNodes?.length || 0)) {
             const newNode = updatedNodes[updatedNodes.length - 1]
             setCurrentNodeId(newNode.id)
           }

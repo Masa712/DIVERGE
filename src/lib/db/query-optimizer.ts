@@ -370,18 +370,12 @@ export async function loadOptimizedSessions(
         last_accessed_at
       `
       
-      // Add conditional fields
-      if (includeNodeCount) {
-        selectQuery += `, chat_nodes(count)`
-      }
-      
-      if (includeLastMessage) {
-        selectQuery += `, chat_nodes!inner(id, prompt, response, created_at)`
-      }
+      // For now, remove problematic joins and use the stored node_count field
+      // The node_count field should be maintained by triggers or application logic
       
       const { data, error } = await supabase
         .from('sessions')
-        .select(selectQuery)
+        .select(selectQuery.trim())
         .eq('user_id', userId)
         .eq('is_archived', archived)
         .order('last_accessed_at', { ascending: false })

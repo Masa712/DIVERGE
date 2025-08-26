@@ -117,9 +117,13 @@ export const GET = withErrorHandler(async (
       .update({ last_accessed_at: new Date().toISOString() })
       .eq('id', sessionId)
   ).then(() => {
-    console.log(`📈 Updated last access time for session: ${sessionId}`)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`📈 Updated last access time for session: ${sessionId}`)
+    }
   }).catch(error => {
-    console.warn('Failed to update last access time:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️ Failed to update last access time:', error)
+    }
   })
 
   return NextResponse.json({

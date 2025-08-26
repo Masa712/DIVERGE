@@ -60,7 +60,9 @@ export class DistributedCache {
         await this.setupPubSub()
       }
       
-      console.log(`🚀 Distributed cache initialized for ${this.instanceId}`)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🚀 Distributed cache initialized for ${this.instanceId}`)
+      }
     } catch (error) {
       console.error('Failed to initialize distributed cache:', error)
       // Fall back to local cache only

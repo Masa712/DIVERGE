@@ -56,7 +56,7 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
     try {
       const response = await fetch('/api/sessions')
       if (response.ok) {
-        const data = await response.json()
+        const { data } = await response.json()
         setSessions(data.sessions || [])
       } else {
         showError('Failed to load sessions')
@@ -107,7 +107,8 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
       })
 
       if (response.ok) {
-        const { session } = await response.json()
+        const { data } = await response.json()
+        const session = data.session
         await fetchSessions()
         onNewSession()
         onSessionSelect(session.id)
@@ -283,10 +284,10 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
               ) : (
                 <div className="space-y-2">
                   {sessions.map((session) => (
-                    <div key={session.id} className="relative">
+                    <div key={session.id} className="relative group">
                       <button
                         onClick={() => onSessionSelect(session.id)}
-                        className={`w-full p-3 rounded-lg text-left transition-all duration-200 group ${
+                        className={`w-full p-3 rounded-lg text-left transition-all duration-200 ${
                           currentSessionId === session.id
                             ? 'bg-white/20 shadow-lg'
                             : 'hover:bg-white/10'
@@ -303,16 +304,17 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
                               {formatDate(session.updatedAt)}
                             </p>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSessionToDelete(session.id)
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 hover:text-red-600 transition-all duration-200"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </div>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSessionToDelete(session.id)
+                        }}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 hover:text-red-600 transition-all duration-200"
+                        title="Delete session"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ))}

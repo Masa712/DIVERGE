@@ -43,25 +43,35 @@ let redlockClient: Redlock | null = null
  */
 export async function getRedisClient(): Promise<Redis> {
   if (!redisClient) {
-    console.log('🔴 Initializing Redis client...')
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔴 Initializing Redis client...')
+    }
     redisClient = new Redis(redisConfig)
     
     // Event handlers
     redisClient.on('connect', () => {
-      console.log('✅ Redis connected successfully')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Redis connected successfully')
+      }
     })
     
     redisClient.on('error', (error) => {
-      console.error('❌ Redis error:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Redis error:', error)
+      }
       // Don't throw - allow graceful degradation
     })
     
     redisClient.on('ready', () => {
-      console.log('🟢 Redis ready for commands')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🟢 Redis ready for commands')
+      }
     })
     
     redisClient.on('reconnecting', (delay: number) => {
-      console.log(`🔄 Redis reconnecting in ${delay}ms...`)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔄 Redis reconnecting in ${delay}ms...`)
+      }
     })
     
     // Connect if lazy connect is enabled

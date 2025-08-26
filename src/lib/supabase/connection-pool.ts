@@ -57,7 +57,7 @@ class SupabaseConnectionPool {
     this.config = { ...DEFAULT_CONFIG, ...config }
     this.startMaintenanceTasks()
     
-    if (this.config.enableMetrics) {
+    if (this.config.enableMetrics && process.env.NODE_ENV === 'development') {
       console.log('🏊 Supabase connection pool initialized:', {
         maxConnections: this.config.maxConnections,
         idleTimeout: `${this.config.idleTimeout}ms`,
@@ -82,7 +82,7 @@ class SupabaseConnectionPool {
         connection.requestCount++
         this.updateMetrics(true, performance.now() - startTime)
         
-        if (this.config.enableMetrics) {
+        if (this.config.enableMetrics && process.env.NODE_ENV === 'development') {
           console.log(`♻️ Reusing pooled connection: ${poolKey} (${connection.requestCount} requests)`)
         }
         
@@ -103,7 +103,7 @@ class SupabaseConnectionPool {
         this.serverPool.set(poolKey, connection)
         this.updateMetrics(false, performance.now() - startTime)
         
-        if (this.config.enableMetrics) {
+        if (this.config.enableMetrics && process.env.NODE_ENV === 'development') {
           console.log(`🆕 Created new pooled connection: ${poolKey} (pool size: ${this.serverPool.size}/${this.config.maxConnections})`)
         }
         
@@ -140,7 +140,7 @@ class SupabaseConnectionPool {
       connection.inUse = false
       connection.lastUsed = Date.now()
       
-      if (this.config.enableMetrics) {
+      if (this.config.enableMetrics && process.env.NODE_ENV === 'development') {
         console.log(`🔄 Released connection: ${poolKey}`)
       }
     }
@@ -250,7 +250,7 @@ class SupabaseConnectionPool {
       }
     }
     
-    if (cleanedCount > 0 && this.config.enableMetrics) {
+    if (cleanedCount > 0 && this.config.enableMetrics && process.env.NODE_ENV === 'development') {
       console.log(`🧹 Cleaned up ${cleanedCount} idle connections`)
     }
   }

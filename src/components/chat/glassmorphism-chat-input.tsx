@@ -150,7 +150,6 @@ export function GlassmorphismChatInput({
       
       // Only auto-collapse when right sidebar is open and screen gets smaller
       if (isRightSidebarOpen && screenWidth < 1400 && !isLeftSidebarCollapsed) {
-        console.log('🔄 Auto-collapsing left sidebar at breakpoint:', screenWidth, 'px')
         onLeftSidebarAutoCollapse(true)
       }
     }
@@ -222,12 +221,10 @@ export function GlassmorphismChatInput({
           }}
           onKeyDown={handleKeyDown}
           onFocus={(e) => {
-            console.log('📝 Textarea focused')
             e.currentTarget.dataset.wasFocused = 'true'
             onFocusChange?.(true)
           }}
           onBlur={(e) => {
-            console.log('📝 Textarea blurred')
             const textarea = e.currentTarget
             setTimeout(() => {
               if (textarea && textarea.dataset) {
@@ -289,18 +286,6 @@ export function GlassmorphismChatInput({
        ${isLeftSidebarCollapsed ? 'lg:left-[124px]' : 'lg:left-[410px]'} lg:translate-x-0`
     : "fixed bottom-6 z-40 w-full" // Right sidebar hidden: use separate positioning for responsive centering
 
-  // Debug logging
-  if (typeof window !== 'undefined') {
-    console.log('🔍 GlassmorphismChatInput render:', {
-      isRightSidebarOpen,
-      isLeftSidebarCollapsed,
-      screenWidth: window.innerWidth,
-      isTablet: window.innerWidth >= 768 && window.innerWidth < 1024,
-      isMobile: window.innerWidth < 768,
-      containerClassName: containerClassName,
-      rightOffset: rightOffset
-    })
-  }
 
   // Hide input area on mobile/tablet when any sidebar is open
   const shouldHideOnMobile = windowWidth < 1024
