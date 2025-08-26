@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
 import { buildEnhancedContext, buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
 import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
+import { isRedisAvailable } from '@/lib/redis/client'
+import { getRedisEnhancedContextCache } from '@/lib/db/redis-enhanced-context-cache'
 
 export async function POST(request: NextRequest) {
   try {
@@ -171,7 +173,22 @@ export async function POST(request: NextRequest) {
       console.error('Error updating chat node:', updateError)
     } else {
       // Clear session cache since new node was added
-      clearSessionCache(sessionId)
+      // Use Redis cache if available, otherwise fall back to local cache
+      const redisIsAvailable = await isRedisAvailable()
+      if (redisIsAvailable) {
+        const redisCache = getRedisEnhancedContextCache()
+        await redisCache.clearSessionCache(sessionId)
+        // Also add the new node to cache
+        await redisCache.addNode(sessionId, {
+          ...chatNode,
+          response: responseContent,
+          status: 'completed',
+          createdAt: chatNode.createdAt.toISOString(),
+          updatedAt: chatNode.updatedAt.toISOString(),
+        })
+      } else {
+        await clearSessionCache(sessionId)
+      }
     }
 
     return NextResponse.json({

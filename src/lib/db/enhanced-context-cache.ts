@@ -5,6 +5,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { ChatNode } from '@/types'
+import { isRedisAvailable } from '@/lib/redis/client'
+import { getRedisEnhancedContextCache } from './redis-enhanced-context-cache'
 
 // In-memory cache for session nodes (scoped to request lifecycle)
 const sessionNodeCache = new Map<string, Map<string, any>>()
@@ -13,20 +15,39 @@ const shortIdCache = new Map<string, Map<string, string>>() // sessionId -> shor
 /**
  * Clear cache for a specific session (e.g., when new nodes are added)
  */
-export function clearSessionCache(sessionId: string) {
-  sessionNodeCache.delete(sessionId)
-  shortIdCache.delete(sessionId)
-  console.log(`🗑️ Cleared cache for session ${sessionId}`)
+export async function clearSessionCache(sessionId: string) {
+  // Use Redis cache if available
+  const redisIsAvailable = await isRedisAvailable()
+  if (redisIsAvailable) {
+    const redisCache = getRedisEnhancedContextCache()
+    await redisCache.clearSessionCache(sessionId)
+  } else {
+    // Fallback to local cache
+    sessionNodeCache.delete(sessionId)
+    shortIdCache.delete(sessionId)
+    console.log(`🗑️ Cleared local cache for session ${sessionId}`)
+  }
 }
 
 /**
  * Get nodes for a session with caching
  */
 export async function getCachedSessionNodes(sessionId: string): Promise<any[]> {
-  // Check cache first
+  // Use Redis cache if available
+  const redisIsAvailable = await isRedisAvailable()
+  console.log(`🔍 Checking Redis availability: ${redisIsAvailable}`)
+  if (redisIsAvailable) {
+    console.log(`🚀 Using Redis cache for session ${sessionId}`)
+    const redisCache = getRedisEnhancedContextCache()
+    return await redisCache.getSessionNodes(sessionId)
+  }
+  
+  console.log(`⚠️ Redis not available, using local cache for session ${sessionId}`)
+  
+  // Fallback to local cache
   if (sessionNodeCache.has(sessionId)) {
     const cachedNodes = sessionNodeCache.get(sessionId)!
-    console.log(`💾 Cache hit: ${cachedNodes.size} nodes for session ${sessionId}`)
+    console.log(`💾 Local cache hit: ${cachedNodes.size} nodes for session ${sessionId}`)
     return Array.from(cachedNodes.values())
   }
 
@@ -66,7 +87,25 @@ export async function resolveNodeReferences(
   sessionId: string,
   referenceIds: string[]
 ): Promise<{ refId: string; node: any | null }[]> {
-  // Ensure session nodes are cached
+  // Use Redis cache if available
+  const redisIsAvailable = await isRedisAvailable()
+  if (redisIsAvailable) {
+    const redisCache = getRedisEnhancedContextCache()
+    const resolved = await Promise.all(
+      referenceIds.map(async refId => {
+        const result = await redisCache.resolveShortId(refId, sessionId)
+        return {
+          refId,
+          node: result.fullId ? await redisCache.getSessionNodes(result.sessionId || sessionId)
+            .then(nodes => nodes.find(n => n.id === result.fullId)) : null
+        }
+      })
+    )
+    console.log(`🔍 Redis resolved ${resolved.filter(r => r.node).length}/${referenceIds.length} references`)
+    return resolved
+  }
+  
+  // Fallback to local cache
   await getCachedSessionNodes(sessionId)
   
   const nodeMap = sessionNodeCache.get(sessionId)

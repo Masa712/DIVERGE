@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Copy, User, Bot, Settings, ChevronLeft, ChevronRight, ArrowUp } from 'lucide-react'
+import { X, Copy, User, Bot, Settings, ChevronLeft, ChevronRight, ArrowUp, MessageCircle } from 'lucide-react'
 import { ChatNode } from '@/types'
 
 interface Props {
@@ -19,6 +19,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   const [nodeChain, setNodeChain] = useState<ChatNode[]>([])
   const [width, setWidth] = useState(400) // Default width 400px (min 400px)
   const [isResizing, setIsResizing] = useState(false)
+  const [comment, setComment] = useState('')
   const sidebarRef = useRef<HTMLDivElement>(null)
 
   // Build the parent chain when node changes
@@ -178,7 +179,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
       {/* Header - Session Title */}
       <div className="px-6 pt-9 pb-4 border-b border-white/10">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-black">
             {session?.name || 'Chat Session'}
           </h1>
         </div>
@@ -187,21 +188,15 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
       {/* Navigation Chain */}
       {nodeChain.length > 1 && (
         <div className="px-6 py-4 border-b border-white/10">
-          <div className="mb-3">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-              Navigation Chain
-            </h3>
-          </div>
-          
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 sidebar-scroll">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 sidebar-scroll mx-[30px]">
             {nodeChain.map((chainNode, index) => (
               <div key={chainNode.id} className="flex items-center gap-2 flex-shrink-0">
                 <button
                   onClick={() => navigateToNode(index)}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-200 ${
+                  className={`transition-all duration-200 ${
                     index === currentNodeIndex
-                      ? 'bg-blue-600 text-white shadow-lg scale-110'
-                      : 'bg-white/20 text-gray-700 hover:bg-white/30 hover:scale-105'
+                      ? 'text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent scale-110'
+                      : 'text-base text-gray-600 hover:text-gray-800 hover:scale-105'
                   }`}
                   title={chainNode.prompt.substring(0, 50) + '...'}
                 >
@@ -279,6 +274,40 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
             </div>
           )}
 
+          {/* Comment Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center">
+                <MessageCircle className="w-3.5 h-3.5 text-white" />
+              </div>
+              <h3 className="font-semibold text-gray-900">Comment</h3>
+            </div>
+            <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Add your thoughts about this response..."
+                className="w-full resize-none bg-transparent border-none text-sm text-gray-800 placeholder:text-gray-500 focus:outline-none"
+                rows={3}
+              />
+              {comment.trim() && (
+                <div className="mt-2 pt-2 border-t border-white/20">
+                  <button
+                    onClick={() => {
+                      // TODO: Save comment functionality
+                      console.log('Saving comment:', comment)
+                      // For now, just clear the comment
+                      setComment('')
+                    }}
+                    className="px-3 py-1 text-xs font-medium bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-blue-700 rounded-full hover:from-blue-500/30 hover:to-purple-500/30 transition-colors"
+                  >
+                    Save Comment
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* System Prompt */}
           {currentDisplayNode.systemPrompt && (
             <div className="space-y-3">
@@ -316,7 +345,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
           {/* Status and Metadata */}
           <div className="space-y-3">
             <h3 className="font-semibold text-gray-900">Details</h3>
-            <div className="bg-white/5 backdrop-blur rounded-lg p-4 border border-white/20">
+            <div className="bg-gradient-to-r from-blue-500/5 to-purple-500/5 backdrop-blur rounded-lg p-4 border border-white/20">
               <div className="grid grid-cols-1 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-gray-600">Status:</span>
@@ -327,10 +356,6 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                 <div>
                   <span className="font-medium text-gray-600">Created:</span>
                   <p className="text-gray-800 mt-1">{formatDate(currentDisplayNode.createdAt)}</p>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-600">Updated:</span>
-                  <p className="text-gray-800 mt-1">{formatDate(currentDisplayNode.updatedAt)}</p>
                 </div>
                 <div>
                   <span className="font-medium text-gray-600">Tokens:</span>
@@ -345,18 +370,6 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                   <span className="font-medium text-gray-600">Cost:</span>
                   <p className="text-gray-800 mt-1">${currentDisplayNode.costUsd.toFixed(4)}</p>
                 </div>
-                {currentDisplayNode.temperature && (
-                  <div>
-                    <span className="font-medium text-gray-600">Temperature:</span>
-                    <p className="text-gray-800 mt-1">{currentDisplayNode.temperature}</p>
-                  </div>
-                )}
-                {currentDisplayNode.maxTokens && (
-                  <div>
-                    <span className="font-medium text-gray-600">Max Tokens:</span>
-                    <p className="text-gray-800 mt-1">{currentDisplayNode.maxTokens}</p>
-                  </div>
-                )}
               </div>
             </div>
           </div>

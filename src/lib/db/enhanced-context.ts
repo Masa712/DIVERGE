@@ -13,6 +13,8 @@ import {
   truncateToTokenLimit,
   estimateTokensFallback 
 } from '@/lib/utils/token-counter'
+import { isRedisAvailable } from '@/lib/redis/client'
+import { getRedisEnhancedContextCache } from './redis-enhanced-context-cache'
 
 export interface ContextScope {
   ancestors: ChatNode[]      // Direct ancestor chain
