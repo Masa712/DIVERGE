@@ -8,15 +8,13 @@ import ReactFlow, {
   ConnectionLineType,
   useNodesState,
   useEdgesState,
-  Controls,
-  Background,
-  BackgroundVariant,
   MarkerType,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { ChatNode } from '@/types'
 import { MessageNode } from './message-node'
 import { CompactTreeLayout, TreeNode } from './CompactTreeLayout'
+import { GradientBackground } from './GradientBackground'
 
 interface Props {
   nodes: ChatNode[]
@@ -190,14 +188,13 @@ export function CompactTreeView({
         fitView
         fitViewOptions={fitViewOptions}
         attributionPosition="bottom-left"
-        className="bg-gray-50"
+        className="bg-transparent"
         minZoom={0.1}
         maxZoom={2}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
         onPaneClick={onBackgroundClick}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d1d5db" />
-        <Controls showInteractive={false} />
+        <GradientBackground gap={20} size={1} opacity={0.3} />
       </ReactFlow>
     </div>
   )

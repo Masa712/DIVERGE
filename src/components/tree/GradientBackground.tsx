@@ -29,20 +29,20 @@ export function GradientBackground({
     >
       <defs>
         {/* メインのグラデーション定義 */}
-        <radialGradient id="mainGradient" cx="30%" cy="20%" r="65%">
-          <stop offset="0%" stopColor="#B8E0FF" stopOpacity="0.6" />
-          <stop offset="25%" stopColor="#E0C7FF" stopOpacity="0.5" />
-          <stop offset="50%" stopColor="#FFF5B8" stopOpacity="0.45" />
-          <stop offset="75%" stopColor="#FFD0D6" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.2" />
+        <radialGradient id="mainGradient" cx="30%" cy="20%" r="70%">
+          <stop offset="0%" stopColor="#E6F3FF" stopOpacity="0.4" />
+          <stop offset="25%" stopColor="#F0E6FF" stopOpacity="0.3" />
+          <stop offset="50%" stopColor="#FFFACD" stopOpacity="0.3" />
+          <stop offset="75%" stopColor="#FFE4E6" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.1" />
         </radialGradient>
         
         {/* セカンダリグラデーション */}
-        <radialGradient id="secondaryGradient" cx="70%" cy="80%" r="55%">
-          <stop offset="0%" stopColor="#FFD0D6" stopOpacity="0.45" />
-          <stop offset="30%" stopColor="#E0C7FF" stopOpacity="0.4" />
-          <stop offset="60%" stopColor="#B8E0FF" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.15" />
+        <radialGradient id="secondaryGradient" cx="70%" cy="80%" r="60%">
+          <stop offset="0%" stopColor="#FFE4E6" stopOpacity="0.3" />
+          <stop offset="30%" stopColor="#F0E6FF" stopOpacity="0.25" />
+          <stop offset="60%" stopColor="#E6F3FF" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.1" />
         </radialGradient>
 
         {/* ドットパターン */}
@@ -82,7 +82,7 @@ export function GradientBackground({
         width="100%" 
         height="100%" 
         fill="url(#dotPattern)" 
-        opacity={opacity * 0.7}
+        opacity={opacity * 0.5}
       />
     </svg>
   )

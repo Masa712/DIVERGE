@@ -62,6 +62,9 @@ export default function ChatPage() {
 
   const handleSessionSelect = (sessionId: string) => {
     fetchSession(sessionId)
+    // Close right sidebar when switching sessions
+    setIsSidebarOpen(false)
+    setSelectedNodeForDetail(null)
   }
 
   const handleNewSession = () => {

@@ -368,10 +368,10 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
                 
                 <button
                   onClick={handleSignOut}
-                  className="w-full p-3 rounded-lg text-gray-600 hover:bg-red-500/20 hover:text-red-600 transition-all duration-200 flex items-center space-x-2"
+                  className="w-full p-3 rounded-lg text-gray-600 hover:text-red-600 transition-all duration-200 flex items-center space-x-2 group"
                 >
-                  <LogOut className="w-4 h-4" />
-                  <span className="text-sm">Sign Out</span>
+                  <LogOut className="w-4 h-4 group-hover:text-red-600 transition-colors duration-200" />
+                  <span className="text-sm group-hover:text-red-600 transition-colors duration-200">Sign Out</span>
                 </button>
               </div>
             )}
@@ -439,10 +439,10 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
         <div className="p-3 border-t border-white/10">
           <button
             onClick={handleSignOut}
-            className="w-full p-2 rounded-lg text-gray-600 hover:bg-red-500/20 hover:text-red-600 transition-all duration-200"
+            className="w-full p-2 rounded-lg text-gray-600 hover:text-red-600 transition-all duration-200 group"
             title="Sign Out"
           >
-            <LogOut className="w-4 h-4 mx-auto" />
+            <LogOut className="w-4 h-4 mx-auto group-hover:text-red-600 transition-colors duration-200" />
           </button>
         </div>
       </aside>
@@ -657,13 +657,13 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
             className="
               w-full px-4 py-2 rounded-lg
               text-gray-600 text-sm
-              hover:bg-red-500/20 hover:text-red-600
+              hover:text-red-600
               transition-all duration-200
-              flex items-center gap-2
+              flex items-center gap-2 group
             "
           >
-            <LogOut className="w-4 h-4" />
-            Sign Out
+            <LogOut className="w-4 h-4 group-hover:text-red-600 transition-colors duration-200" />
+            <span className="group-hover:text-red-600 transition-colors duration-200">Sign Out</span>
           </button>
         </div>
       </aside>
