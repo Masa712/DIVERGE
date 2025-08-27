@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Copy, User, Bot, Settings, ChevronLeft, ChevronRight, ArrowUp, MessageCircle, Clock, Edit2, Trash2 } from 'lucide-react'
+import { X, Copy, User, Bot, Settings, ChevronLeft, ChevronRight, ArrowUp, MessageCircle, Clock, Edit2, Trash2, RefreshCw } from 'lucide-react'
 import { ChatNode } from '@/types'
 import { useComments } from '@/hooks/useComments'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
@@ -14,9 +14,10 @@ interface Props {
   session?: { id: string; name: string } | null
   onModelChange?: (nodeId: string, model: string) => void
   onWidthChange?: (width: number) => void
+  onRetryNode?: (nodeId: string, prompt: string) => void
 }
 
-export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange }: Props) {
+export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange, onRetryNode }: Props) {
   const [currentNodeIndex, setCurrentNodeIndex] = useState(0)
   const [nodeChain, setNodeChain] = useState<ChatNode[]>([])
   const [width, setWidth] = useState(400) // Default width 400px (min 400px)
@@ -314,6 +315,25 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                   {currentDisplayNode.status === 'streaming' ? (
                     <div className="py-4 flex items-start">
                       <StreamingAnimation />
+                    </div>
+                  ) : currentDisplayNode.status === 'failed' ? (
+                    <div className="py-4 flex flex-col items-center space-y-3">
+                      <div className="flex items-center space-x-2 text-red-600">
+                        <span className="text-sm">Generation failed</span>
+                      </div>
+                      {currentDisplayNode.errorMessage && (
+                        <p className="text-xs text-red-500 text-center">
+                          {currentDisplayNode.errorMessage}
+                        </p>
+                      )}
+                      <button
+                        onClick={() => onRetryNode?.(currentDisplayNode.id, currentDisplayNode.prompt)}
+                        className="flex items-center space-x-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors"
+                        title="Retry generation"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        <span>Retry</span>
+                      </button>
                     </div>
                   ) : currentDisplayNode.response ? (
                     <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">

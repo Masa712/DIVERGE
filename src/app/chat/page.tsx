@@ -162,6 +162,73 @@ export default function ChatPage() {
     }
   }
 
+  const handleRetryNode = async (nodeId: string, originalPrompt: string) => {
+    if (!currentSession) return
+
+    try {
+      // Find the failed node to get its parent
+      const failedNode = chatNodes.find(node => node.id === nodeId)
+      if (!failedNode) return
+
+      // Use the same parent as the failed node
+      const parentNode = failedNode.parentId ? chatNodes.find(node => node.id === failedNode.parentId) : null
+
+      console.log(`Retrying failed node: ${nodeId} with prompt: ${originalPrompt}`)
+      
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: originalPrompt }],
+          model: failedNode.model,
+          max_tokens: 8000,
+          sessionId: currentSession.id,
+          parentNodeId: parentNode?.id,
+          useEnhancedContext: true,
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        const newNode = result.data.node
+        
+        // Delete the failed node
+        try {
+          await fetch(`/api/nodes/${nodeId}`, {
+            method: 'DELETE',
+          })
+          console.log(`Successfully deleted failed node: ${nodeId}`)
+        } catch (deleteError) {
+          console.warn('Failed to delete node from database:', deleteError)
+          // Continue with UI update even if deletion fails
+        }
+        
+        // Remove failed node from UI and add the new retry node
+        setChatNodes(prev => {
+          const filteredNodes = prev.filter(node => node.id !== nodeId)
+          return [...filteredNodes, newNode]
+        })
+        setCurrentNodeId(newNode.id)
+        
+        // Update sidebar to show the new node
+        setSelectedNodeForDetail(newNode)
+        setIsSidebarOpen(true)
+        
+        // Start polling for the new node
+        pollNodeStatus(newNode.id)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || `HTTP ${response.status}: Failed to retry message`
+        showError(errorMessage)
+      }
+    } catch (error) {
+      console.error('Error retrying message:', error)
+      showError('Network error. Please check your connection.')
+    }
+  }
+
   // Poll for node status updates
   const pollNodeStatus = async (nodeId: string) => {
     const maxAttempts = 60 // 5 minutes maximum (5s * 60)
@@ -282,6 +349,7 @@ export default function ChatPage() {
         onClose={handleCloseSidebar}
         session={currentSession}
         onWidthChange={setRightSidebarWidth}
+        onRetryNode={handleRetryNode}
       />
     </div>
   )
