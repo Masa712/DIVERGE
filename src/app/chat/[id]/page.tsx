@@ -230,6 +230,57 @@ export default function ChatSessionPage({ params }: Props) {
     }
   }
 
+  const handleDeleteNode = async (nodeId: string) => {
+    if (!session) return
+
+    try {
+      // Check if node has children (safety check on frontend)
+      const hasChildren = chatNodes.some(node => node.parentId === nodeId)
+      if (hasChildren) {
+        showError('Cannot delete node with child nodes')
+        return
+      }
+
+      console.log(`Deleting node: ${nodeId}`)
+      
+      const response = await fetch(`/api/nodes/${nodeId}`, {
+        method: 'DELETE',
+      })
+      
+      console.log(`Delete response status: ${response.status}`)
+
+      if (response.ok) {
+        // Remove node from UI
+        setChatNodes(prev => prev.filter(node => node.id !== nodeId))
+        
+        // Close sidebar if deleted node was being displayed
+        if (selectedNodeForDetail?.id === nodeId) {
+          setIsSidebarOpen(false)
+          setSelectedNodeForDetail(null)
+        }
+        
+        // Reset current node if it was the deleted one
+        if (currentNodeId === nodeId) {
+          const remainingNodes = chatNodes.filter(node => node.id !== nodeId)
+          if (remainingNodes.length > 0) {
+            setCurrentNodeId(remainingNodes[remainingNodes.length - 1].id)
+          } else {
+            setCurrentNodeId(undefined)
+          }
+        }
+        
+        console.log(`Successfully deleted node: ${nodeId}`)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || `HTTP ${response.status}: Failed to delete node`
+        showError(errorMessage)
+      }
+    } catch (error) {
+      console.error('Error deleting node:', error)
+      showError('Network error. Please check your connection.')
+    }
+  }
+
   // Poll for node status updates
   const pollNodeStatus = async (nodeId: string) => {
     const maxAttempts = 60 // 5 minutes maximum (5s * 60)
@@ -249,8 +300,20 @@ export default function ChatSessionPage({ params }: Props) {
           const updatedNode = updatedNodes.find((n: any) => n.id === nodeId)
           
           if (updatedNode && updatedNode.status !== 'streaming') {
-            // Node has been completed or failed, update the UI
-            setChatNodes(updatedNodes)
+            // Node has been completed or failed, update only this specific node
+            setChatNodes(prev => {
+              // Check if the node still exists in our local state (not deleted)
+              const nodeExists = prev.some(node => node.id === nodeId)
+              if (!nodeExists) {
+                console.log(`Node ${nodeId} was deleted locally, skipping update`)
+                return prev // Don't update if node was deleted
+              }
+              
+              // Update only the specific node that was polled
+              return prev.map(node => 
+                node.id === nodeId ? updatedNode : node
+              )
+            })
             console.log(`Node ${nodeId} updated with status: ${updatedNode.status}`)
             return // Stop polling
           }
@@ -352,6 +415,7 @@ export default function ChatSessionPage({ params }: Props) {
         session={session}
         onWidthChange={setRightSidebarWidth}
         onRetryNode={handleRetryNode}
+        onDeleteNode={handleDeleteNode}
       />
     </div>
   )

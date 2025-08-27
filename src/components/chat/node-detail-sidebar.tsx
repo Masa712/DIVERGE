@@ -15,9 +15,10 @@ interface Props {
   onModelChange?: (nodeId: string, model: string) => void
   onWidthChange?: (width: number) => void
   onRetryNode?: (nodeId: string, prompt: string) => void
+  onDeleteNode?: (nodeId: string) => void
 }
 
-export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange, onRetryNode }: Props) {
+export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange, onRetryNode, onDeleteNode }: Props) {
   const [currentNodeIndex, setCurrentNodeIndex] = useState(0)
   const [nodeChain, setNodeChain] = useState<ChatNode[]>([])
   const [width, setWidth] = useState(400) // Default width 400px (min 400px)
@@ -35,6 +36,14 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
     const latestNode = allNodes.find(n => n.id === chainNode.id)
     return latestNode || chainNode
   })()
+
+  // Check if current node has children (to determine if deletion is allowed)
+  const hasChildren = useCallback((nodeId: string) => {
+    return allNodes.some(node => node.parentId === nodeId)
+  }, [allNodes])
+
+  // Check if current node can be deleted
+  const canDeleteCurrentNode = currentDisplayNode && !hasChildren(currentDisplayNode.id)
   
   // Use comments hook to fetch and manage comments
   const { comments, loading: commentsLoading, createComment, deleteComment, refetch } = useComments({
@@ -494,6 +503,24 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                     {currentDisplayNode.id.slice(-8)}
                   </div>
                 </div>
+
+                {/* Delete Node Section */}
+                {canDeleteCurrentNode && (
+                  <div className="pt-4 border-t border-white/20">
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to delete this node? This action cannot be undone.')) {
+                          onDeleteNode?.(currentDisplayNode.id)
+                        }
+                      }}
+                      className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors"
+                      title="Delete this node (only available if no child nodes exist)"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Delete Node</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
