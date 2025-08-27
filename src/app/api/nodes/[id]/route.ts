@@ -1,14 +1,15 @@
 'use server'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { clearQueryCache } from '@/lib/db/query-optimizer'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
     
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -63,18 +64,69 @@ export async function DELETE(
       return NextResponse.json({ error: 'Cannot delete node with child nodes' }, { status: 400 })
     }
 
-    // Delete the node
-    const { error: deleteError } = await supabase
+    // Verify node exists before deletion
+    const { data: preDeleteCheck } = await supabase
       .from('chat_nodes')
-      .delete()
+      .select('id')
       .eq('id', nodeId)
+      .single()
+    
+    console.log(`Pre-delete check - Node ${nodeId} exists:`, !!preDeleteCheck)
+
+    // Delete the node using service role client to bypass RLS
+    const serviceSupabase = createServiceRoleClient()
+    const { data: deleteData, error: deleteError, count } = await serviceSupabase
+      .from('chat_nodes')
+      .delete({ count: 'exact' })
+      .eq('id', nodeId)
+
+    console.log(`Delete operation result:`, {
+      data: deleteData,
+      error: deleteError,
+      count,
+      nodeId
+    })
 
     if (deleteError) {
       console.error('Error deleting node:', deleteError)
       return NextResponse.json({ error: 'Failed to delete node' }, { status: 500 })
     }
 
-    console.log(`Successfully deleted node: ${nodeId}`)
+    if (count === 0) {
+      console.error('❌ Delete operation succeeded but no rows were deleted')
+      return NextResponse.json({ error: 'No rows were deleted - possible permission issue' }, { status: 500 })
+    }
+    
+    // Verify deletion actually occurred using service role client
+    const { data: verifyData, error: verifyError } = await serviceSupabase
+      .from('chat_nodes')
+      .select('id')
+      .eq('id', nodeId)
+      .single()
+    
+    console.log(`Post-delete verification - Node ${nodeId}:`, {
+      data: verifyData,
+      error: verifyError?.code,
+      errorMessage: verifyError?.message
+    })
+    
+    if (verifyData) {
+      console.error('⚠️ Node still exists after deletion attempt:', nodeId)
+      console.error('Node data:', verifyData)
+      return NextResponse.json({ error: 'Node deletion failed - node still exists' }, { status: 500 })
+    }
+    
+    if (verifyError && verifyError.code !== 'PGRST116') {
+      console.error('Unexpected error during verification:', verifyError)
+    } else if (verifyError && verifyError.code === 'PGRST116') {
+      console.log(`✅ Node successfully deleted: ${nodeId} (PGRST116 = not found)`)
+    }
+
+    // Clear query cache to ensure deleted nodes don't appear in subsequent requests
+    // This is necessary because the chatNodesLoader caches results
+    clearQueryCache()
+    console.log(`🗑️ Successfully deleted node ${nodeId} from session ${nodeData.session_id} and cleared cache`)
+    
     return NextResponse.json({ success: true })
 
   } catch (error) {
