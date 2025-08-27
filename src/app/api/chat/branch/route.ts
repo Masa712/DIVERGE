@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       prompt,
       model,
       temperature = 0.7,
-      maxTokens = 1000,
+      maxTokens = 4000, // Increased default for better responses
       systemPrompt,
       useEnhancedContext = true
     } = body
@@ -103,12 +103,26 @@ export async function POST(request: NextRequest) {
     // Initialize OpenRouter client
     const client = new OpenRouterClient()
 
+    // Set model-specific max_tokens for optimal output length
+    const getOptimalMaxTokens = (modelId: string, userMaxTokens: number): number => {
+      // For reasoning models like Grok-4, allow more tokens for complete responses
+      if (modelId === 'x-ai/grok-4') return Math.max(userMaxTokens, 6000)
+      
+      // For high-context models, use generous limits
+      if (modelId.includes('gpt-5') || modelId.includes('claude-opus')) return Math.max(userMaxTokens, 5000)
+      
+      // For other models, ensure minimum for complete responses
+      return Math.max(userMaxTokens, 4000)
+    }
+    
+    const optimalMaxTokens = getOptimalMaxTokens(model, maxTokens)
+
     // Get response from AI
     const response = await client.createChatCompletion({
       model: model as ModelId,
       messages,
       temperature,
-      max_tokens: maxTokens,
+      max_tokens: optimalMaxTokens,
       stream: false,
     })
 

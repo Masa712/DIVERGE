@@ -1,27 +1,24 @@
-export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'meta' | 'mistral'
+export type ModelProvider = 'OpenAI' | 'Anthropic' | 'Google' | 'xAI'
 
 export type ModelId = 
-  // OpenAI Models via OpenRouter
-  | 'openai/gpt-4o' 
-  | 'openai/gpt-4-turbo' 
-  | 'openai/gpt-3.5-turbo'
-  | 'openai/o1-preview'
-  | 'openai/o1-mini'
-  // Anthropic Models via OpenRouter
-  | 'anthropic/claude-3.5-sonnet' 
-  | 'anthropic/claude-3-opus' 
-  | 'anthropic/claude-3-haiku'
-  | 'anthropic/claude-3-sonnet'
-  // Google Models via OpenRouter
-  | 'google/gemini-pro' 
-  | 'google/gemini-pro-vision'
-  | 'google/gemini-pro-1.5'
-  // Meta Models via OpenRouter
-  | 'meta-llama/llama-3.1-70b-instruct'
-  | 'meta-llama/llama-3.1-8b-instruct'
-  // Other Popular Models
-  | 'mistralai/mistral-large'
-  | 'mistralai/mixtral-8x7b-instruct'
+  // OpenAI Latest Models via OpenRouter
+  | 'openai/gpt-5'
+  | 'openai/gpt-5-mini'
+  | 'openai/gpt-oss-120b'
+  | 'openai/o3'
+  | 'openai/gpt-4.1'
+  | 'openai/gpt-4o-2024-11-20'
+  // Anthropic Latest Models via OpenRouter
+  | 'anthropic/claude-opus-4.1'
+  | 'anthropic/claude-opus-4'
+  | 'anthropic/claude-sonnet-4'
+  // Google Latest Models via OpenRouter
+  | 'google/gemini-2.5-flash'
+  | 'google/gemini-2.5-pro'
+  // xAI Latest Models via OpenRouter (Note: x-ai with hyphen, not xai)
+  | 'x-ai/grok-4'
+  | 'x-ai/grok-3'
+  | 'x-ai/grok-3-mini'
 
 // Model configuration with OpenRouter
 export interface ModelConfig {
@@ -37,58 +34,107 @@ export interface ModelConfig {
 
 // Available models via OpenRouter
 export const AVAILABLE_MODELS: ModelConfig[] = [
-  // OpenAI
+  // OpenAI Latest Models
   { 
-    id: 'openai/gpt-4o', 
-    name: 'GPT-4o', 
+    id: 'openai/gpt-5', 
+    name: 'GPT-5', 
+    provider: 'OpenAI',
+    contextLength: 256000,
+    costPerMillionTokens: { input: 20, output: 60 }
+  },
+  { 
+    id: 'openai/gpt-5-mini', 
+    name: 'GPT-5 Mini', 
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 8, output: 24 }
+  },
+  { 
+    id: 'openai/gpt-oss-120b', 
+    name: 'GPT-OSS 120B', 
     provider: 'OpenAI',
     contextLength: 128000,
     costPerMillionTokens: { input: 5, output: 15 }
   },
   { 
-    id: 'openai/gpt-4-turbo', 
-    name: 'GPT-4 Turbo', 
+    id: 'openai/o3', 
+    name: 'O3', 
     provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 15, output: 45 }
+  },
+  { 
+    id: 'openai/gpt-4.1', 
+    name: 'GPT-4.1', 
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 12, output: 36 }
+  },
+  { 
+    id: 'openai/gpt-4o-2024-11-20', 
+    name: 'GPT-4o', 
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 5, output: 15 }
+  },
+  // Anthropic Latest Models
+  { 
+    id: 'anthropic/claude-opus-4.1', 
+    name: 'Claude Opus 4.1', 
+    provider: 'Anthropic',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 25, output: 100 }
+  },
+  { 
+    id: 'anthropic/claude-opus-4', 
+    name: 'Claude Opus 4', 
+    provider: 'Anthropic',
+    contextLength: 300000,
+    costPerMillionTokens: { input: 20, output: 80 }
+  },
+  { 
+    id: 'anthropic/claude-sonnet-4', 
+    name: 'Claude Sonnet 4', 
+    provider: 'Anthropic',
+    contextLength: 250000,
+    costPerMillionTokens: { input: 8, output: 32 }
+  },
+  // Google Latest Models
+  { 
+    id: 'google/gemini-2.5-flash', 
+    name: 'Gemini 2.5 Flash', 
+    provider: 'Google',
+    contextLength: 1000000,
+    costPerMillionTokens: { input: 0.25, output: 0.75 }
+  },
+  { 
+    id: 'google/gemini-2.5-pro', 
+    name: 'Gemini 2.5 Pro', 
+    provider: 'Google',
+    contextLength: 2000000,
+    costPerMillionTokens: { input: 2.5, output: 7.5 }
+  },
+  // xAI Latest Models
+  { 
+    id: 'x-ai/grok-4', 
+    name: 'Grok 4', 
+    provider: 'xAI',
+    contextLength: 256000,
+    costPerMillionTokens: { input: 18, output: 54 }
+  },
+  { 
+    id: 'x-ai/grok-3', 
+    name: 'Grok 3', 
+    provider: 'xAI',
     contextLength: 128000,
     costPerMillionTokens: { input: 10, output: 30 }
   },
   { 
-    id: 'openai/gpt-3.5-turbo', 
-    name: 'GPT-3.5 Turbo', 
-    provider: 'OpenAI',
-    contextLength: 16385,
-    costPerMillionTokens: { input: 0.5, output: 1.5 }
-  },
-  // Anthropic
-  { 
-    id: 'anthropic/claude-3.5-sonnet', 
-    name: 'Claude 3.5 Sonnet', 
-    provider: 'Anthropic',
-    contextLength: 200000,
-    costPerMillionTokens: { input: 3, output: 15 }
-  },
-  { 
-    id: 'anthropic/claude-3-opus', 
-    name: 'Claude 3 Opus', 
-    provider: 'Anthropic',
-    contextLength: 200000,
-    costPerMillionTokens: { input: 15, output: 75 }
-  },
-  // Google
-  { 
-    id: 'google/gemini-pro', 
-    name: 'Gemini Pro', 
-    provider: 'Google',
-    contextLength: 32000,
-    costPerMillionTokens: { input: 0.5, output: 1.5 }
-  },
-  // Meta
-  { 
-    id: 'meta-llama/llama-3.1-70b-instruct', 
-    name: 'Llama 3.1 70B', 
-    provider: 'Meta',
-    contextLength: 128000,
-    costPerMillionTokens: { input: 0.8, output: 0.8 }
+    id: 'x-ai/grok-3-mini', 
+    name: 'Grok 3 Mini', 
+    provider: 'xAI',
+    contextLength: 64000,
+    costPerMillionTokens: { input: 4, output: 12 }
   },
 ]
 

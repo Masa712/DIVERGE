@@ -37,7 +37,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     messages, 
     model, 
     temperature = 0.7, 
-    max_tokens = 1000,
+    max_tokens = 4000, // Increased default for better responses
     sessionId,
     parentNodeId,
     useEnhancedContext = true
@@ -183,17 +183,34 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   const client = new OpenRouterClient()
   const aiTimer = performanceMonitor.startTimer('openrouter_api')
   
+  // Grok-4 is a reasoning model that needs more time (2-4 minutes typical)
+  const timeoutMs = model === 'x-ai/grok-4' ? 150000 : 30000 // 2.5 minutes for Grok-4, 30 seconds for others
+  
+  // Set model-specific max_tokens for optimal output length
+  const getOptimalMaxTokens = (modelId: string, userMaxTokens: number): number => {
+    // For reasoning models like Grok-4, allow more tokens for complete responses
+    if (modelId === 'x-ai/grok-4') return Math.max(userMaxTokens, 6000)
+    
+    // For high-context models, use generous limits
+    if (modelId.includes('gpt-5') || modelId.includes('claude-opus')) return Math.max(userMaxTokens, 5000)
+    
+    // For other models, ensure minimum for complete responses
+    return Math.max(userMaxTokens, 4000)
+  }
+  
+  const optimalMaxTokens = getOptimalMaxTokens(model, max_tokens)
+  
   const response = await withTimeout(
     withRetry(async () => {
       return await client.createChatCompletion({
         model: model as ModelId,
         messages: finalMessages,
         temperature,
-        max_tokens,
+        max_tokens: optimalMaxTokens,
         stream: false,
       })
     }, { maxAttempts: 2 }),
-    30000, // 30 second timeout
+    timeoutMs,
     'OpenRouter API call'
   ).catch(error => {
     aiTimer()

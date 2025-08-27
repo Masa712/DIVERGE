@@ -164,6 +164,13 @@ export async function executeOptimizedQuery<T>(
       timestamp: new Date().toISOString()
     })
     
+    // Log detailed error information
+    console.error('❌ Database query failed:', {
+      queryId,
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
     throw createAppError(
       `Optimized query failed: ${queryId}`,
       ErrorCategory.DATABASE,

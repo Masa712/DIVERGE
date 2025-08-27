@@ -18,7 +18,7 @@ export default function ChatPage() {
   
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
-  const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o')
+  const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
   const [loadingSession, setLoadingSession] = useState(false)
   
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
@@ -121,6 +121,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           messages: [{ role: 'user', content: message }],
           model: selectedModel,
+          max_tokens: 8000, // Ensure sufficient tokens for complete responses
           sessionId: currentSession.id,
           parentNodeId: parentNode?.id,
           useEnhancedContext: true, // Explicitly enable enhanced context

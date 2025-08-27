@@ -126,6 +126,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   }
 
   // Create new session with optimized insert operation
+  console.log('📝 Creating new session:', { name: name.trim(), userId: user.id })
+  
   const sessionRaw = await executeOptimizedQuery(
     `create_session_${user.id}_${Date.now()}`, // Unique cache key
     async (supabase) => {
@@ -154,17 +156,25 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         .single()
       
       if (error) {
+        console.error('❌ Session creation error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        })
+        
         throw createAppError(
           'Failed to create session in database',
           classifyDatabaseError(error),
           {
             userMessage: 'Unable to create your session. Please try again.',
-            context: { name, userId: user.id },
+            context: { name, userId: user.id, errorDetails: error },
             cause: error
           }
         )
       }
       
+      console.log('✅ Session created successfully:', data?.id)
       return data
     },
     { poolKey: `create_${user.id}`, skipCache: true } // Don't cache create operations
