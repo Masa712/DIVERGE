@@ -130,18 +130,19 @@ export default function ChatSessionPage({ params }: Props) {
       })
 
       if (response.ok) {
-        // Refresh the session data to get updated nodes
-        await fetchSession()
-        // Set the new node as current (it will be the last one created)
-        const updatedResponse = await fetch(`/api/sessions/${session.id}`)
-        if (updatedResponse.ok) {
-          const { data } = await updatedResponse.json()
-          const { chatNodes: updatedNodes } = data
-          if (updatedNodes && updatedNodes.length > (chatNodes?.length || 0)) {
-            const newNode = updatedNodes[updatedNodes.length - 1]
-            setCurrentNodeId(newNode.id)
-          }
-        }
+        const result = await response.json()
+        const newNode = result.data.node
+        
+        // Immediately add the streaming node to the UI
+        setChatNodes(prev => [...prev, newNode])
+        setCurrentNodeId(newNode.id)
+        
+        // Automatically open right sidebar with the new node details
+        setSelectedNodeForDetail(newNode)
+        setIsSidebarOpen(true)
+        
+        // Start polling for node updates
+        pollNodeStatus(newNode.id)
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || `HTTP ${response.status}: Failed to send message`
@@ -160,6 +161,48 @@ export default function ChatSessionPage({ params }: Props) {
       }
       throw error // Re-throw so ChatInput can handle message restoration
     }
+  }
+
+  // Poll for node status updates
+  const pollNodeStatus = async (nodeId: string) => {
+    const maxAttempts = 60 // 5 minutes maximum (5s * 60)
+    let attempts = 0
+
+    const checkStatus = async () => {
+      if (attempts >= maxAttempts) {
+        console.log('Polling timeout for node:', nodeId)
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/sessions/${session?.id}`)
+        if (response.ok) {
+          const { data } = await response.json()
+          const { chatNodes: updatedNodes } = data
+          const updatedNode = updatedNodes.find((n: any) => n.id === nodeId)
+          
+          if (updatedNode && updatedNode.status !== 'streaming') {
+            // Node has been completed or failed, update the UI
+            setChatNodes(updatedNodes)
+            console.log(`Node ${nodeId} updated with status: ${updatedNode.status}`)
+            return // Stop polling
+          }
+          
+          // Continue polling if still streaming
+          attempts++
+          setTimeout(checkStatus, 5000) // Poll every 5 seconds
+        }
+      } catch (error) {
+        console.error('Error polling node status:', error)
+        attempts++
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 5000)
+        }
+      }
+    }
+
+    // Start polling after a short delay
+    setTimeout(checkStatus, 2000) // Initial check after 2 seconds
   }
 
   if (loading || loadingSession || !user) {
@@ -207,6 +250,9 @@ export default function ChatSessionPage({ params }: Props) {
               onNodeClick={handleNodeClick}
               onNodeIdClick={handleNodeIdClick}
               onBackgroundClick={handleCloseSidebar}
+              isLeftSidebarCollapsed={true}
+              isRightSidebarOpen={isSidebarOpen}
+              rightSidebarWidth={rightSidebarWidth}
             />
           </div>
         </div>

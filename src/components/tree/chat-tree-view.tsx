@@ -9,6 +9,9 @@ interface Props {
   onNodeClick?: (nodeId: string) => void
   onNodeIdClick?: (nodeReference: string) => void
   onBackgroundClick?: () => void
+  isLeftSidebarCollapsed?: boolean
+  isRightSidebarOpen?: boolean
+  rightSidebarWidth?: number
 }
 
 export function ChatTreeView({ 
@@ -16,7 +19,10 @@ export function ChatTreeView({
   currentNodeId, 
   onNodeClick, 
   onNodeIdClick,
-  onBackgroundClick
+  onBackgroundClick,
+  isLeftSidebarCollapsed,
+  isRightSidebarOpen,
+  rightSidebarWidth
 }: Props) {
   // Always use CompactTreeView - simplified implementation
   return (
@@ -26,6 +32,9 @@ export function ChatTreeView({
       onNodeClick={onNodeClick}
       onNodeIdClick={onNodeIdClick}
       onBackgroundClick={onBackgroundClick}
+      isLeftSidebarCollapsed={isLeftSidebarCollapsed}
+      isRightSidebarOpen={isRightSidebarOpen}
+      rightSidebarWidth={rightSidebarWidth}
     />
   )
 }

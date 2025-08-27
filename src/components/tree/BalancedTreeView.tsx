@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -9,6 +9,8 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   MarkerType,
+  useReactFlow,
+  ReactFlowProvider,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { ChatNode } from '@/types'
@@ -22,6 +24,9 @@ interface Props {
   onNodeClick?: (nodeId: string) => void
   onNodeIdClick?: (nodeReference: string) => void
   onBackgroundClick?: () => void
+  isLeftSidebarCollapsed?: boolean
+  isRightSidebarOpen?: boolean
+  rightSidebarWidth?: number
 }
 
 const nodeTypes = {
@@ -35,20 +40,81 @@ const COMPACT_LAYOUT_CONFIG = {
   minSubtreeSpacing: 150,
 }
 
-export function CompactTreeView({ 
+// Inner component that uses ReactFlow hooks
+function CompactTreeViewInner({ 
   nodes: chatNodes, 
   currentNodeId, 
   onNodeClick, 
   onNodeIdClick,
-  onBackgroundClick
+  onBackgroundClick,
+  isLeftSidebarCollapsed = false,
+  isRightSidebarOpen = false,
+  rightSidebarWidth = 400
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const { fitView, setCenter, getZoom } = useReactFlow()
+  const prevNodeCountRef = useRef(0)
 
   // Initialize layout engine
   const layoutEngine = useMemo(() => {
     return new CompactTreeLayout(COMPACT_LAYOUT_CONFIG)
   }, [])
+  
+  // Store positions for centering when clicking nodes
+  const positionsRef = useRef<Map<string, { x: number, y: number }>>(new Map())
+
+  // Calculate dynamic centering offset based on layout state
+  const calculateCenteringOffset = useCallback(() => {
+    const screenWidth = window.innerWidth
+    const isMobile = screenWidth < 768 // md breakpoint
+    const isTablet = screenWidth >= 768 && screenWidth < 1024 // lg breakpoint
+    
+    let xOffset = 140 // Half of node width (280/2)
+    let yOffset = 50  // Base vertical offset
+
+    if (isMobile || isTablet) {
+      // Mobile/Tablet: Simpler centering approach
+      // For mobile/tablet, we want to center more precisely
+      // Reduce the base offset since mobile doesn't have sidebar complications
+      xOffset = 140 // Base node half-width
+      
+      // Apply smaller adjustment for mobile to prevent over-shifting
+      const mobileAdjustment = isMobile ? 50 : 75 // Less aggressive adjustment for mobile
+      xOffset += mobileAdjustment
+      yOffset += 200 // User requested 200px up adjustment
+      
+      console.log(`📱 Mobile/Tablet centering: screenWidth=${screenWidth}, xOffset=${xOffset}, yOffset=${yOffset}`)
+    } else {
+      // Desktop: Calculate the actual available content area
+      const leftSidebarWidth = isLeftSidebarCollapsed ? 64 : 256
+      const rightSidebarWidth_actual = isRightSidebarOpen ? rightSidebarWidth : 0
+      
+      // Calculate the center of the available content area
+      const availableWidth = screenWidth - leftSidebarWidth - rightSidebarWidth_actual
+      const contentAreaCenterX = leftSidebarWidth + (availableWidth / 2)
+      
+      // Calculate how much to shift from screen center to content area center
+      const screenCenterX = screenWidth / 2
+      let centerAdjustment = contentAreaCenterX - screenCenterX
+      
+      // Special adjustment for collapsed left sidebar to compensate for left shift
+      if (isLeftSidebarCollapsed) {
+        centerAdjustment += 320 // Add rightward shift when left sidebar is collapsed to center properly
+      }
+      
+      // Apply the adjustment
+      xOffset = 140 + centerAdjustment // 140 = half node width
+      
+      // Apply user's preferred offset adjustments for desktop
+      xOffset += 100 // User requested 100px left adjustment
+      yOffset += 200 // User requested 200px up adjustment
+      
+      console.log(`🖥️ Desktop centering: screenWidth=${screenWidth}, leftSidebarWidth=${leftSidebarWidth}, rightSidebarWidth=${rightSidebarWidth_actual}, availableWidth=${availableWidth}, contentAreaCenterX=${contentAreaCenterX}, centerAdjustment=${centerAdjustment}, isCollapsed=${isLeftSidebarCollapsed}, finalXOffset=${xOffset}`)
+    }
+
+    return { x: xOffset, y: yOffset }
+  }, [isLeftSidebarCollapsed, isRightSidebarOpen, rightSidebarWidth])
 
   // Convert ChatNodes to TreeNodes
   const convertToTreeNodes = useCallback((chatNodes: ChatNode[]): TreeNode[] => {
@@ -59,6 +125,28 @@ export function CompactTreeView({
       children: [], // Will be populated by layout engine
     }))
   }, [])
+  
+  // Enhanced node click handler that also centers the clicked node
+  const handleNodeClick = useCallback((nodeId: string) => {
+    // Call original handler
+    onNodeClick?.(nodeId)
+    
+    // Center on clicked node
+    const position = positionsRef.current.get(nodeId)
+    if (position) {
+      const currentZoom = getZoom()
+      const offset = calculateCenteringOffset()
+      setCenter(
+        position.x + offset.x,
+        position.y + offset.y,
+        { 
+          zoom: currentZoom,
+          duration: 500 
+        }
+      )
+      console.log(`🎯 Centered on clicked node: ${nodeId}`)
+    }
+  }, [onNodeClick, setCenter, getZoom, calculateCenteringOffset])
 
   // Convert chat nodes to React Flow nodes and edges with balanced layout
   useEffect(() => {
@@ -76,6 +164,9 @@ export function CompactTreeView({
       
       // Calculate positions using compact layout
       const positions = layoutEngine.calculateLayout(treeNodes)
+      
+      // Store positions for later use
+      positionsRef.current = positions
 
 //       console.log(`📍 Calculated positions for ${positions.size} nodes`)
 
@@ -100,7 +191,7 @@ export function CompactTreeView({
             node: chatNode,
             isCurrentNode,
             subtreeWidth,
-            onNodeClick: onNodeClick,
+            onNodeClick: handleNodeClick,
           },
           draggable: false,
           selectable: true,
@@ -141,12 +232,42 @@ export function CompactTreeView({
       setNodes(reactFlowNodes)
       setEdges(reactFlowEdges)
 
+      // Check if a new node was added (node count increased) or if current node is streaming
+      if (chatNodes.length > prevNodeCountRef.current || 
+          (currentNodeId && chatNodes.find(n => n.id === currentNodeId && n.status === 'streaming'))) {
+        // Find the node to center (prioritize streaming nodes, then current node, then newest)
+        const nodeToCenter = chatNodes.find(n => n.status === 'streaming') || 
+                            (currentNodeId ? chatNodes.find(n => n.id === currentNodeId) : null) ||
+                            chatNodes[chatNodes.length - 1]
+        
+        if (nodeToCenter && positions.has(nodeToCenter.id)) {
+          const position = positions.get(nodeToCenter.id)!
+          // Center the node with a slight delay to ensure ReactFlow has processed the nodes
+          setTimeout(() => {
+            const currentZoom = getZoom()
+            const offset = calculateCenteringOffset()
+            setCenter(
+              position.x + offset.x,
+              position.y + offset.y,
+              { 
+                zoom: currentZoom > 0.8 ? currentZoom : 0.8,
+                duration: 800 
+              }
+            )
+            console.log(`🎯 Centered on node: ${nodeToCenter.id} (status: ${nodeToCenter.status})`)
+          }, 100)
+        }
+      }
+      
+      // Update the previous node count
+      prevNodeCountRef.current = chatNodes.length
+
     } catch (error) {
       console.error('❌ Error in BalancedTreeView layout calculation:', error)
       setNodes([])
       setEdges([])
     }
-  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, onNodeClick, onNodeIdClick])
+  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, handleNodeClick, onNodeIdClick, setCenter, getZoom, calculateCenteringOffset])
 
   // Check if a node is in the current path
   const isCurrentPath = useCallback((nodeId: string, currentNodeId: string | undefined, nodes: ChatNode[]): boolean => {
@@ -345,4 +466,13 @@ export function generateCompactTestData(): ChatNode[] {
   })
   
   return nodes
+}
+
+// Wrapper component with ReactFlowProvider
+export function CompactTreeView(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <CompactTreeViewInner {...props} />
+    </ReactFlowProvider>
+  )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Copy, User, Bot, Settings, ChevronLeft, ChevronRight, ArrowUp, MessageCircle, Clock, Edit2, Trash2 } from 'lucide-react'
 import { ChatNode } from '@/types'
 import { useComments } from '@/hooks/useComments'
+import { StreamingAnimation } from '@/components/ui/streaming-animation'
 
 interface Props {
   node: ChatNode | null
@@ -24,8 +25,15 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   const [isCommentLoading, setIsCommentLoading] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
   
-  // Get current display node
-  const currentDisplayNode = nodeChain[currentNodeIndex]
+  // Get current display node (always get the latest version from allNodes)
+  const currentDisplayNode = (() => {
+    const chainNode = nodeChain[currentNodeIndex]
+    if (!chainNode) return chainNode
+    
+    // Find the latest version of this node from allNodes
+    const latestNode = allNodes.find(n => n.id === chainNode.id)
+    return latestNode || chainNode
+  })()
   
   // Use comments hook to fetch and manage comments
   const { comments, loading: commentsLoading, createComment, deleteComment, refetch } = useComments({
@@ -275,7 +283,6 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
             </div>
 
             {/* AI Response Section */}
-            {currentDisplayNode.response && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
@@ -304,12 +311,21 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                   </button>
                 </div>
                 <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                    {currentDisplayNode.response}
-                  </p>
+                  {currentDisplayNode.status === 'streaming' ? (
+                    <div className="py-4 flex items-start">
+                      <StreamingAnimation />
+                    </div>
+                  ) : currentDisplayNode.response ? (
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                      {currentDisplayNode.response}
+                    </p>
+                  ) : (
+                    <div className="py-4 text-center text-gray-400 text-sm italic">
+                      Waiting for response...
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
 
             {/* Comments Section */}
             <div className="space-y-3">

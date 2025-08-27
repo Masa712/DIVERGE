@@ -100,26 +100,34 @@ export async function updateChatNodeResponse(
   nodeId: string,
   response: string,
   usage: { prompt_tokens: number; completion_tokens: number } | undefined,
-  model: string
+  model: string,
+  status: string = 'completed',
+  errorMessage?: string
 ): Promise<void> {
   try {
     return await withPooledConnection(async (supabase) => {
+      const updateData: any = {
+        response,
+        status,
+        prompt_tokens: usage?.prompt_tokens || 0,
+        response_tokens: usage?.completion_tokens || 0,
+        cost_usd: calculateCost(model, usage),
+      }
+      
+      if (errorMessage) {
+        updateData.error_message = errorMessage
+      }
+
       const { error: updateError } = await supabase
         .from('chat_nodes')
-        .update({
-          response,
-          status: 'completed',
-          prompt_tokens: usage?.prompt_tokens || 0,
-          response_tokens: usage?.completion_tokens || 0,
-          cost_usd: calculateCost(model, usage),
-        })
+        .update(updateData)
         .eq('id', nodeId)
 
       if (updateError) {
         throw createAppError(
           'Failed to update chat node response',
           classifyDatabaseError(updateError),
-          { context: { nodeId, model, hasUsage: !!usage }, cause: updateError }
+          { context: { nodeId, model, hasUsage: !!usage, status }, cause: updateError }
         )
       }
     }, `update_${nodeId}`)
@@ -130,7 +138,7 @@ export async function updateChatNodeResponse(
     throw createAppError(
       'Connection pool error while updating chat node',
       ErrorCategory.DATABASE,
-      { context: { nodeId, model }, cause: error as Error }
+      { context: { nodeId, model, status }, cause: error as Error }
     )
   }
 }

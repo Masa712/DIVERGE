@@ -17,6 +17,157 @@ import {
 import { recordError } from '@/lib/errors/error-monitoring'
 import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
 
+// Background processing function for AI responses
+async function processAIResponseInBackground(
+  chatNode: any,
+  messages: any[],
+  model: string,
+  temperature: number,
+  maxTokens: number,
+  sessionId: string,
+  parentNodeId: string | undefined,
+  useEnhancedContext: boolean,
+  userPrompt: string
+) {
+  try {
+    // Build context using enhanced context system if enabled and parentNodeId exists
+    let finalMessages = messages
+    let contextMetadata = null
+    
+    // Debug: Enhanced context evaluation
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🧠 Enhanced context: ${useEnhancedContext}, parent: ${parentNodeId ? 'present' : 'none'}`)
+    }
+    
+    if (useEnhancedContext && parentNodeId) {
+      try {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🚀 Building enhanced context for: ${parentNodeId}`)
+        }
+        
+        // Extract node references from user prompt
+        const referencedNodes = extractNodeReferences(userPrompt)
+        
+        // Build enhanced context with intelligent strategy selection
+        const enhancedContext = await buildContextWithStrategy(parentNodeId, userPrompt, {
+          includeSiblings: true,
+          maxTokens: 3000, // Leave room for new prompt and response
+          includeReferences: referencedNodes,
+          model: model // Pass model for accurate token counting
+        })
+        
+        contextMetadata = enhancedContext.metadata
+        
+        // Combine enhanced context with new user message
+        finalMessages = [
+          ...enhancedContext.messages,
+          { role: 'user', content: userPrompt }
+        ]
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
+        }
+        
+      } catch (contextError) {
+        // Log but don't fail - enhanced context is optional
+        recordError(createAppError(
+          'Enhanced context building failed',
+          ErrorCategory.INTERNAL,
+          {
+            userMessage: 'Using simplified context for this message.',
+            context: { parentNodeId, useEnhancedContext },
+            cause: contextError as Error,
+            severity: 'medium' as any
+          }
+        ))
+        console.warn('Enhanced context failed, falling back to simple messages:', contextError)
+        // Keep original messages as fallback
+      }
+    } else if (process.env.NODE_ENV === 'development') {
+      console.log(`⏩ Enhanced context skipped - useEnhancedContext: ${useEnhancedContext}, parentNodeId: ${parentNodeId}`)
+    }
+
+    // Initialize OpenRouter client and create completion with timeout and retry
+    const client = new OpenRouterClient()
+    const aiTimer = performanceMonitor.startTimer('openrouter_api')
+    
+    // Grok-4 is a reasoning model that needs more time (2-4 minutes typical)
+    const timeoutMs = model === 'x-ai/grok-4' ? 150000 : 30000 // 2.5 minutes for Grok-4, 30 seconds for others
+    
+    // Set model-specific max_tokens for optimal output length
+    const getOptimalMaxTokens = (modelId: string, userMaxTokens: number): number => {
+      // For reasoning models like Grok-4, allow more tokens for complete responses
+      if (modelId === 'x-ai/grok-4') return Math.max(userMaxTokens, 6000)
+      
+      // For high-context models, use generous limits
+      if (modelId.includes('gpt-5') || modelId.includes('claude-opus')) return Math.max(userMaxTokens, 5000)
+      
+      // For other models, ensure minimum for complete responses
+      return Math.max(userMaxTokens, 4000)
+    }
+    
+    const optimalMaxTokens = getOptimalMaxTokens(model, maxTokens)
+    
+    const response = await withTimeout(
+      withRetry(async () => {
+        return await client.createChatCompletion({
+          model: model as ModelId,
+          messages: finalMessages,
+          temperature,
+          max_tokens: optimalMaxTokens,
+          stream: false,
+        })
+      }, { maxAttempts: 2 }),
+      timeoutMs,
+      'OpenRouter API call'
+    )
+    
+    aiTimer()
+
+    const responseContent = response.choices[0]?.message?.content || ''
+    const usage = response.usage
+
+    // Update chat node with response using pooled connection with retry
+    await withRetry(async () => {
+      await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
+    }, { maxAttempts: 3 })
+    
+    // Clear session cache since new node was added
+    // Use Redis cache if available, otherwise fall back to local cache
+    const redisIsAvailable = await isRedisAvailable()
+    if (redisIsAvailable) {
+      const redisCache = getRedisEnhancedContextCache()
+      await redisCache.clearSessionCache(sessionId)
+      // Also add the new node to cache
+      await redisCache.addNode(sessionId, {
+        ...chatNode,
+        response: responseContent,
+        status: 'completed',
+        createdAt: chatNode.createdAt.toISOString(),
+        updatedAt: chatNode.updatedAt.toISOString(),
+      })
+    } else {
+      await clearSessionCache(sessionId)
+    }
+
+  } catch (error) {
+    console.error('Background AI processing failed:', error)
+    // Update node status to failed
+    await updateChatNodeResponse(chatNode.id, '', null, model, 'failed', error instanceof Error ? error.message : 'Unknown error').catch(console.error)
+    
+    // Record error for monitoring
+    recordError(createAppError(
+      'Background AI processing failed',
+      ErrorCategory.EXTERNAL_API,
+      {
+        context: { chatNodeId: chatNode.id, sessionId },
+        cause: error as Error,
+        severity: 'high' as any
+      }
+    ))
+  }
+}
+
 export const POST = withErrorHandler(async (request: NextRequest) => {
   const stopTimer = performanceMonitor.startTimer('chat_api_total')
   
@@ -122,159 +273,35 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       updatedAt: new Date(chatNodeRaw.updated_at),
     }
 
-    // Build context using enhanced context system if enabled and parentNodeId exists
-    let finalMessages = messages
-    let contextMetadata = null
-    
-    // Debug: Enhanced context evaluation
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🧠 Enhanced context: ${useEnhancedContext}, parent: ${parentNodeId ? 'present' : 'none'}`)
+  // Return node immediately for instant UI feedback (async processing continues)
+  const immediateResponse = NextResponse.json({
+    success: true,
+    data: {
+      id: chatNode.id,
+      content: null, // Will be updated via background processing
+      status: 'streaming',
+      node: chatNode
     }
-    
-    if (useEnhancedContext && parentNodeId) {
-      try {
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`🚀 Building enhanced context for: ${parentNodeId}`)
-        }
-        
-        // Extract node references from user prompt
-        const referencedNodes = extractNodeReferences(userPrompt)
-        
-        // Build enhanced context with intelligent strategy selection
-        const enhancedContext = await buildContextWithStrategy(parentNodeId, userPrompt, {
-          includeSiblings: true,
-          maxTokens: 3000, // Leave room for new prompt and response
-          includeReferences: referencedNodes,
-          model: model // Pass model for accurate token counting
-        })
-        
-        contextMetadata = enhancedContext.metadata
-        
-        // Combine enhanced context with new user message
-        finalMessages = [
-          ...enhancedContext.messages,
-          { role: 'user', content: userPrompt }
-        ]
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`✅ Enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
-        }
-        
-      } catch (contextError) {
-        // Log but don't fail - enhanced context is optional
-        recordError(createAppError(
-          'Enhanced context building failed',
-          ErrorCategory.INTERNAL,
-          {
-            userMessage: 'Using simplified context for this message.',
-            context: { parentNodeId, useEnhancedContext },
-            cause: contextError as Error,
-            severity: 'medium' as any
-          }
-        ))
-        console.warn('Enhanced context failed, falling back to simple messages:', contextError)
-        // Keep original messages as fallback
-      }
-    } else if (process.env.NODE_ENV === 'development') {
-      console.log(`⏩ Enhanced context skipped - useEnhancedContext: ${useEnhancedContext}, parentNodeId: ${parentNodeId}`)
-    }
-
-  // Initialize OpenRouter client and create completion with timeout and retry
-  const client = new OpenRouterClient()
-  const aiTimer = performanceMonitor.startTimer('openrouter_api')
-  
-  // Grok-4 is a reasoning model that needs more time (2-4 minutes typical)
-  const timeoutMs = model === 'x-ai/grok-4' ? 150000 : 30000 // 2.5 minutes for Grok-4, 30 seconds for others
-  
-  // Set model-specific max_tokens for optimal output length
-  const getOptimalMaxTokens = (modelId: string, userMaxTokens: number): number => {
-    // For reasoning models like Grok-4, allow more tokens for complete responses
-    if (modelId === 'x-ai/grok-4') return Math.max(userMaxTokens, 6000)
-    
-    // For high-context models, use generous limits
-    if (modelId.includes('gpt-5') || modelId.includes('claude-opus')) return Math.max(userMaxTokens, 5000)
-    
-    // For other models, ensure minimum for complete responses
-    return Math.max(userMaxTokens, 4000)
-  }
-  
-  const optimalMaxTokens = getOptimalMaxTokens(model, max_tokens)
-  
-  const response = await withTimeout(
-    withRetry(async () => {
-      return await client.createChatCompletion({
-        model: model as ModelId,
-        messages: finalMessages,
-        temperature,
-        max_tokens: optimalMaxTokens,
-        stream: false,
-      })
-    }, { maxAttempts: 2 }),
-    timeoutMs,
-    'OpenRouter API call'
-  ).catch(error => {
-    aiTimer()
-    throw createAppError(
-      'AI service request failed or timed out',
-      ErrorCategory.EXTERNAL_API,
-      {
-        userMessage: 'The AI service is temporarily unavailable. Please try again in a moment.',
-        context: { model, messageCount: finalMessages.length },
-        cause: error as Error
-      }
-    )
   })
-  
-  aiTimer()
 
-    const responseContent = response.choices[0]?.message?.content || ''
-    const usage = response.usage
+  // Continue processing AI response in background without blocking UI
+  processAIResponseInBackground(
+    chatNode, 
+    messages, 
+    model, 
+    temperature, 
+    max_tokens, 
+    sessionId, 
+    parentNodeId, 
+    useEnhancedContext, 
+    userPrompt
+  ).catch(error => {
+    console.error('Background AI processing failed:', error)
+    // Update node status to failed
+    updateChatNodeResponse(chatNode.id, '', null, model, 'failed', error.message).catch(console.error)
+  })
 
-  // Update chat node with response using pooled connection with retry
-  try {
-    await withRetry(async () => {
-      await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
-    }, { maxAttempts: 3 })
-    
-    // Clear session cache since new node was added
-    // Use Redis cache if available, otherwise fall back to local cache
-    const redisIsAvailable = await isRedisAvailable()
-    if (redisIsAvailable) {
-      const redisCache = getRedisEnhancedContextCache()
-      await redisCache.clearSessionCache(sessionId)
-      // Also add the new node to cache
-      await redisCache.addNode(sessionId, {
-        ...chatNode,
-        response: responseContent,
-        status: 'completed',
-        createdAt: chatNode.createdAt.toISOString(),
-        updatedAt: chatNode.updatedAt.toISOString(),
-      })
-    } else {
-      await clearSessionCache(sessionId)
-    }
-  } catch (updateError) {
-    // Log error but don't fail the request - user got their response
-    recordError(createAppError(
-      'Failed to update chat node with response',
-      classifyDatabaseError(updateError),
-      {
-        context: { chatNodeId: chatNode.id, sessionId },
-        cause: updateError as Error,
-        severity: 'medium' as any
-      }
-    ))
-  }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: chatNode.id,
-        content: responseContent,
-        usage,
-        contextMetadata,
-      }
-    })
+  return immediateResponse
   } finally {
     stopTimer()
   }

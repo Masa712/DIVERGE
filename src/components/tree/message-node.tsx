@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { ChatNode } from '@/types'
+import { StreamingAnimation } from '@/components/ui/streaming-animation'
 
 interface MessageNodeData {
   node: ChatNode
@@ -148,12 +149,18 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
       </div>
 
       {/* Assistant Response */}
-      {node.response && (
-        <div className="mb-2">
-          <p className="text-xs font-medium text-gray-600 mb-1">Assistant:</p>
+      <div className="mb-2">
+        <p className="text-xs font-medium text-gray-600 mb-1">Assistant:</p>
+        {node.status === 'streaming' ? (
+          <div className="py-2">
+            <StreamingAnimation />
+          </div>
+        ) : node.response ? (
           <p className="text-sm text-gray-700">{truncateText(node.response, 80)}</p>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-gray-400 italic">Waiting for response...</p>
+        )}
+      </div>
 
       {/* Status */}
       <div className="flex items-center justify-between text-xs">
