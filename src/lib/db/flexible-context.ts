@@ -63,7 +63,7 @@ export async function buildFlexibleEnhancedContext(
   const includedNodes: string[] = []
   let adaptiveAdjustments = 0
   
-  // 1. Get all candidate nodes (ancestors + cached session nodes)
+  // 1. Get ONLY direct ancestors (no siblings from other branches)
   const { data: ancestorData, error: ancestorError } = await supabase.rpc(
     'get_node_ancestors',
     { node_id: nodeId }
@@ -74,24 +74,20 @@ export async function buildFlexibleEnhancedContext(
     return createEmptyContext(strategy, priority, model)
   }
   
-  // Convert ancestor data
+  // Convert ancestor data - these are the ONLY nodes we should use for context
   const ancestors: ChatNode[] = (ancestorData || [])
     .map((node: any) => convertDbNodeToChatNode(node, model))
     .sort((a: ChatNode, b: ChatNode) => a.depth - b.depth)
   
   const sessionId = ancestors[0]?.sessionId || ''
   
-  // Get cached session nodes for sibling context
-  const sessionNodes = await getCachedSessionNodes(sessionId)
-  const siblings = sessionNodes
-    .filter(node => node.id !== nodeId && !ancestors.find(a => a.id === node.id))
-    .map(node => convertDbNodeToChatNode(node, model))
+  console.log(`🔗 Using ONLY direct ancestors: ${ancestors.length} nodes (no cross-branch contamination)`)
   
-  // 2. Apply strategy-based node selection
-  const allCandidates = [...ancestors, ...siblings]
-  const weightedNodes = calculateNodeWeights(allCandidates, userPrompt, strategy, priority, model)
+  // 2. Apply strategy-based node selection ONLY to ancestors
+  // No siblings from other branches should be included
+  const weightedNodes = calculateNodeWeights(ancestors, userPrompt, strategy, priority, model)
   
-  console.log(`📊 Strategy analysis: ${allCandidates.length} candidates, top weight: ${weightedNodes[0]?.weight.toFixed(2)}`)
+  console.log(`📊 Strategy analysis: ${ancestors.length} ancestor candidates, top weight: ${weightedNodes[0]?.weight.toFixed(2)}`)
   
   // 3. Smart token allocation based on strategy
   const tokenAllocation = calculateTokenAllocation(strategy, maxTokens, options.customWeights)
@@ -126,13 +122,14 @@ export async function buildFlexibleEnhancedContext(
   
   console.log(`⚡ Flexible context built in ${buildTime}ms using ${strategy} strategy`)
   console.log(`📏 Selection: ${selectionResult.selectionMeta.selectedCount}/${selectionResult.selectionMeta.candidateCount} nodes, ${accurateTokens} tokens`)
+  console.log(`🚫 Cross-branch isolation: siblings from other branches excluded`)
   
   // Export performance metrics
   if (typeof window !== 'undefined') {
     (window as any).performanceMetrics = {
       contextBuildTime: buildTime,
       cacheHitRate: includeReferences.length > 0 ? 85 : 0,
-      dbQueries: 2,
+      dbQueries: 1, // Only ancestor query, no session nodes
       nodesProcessed: selectionResult.selectionMeta.selectedCount,
       referencesResolved: includeReferences.length,
       sessionId: sessionId,
@@ -145,7 +142,10 @@ export async function buildFlexibleEnhancedContext(
       adaptiveAdjustments: adaptiveAdjustments,
       candidateCount: selectionResult.selectionMeta.candidateCount,
       averageWeight: selectionResult.selectionMeta.averageWeight,
-      tokenDistribution: selectionResult.tokenDistribution
+      tokenDistribution: selectionResult.tokenDistribution,
+      // Context isolation metrics
+      ancestorCount: ancestors.length,
+      crossBranchIsolation: true
     }
   }
   
@@ -155,7 +155,7 @@ export async function buildFlexibleEnhancedContext(
       totalTokens: estimatedTokens,
       accurateTokens,
       includedNodes,
-      siblingCount: siblings.length,
+      siblingCount: 0, // No siblings included for proper isolation
       maxDepth: ancestors.length > 0 ? ancestors[ancestors.length - 1].depth : 0,
       model,
       tokenEfficiency,

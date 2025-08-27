@@ -163,7 +163,7 @@ export async function buildEnhancedContext(
 ): Promise<EnhancedContext> {
   const startTime = performance.now()
   const {
-    includeSiblings = true,
+    includeSiblings = false, // CHANGED: Default to false to prevent cross-branch contamination
     maxTokens = 4000,
     includeReferences = [],
     model = 'gpt-4o' // NEW: Default model for token calculations
@@ -174,7 +174,7 @@ export async function buildEnhancedContext(
   let estimatedTokens = 0 // Legacy estimation for comparison
   const includedNodes: string[] = []
   
-  console.log(`🧠 Building enhanced context for ${nodeId} (model: ${model}, maxTokens: ${maxTokens})`)
+  console.log(`🧠 Building enhanced context for ${nodeId} (model: ${model}, maxTokens: ${maxTokens}, includeSiblings: ${includeSiblings})`)
   
   // 1. Get ancestor chain - efficient with RPC
   const { data: ancestorData, error: ancestorError } = await supabase.rpc(
@@ -226,7 +226,7 @@ export async function buildEnhancedContext(
   const sessionId = ancestors[0]?.sessionId || ''
   const actualModel = ancestors[0]?.model || model
   
-  console.log(`📊 Processing ${ancestors.length} ancestors for session ${sessionId}`)
+  console.log(`📊 Processing ${ancestors.length} ancestors for session ${sessionId} (cross-branch isolation: ${!includeSiblings})`)
   
   // 2. Build base context from ancestors with accurate token counting
   for (const node of ancestors) {
@@ -251,16 +251,17 @@ export async function buildEnhancedContext(
     }
     
     // Smart token limit checking with accurate counting
-    if (estimatedTokens > maxTokens * 0.7) { // Leave 30% buffer for siblings
+    if (estimatedTokens > maxTokens * 0.9) { // Increased threshold since no siblings
       console.log(`⚠️ Approaching token limit (${estimatedTokens}/${maxTokens}), stopping ancestor processing`)
       break
     }
   }
   
-  // 3. Include sibling context with accurate token accounting (OPTIMIZED)
+  // 3. Include sibling context only if explicitly requested (DISABLED by default for isolation)
   let siblingCount = 0
   if (includeSiblings && estimatedTokens < maxTokens * 0.8) {
     console.log(`🔍 Adding sibling context (current: ${estimatedTokens} tokens)`)
+    console.log(`⚠️ WARNING: includeSiblings=true may cause cross-branch contamination`)
     
     // PERFORMANCE OPTIMIZATION: Use cached sibling nodes
     const siblingNodes = await getCachedSiblingNodes(nodeId, sessionId)
@@ -308,6 +309,8 @@ export async function buildEnhancedContext(
         console.log(`⚠️ Skipping siblings: would exceed token limit (${summaryTokens} additional tokens)`)
       }
     }
+  } else if (includeSiblings === false) {
+    console.log(`🚫 Siblings excluded for proper branch isolation`)
   }
   
   // 4. Include explicitly referenced nodes with smart truncation (OPTIMIZED WITH CACHE)
@@ -366,6 +369,7 @@ Assistant: "${refNode.response || 'No response yet'}"
   
   console.log(`⚡ Enhanced context completed in ${buildTime}ms`)
   console.log(`📏 Token analysis: estimated=${estimatedTokens}, accurate=${accurateTokens}, efficiency=${(tokenEfficiency * 100).toFixed(1)}%`)
+  console.log(`🔒 Branch isolation: ${!includeSiblings ? 'ACTIVE' : 'DISABLED'}`)
   
   // Export performance metrics for dashboard
   if (typeof window !== 'undefined') {
@@ -378,7 +382,8 @@ Assistant: "${refNode.response || 'No response yet'}"
       sessionId: sessionId,
       tokenAccuracy: tokenEfficiency,
       estimatedTokens: estimatedTokens,
-      accurateTokens: accurateTokens
+      accurateTokens: accurateTokens,
+      branchIsolation: !includeSiblings
     }
   }
   
@@ -388,7 +393,7 @@ Assistant: "${refNode.response || 'No response yet'}"
       totalTokens: estimatedTokens, // Keep for backward compatibility
       accurateTokens,
       includedNodes,
-      siblingCount,
+      siblingCount: includeSiblings ? siblingCount : 0,
       maxDepth: ancestors.length > 0 ? ancestors[ancestors.length - 1].depth : 0,
       model: actualModel,
       tokenEfficiency

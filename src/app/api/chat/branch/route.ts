@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         
         // Build enhanced context with intelligent strategy selection
         const enhancedContext = await buildContextWithStrategy(parentNodeId, prompt, {
-          includeSiblings: true,
+          includeSiblings: false, // FIXED: Prevent cross-branch contamination
           maxTokens: 3000,
           includeReferences: referencedNodes,
           model: model // Pass model for accurate token counting

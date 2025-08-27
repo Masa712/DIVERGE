@@ -50,7 +50,7 @@ async function processAIResponseInBackground(
         
         // Build enhanced context with intelligent strategy selection
         const enhancedContext = await buildContextWithStrategy(parentNodeId, userPrompt, {
-          includeSiblings: true,
+          includeSiblings: false, // FIXED: Prevent cross-branch contamination
           maxTokens: 3000, // Leave room for new prompt and response
           includeReferences: referencedNodes,
           model: model // Pass model for accurate token counting
