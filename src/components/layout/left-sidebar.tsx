@@ -242,15 +242,6 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
               >
                 <Menu className="w-4 h-4" />
               </button>
-              
-              {/* Close Button - Mobile Only */}
-              <button
-                onClick={() => setIsMobileOpen(false)}
-                className="p-2 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 lg:hidden"
-                title="Close sidebar"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
@@ -360,10 +351,10 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
               <div className="space-y-3">
                 <button
                   onClick={() => setShowDashboard(true)}
-                  className="w-full p-3 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 flex items-center space-x-2"
+                  className="w-full p-3 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 flex items-center space-x-2 group"
                 >
-                  <Activity className="w-4 h-4" />
-                  <span className="text-sm">Dashboard</span>
+                  <Activity className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
+                  <span className="text-sm group-hover:text-blue-600 transition-colors duration-200">Dashboard</span>
                 </button>
                 
                 <button
@@ -507,14 +498,6 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
             >
               <Menu className="w-5 h-5" />
             </button>
-            {/* Mobile close button */}
-            <button
-              onClick={() => setIsMobileOpen(false)}
-              className="p-2 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 lg:hidden"
-              title="Close sidebar"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
         </div>
 
@@ -642,13 +625,13 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
             className="
               w-full mb-2 px-4 py-2 rounded-lg
               text-gray-700 text-sm
-              hover:bg-white/10 hover:text-gray-800
+              hover:text-blue-600
               transition-all duration-200
-              flex items-center gap-2
+              flex items-center gap-2 group
             "
           >
-            <Activity className="w-4 h-4" />
-            Dashboard
+            <Activity className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
+            <span className="group-hover:text-blue-600 transition-colors duration-200">Dashboard</span>
           </button>
           
           {/* Sign Out Button */}

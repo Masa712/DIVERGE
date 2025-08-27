@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Copy, User, Bot, Settings, ChevronLeft, ChevronRight, ArrowUp, MessageCircle, Clock, Edit2, Trash2, RefreshCw } from 'lucide-react'
+import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw } from 'lucide-react'
 import { ChatNode } from '@/types'
 import { useComments } from '@/hooks/useComments'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
@@ -526,15 +526,6 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
           </div>
         </div>
 
-        {/* Close button - Mobile/Tablet only */}
-        <div className="lg:hidden absolute top-4 right-4">
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 backdrop-blur border border-white/20 flex items-center justify-center hover:bg-white/20 transition-colors"
-          >
-            <X className="w-4 h-4 text-gray-700" />
-          </button>
-        </div>
       </div>
     </div>
   )
