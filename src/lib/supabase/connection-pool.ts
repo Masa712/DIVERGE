@@ -32,7 +32,7 @@ interface PoolMetrics {
 }
 
 const DEFAULT_CONFIG: ConnectionPoolConfig = {
-  maxConnections: 10, // Conservative for Supabase free tier
+  maxConnections: 20, // Increased for better performance
   idleTimeout: 300000, // 5 minutes
   connectionTimeout: 10000, // 10 seconds
   enableMetrics: true,

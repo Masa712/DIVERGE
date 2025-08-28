@@ -68,7 +68,7 @@ export const GET = withErrorHandler(async (
 
       return data
     },
-    { poolKey: `session_${sessionId}`, cacheTTL: 60000 } // 1 minute cache
+    { poolKey: `session_${sessionId}`, skipCache: true } // Skip cache to always get fresh data
   )
 
     // Convert session to camelCase
@@ -125,6 +125,11 @@ export const GET = withErrorHandler(async (
       console.warn('⚠️ Failed to update last access time:', error)
     }
   })
+
+  // Debug: Log session name when fetched
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`📋 Session fetched: "${session.name}" (ID: ${sessionId})`)
+  }
 
   return NextResponse.json({
     success: true,

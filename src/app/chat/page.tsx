@@ -12,6 +12,11 @@ import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { LeftSidebar } from '@/components/layout/left-sidebar'
 
 export default function ChatPage() {
+  console.log(`🚀 ChatPage component loaded at ${new Date().toISOString()}`)
+  if (typeof window !== 'undefined') {
+    (window as any).debugChatPageLoaded = true
+    console.log(`🌐 Browser environment detected, set window.debugChatPageLoaded = true`)
+  }
   const { user, loading } = useAuth()
   const router = useRouter()
   const { showError } = useError()
@@ -29,18 +34,22 @@ export default function ChatPage() {
   const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
 
   useEffect(() => {
+    console.log(`🔐 Auth check - loading: ${loading}, user: ${user ? 'present' : 'null'}`)
     if (!loading && !user) {
+      console.log(`🚪 Redirecting to /auth`)
       router.push('/auth')
     }
   }, [user, loading, router])
 
   const fetchSession = async (sessionId: string) => {
+    console.log(`📡 Fetching session: ${sessionId}`)
     setLoadingSession(true)
     try {
       const response = await fetch(`/api/sessions/${sessionId}`)
       if (response.ok) {
         const { data } = await response.json()
         const { session, chatNodes } = data
+        console.log(`✅ Session loaded: ${session.id}, name: "${session.name}", nodes: ${chatNodes?.length || 0}`)
         setCurrentSession(session)
         setChatNodes(chatNodes || [])
         // Set current node to the last node
@@ -48,8 +57,18 @@ export default function ChatPage() {
           setCurrentNodeId(chatNodes[chatNodes.length - 1].id)
         }
       } else if (response.status === 404) {
-        showError('Session not found')
+        console.log(`❌ Session not found: ${sessionId}`)
+        showError('Session not found. It may have been deleted.')
+        // Clear current session and trigger sidebar refresh
+        setCurrentSession(null)
+        setChatNodes([])
+        setCurrentNodeId(undefined)
+        // Trigger sidebar refresh by calling onNewSession
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('session-sync-needed'))
+        }
       } else {
+        console.error(`❌ Session fetch failed: ${response.status}`)
         showError('Failed to load session')
       }
     } catch (error) {
@@ -97,7 +116,11 @@ export default function ChatPage() {
   }
 
   const handleSendMessage = async (message: string) => {
-    if (!currentSession) return
+    console.log(`💬 handleSendMessage called: "${message.substring(0, 50)}..."`)
+    if (!currentSession) {
+      console.log(`❌ No current session, aborting`)
+      return
+    }
 
     try {
       // Use current selected node as parent, or the last node if none selected
@@ -131,6 +154,7 @@ export default function ChatPage() {
       if (response.ok) {
         const result = await response.json()
         const newNode = result.data.node
+        console.log(`✅ Chat response received, new node: ${newNode.id}, status: ${newNode.status}`)
         
         // Immediately add the streaming node to the UI
         setChatNodes(prev => [...prev, newNode])
@@ -141,6 +165,7 @@ export default function ChatPage() {
         setIsSidebarOpen(true)
         
         // Start polling for node updates
+        console.log(`📡 Initiating polling for new node: ${newNode.id}`)
         pollNodeStatus(newNode.id)
       } else {
         const errorData = await response.json().catch(() => ({}))
@@ -282,6 +307,7 @@ export default function ChatPage() {
 
   // Poll for node status updates
   const pollNodeStatus = async (nodeId: string) => {
+    console.log(`🚀 Starting polling for node: ${nodeId}`)
     const maxAttempts = 60 // 5 minutes maximum (5s * 60)
     let attempts = 0
 
@@ -292,11 +318,22 @@ export default function ChatPage() {
       }
 
       try {
+        console.log(`🔍 Polling attempt ${attempts + 1} for node: ${nodeId}`)
         const response = await fetch(`/api/sessions/${currentSession?.id}`)
         if (response.ok) {
           const { data } = await response.json()
-          const { chatNodes: updatedNodes } = data
+          const { session, chatNodes: updatedNodes } = data
           const updatedNode = updatedNodes.find((n: any) => n.id === nodeId)
+          
+          // Debug: Log session name comparison
+          console.log(`🔍 Polling check - Current: "${currentSession?.name}" vs Fetched: "${session?.name}"`)
+          console.log(`🔍 Node status check - NodeID: ${nodeId}, Status: ${updatedNode?.status}`)
+          
+          // Update session info if name changed (e.g., AI-generated title)
+          if (session && session.name !== currentSession?.name) {
+            setCurrentSession(session)
+            console.log(`✨ Session title updated to: "${session.name}"`)
+          }
           
           if (updatedNode && updatedNode.status !== 'streaming') {
             // Node has been completed or failed, update only this specific node
@@ -313,28 +350,33 @@ export default function ChatPage() {
                 node.id === nodeId ? updatedNode : node
               )
             })
-            console.log(`Node ${nodeId} updated with status: ${updatedNode.status}`)
+            console.log(`✅ Node ${nodeId} updated with status: ${updatedNode.status}`)
+            console.log(`🏁 Polling completed for node: ${nodeId}`)
             return // Stop polling
           }
           
           // Continue polling if still streaming
           attempts++
-          setTimeout(checkStatus, 5000) // Poll every 5 seconds
+          // Poll faster in the first few attempts to catch title updates quickly
+          const pollInterval = attempts <= 10 ? 1000 : 3000 // First 10 attempts: 1s, then 3s
+          setTimeout(checkStatus, pollInterval)
         }
       } catch (error) {
         console.error('Error polling node status:', error)
         attempts++
         if (attempts < maxAttempts) {
-          setTimeout(checkStatus, 5000)
+          const pollInterval = attempts <= 10 ? 1000 : 3000 // First 10 attempts: 1s, then 3s
+          setTimeout(checkStatus, pollInterval)
         }
       }
     }
 
     // Start polling after a short delay
-    setTimeout(checkStatus, 2000) // Initial check after 2 seconds
+    setTimeout(checkStatus, 500) // Initial check after 0.5 seconds for faster detection
   }
 
   if (loading || !user) {
+    console.log(`⏳ ChatPage showing loading state`)
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -342,11 +384,14 @@ export default function ChatPage() {
     )
   }
 
+  console.log(`🎨 ChatPage rendering main content - currentSession: ${currentSession?.id || 'null'}`)
+
   return (
     <div className="flex h-screen bg-background">
       {/* Left Sidebar */}
       <LeftSidebar
         currentSessionId={currentSession?.id}
+        currentSession={currentSession}
         onSessionSelect={handleSessionSelect}
         onNewSession={handleNewSession}
         isCollapsed={isLeftSidebarCollapsed}

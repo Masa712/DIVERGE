@@ -132,6 +132,57 @@ async function processAIResponseInBackground(
       await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
     }, { maxAttempts: 3 })
     
+    // Generate AI title for the session if it's the first node (depth = 0 and no parentNodeId)
+    if (!parentNodeId && chatNode.depth === 0) {
+      try {
+        // Generate title based on user's message and AI's response
+        const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/sessions/generate-title`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userMessage: userPrompt,
+            assistantResponse: responseContent.substring(0, 500) // Send first 500 chars of response
+          })
+        })
+
+        if (titleResponse.ok) {
+          const { title } = await titleResponse.json()
+          
+          // Update session name with AI-generated title
+          const supabase = createClient()
+          const { data: updatedSession, error: updateError } = await supabase
+            .from('sessions')
+            .update({ 
+              name: title,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sessionId)
+            .select('id, name')
+            .single()
+          
+          if (updateError) {
+            console.error('Failed to update session name:', updateError)
+          } else {
+            console.log(`✨ Updated session title to: "${title}" (Verified: ${updatedSession?.name})`)
+            
+            // Force clear all related caches
+            try {
+              const { clearQueryCache } = await import('@/lib/db/query-optimizer')
+              clearQueryCache()
+              console.log(`🧹 Cleared query cache to force fresh data`)
+            } catch (error) {
+              console.warn('Failed to clear query cache:', error)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to generate AI title:', error)
+        // Don't throw - this is a non-critical feature
+      }
+    }
+
     // Clear session cache since new node was added
     // Use Redis cache if available, otherwise fall back to local cache
     const redisIsAvailable = await isRedisAvailable()

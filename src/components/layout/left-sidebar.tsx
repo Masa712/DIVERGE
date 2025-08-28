@@ -19,6 +19,7 @@ import { Session } from '@/types'
 
 interface Props {
   currentSessionId?: string
+  currentSession?: Session | null
   onSessionSelect: (sessionId: string) => void
   onNewSession: () => void
   isCollapsed: boolean
@@ -26,7 +27,8 @@ interface Props {
   onMobileOpenChange?: (isOpen: boolean) => void
 }
 
-export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, isCollapsed, onToggleCollapse, onMobileOpenChange }: Props) {
+export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect, onNewSession, isCollapsed, onToggleCollapse, onMobileOpenChange }: Props) {
+  console.log(`🔧 LeftSidebar component loaded at ${new Date().toISOString()}`)
   const { user, signOut } = useAuth()
   const { showError } = useError()
   const router = useRouter()
@@ -48,17 +50,59 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
   })
 
   useEffect(() => {
+    console.log(`📍 LeftSidebar useEffect triggered - fetching initial data`)
     fetchSessions()
     fetchDashboardData()
+
+    // Periodically sync sessions to catch any database inconsistencies
+    const syncInterval = setInterval(() => {
+      console.log(`🔄 Periodic session sync`)
+      fetchSessions()
+    }, 30000) // Every 30 seconds
+
+    // Listen for session sync events from other components
+    const handleSessionSyncNeeded = () => {
+      console.log(`🔄 Session sync requested by external event`)
+      fetchSessions()
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('session-sync-needed', handleSessionSyncNeeded)
+    }
+
+    return () => {
+      clearInterval(syncInterval)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('session-sync-needed', handleSessionSyncNeeded)
+      }
+    }
   }, [])
+
+  // Update session list when current session changes (e.g., title update)
+  useEffect(() => {
+    if (currentSession && currentSessionId) {
+      console.log(`🔄 Updating sidebar session: ${currentSessionId} -> "${currentSession.name}"`)
+      setSessions(prev => 
+        prev.map(session => 
+          session.id === currentSessionId 
+            ? { ...session, name: currentSession.name }
+            : session
+        )
+      )
+    }
+  }, [currentSession?.name, currentSessionId])
 
   const fetchSessions = async () => {
     try {
+      console.log(`📡 Fetching sessions for sidebar...`)
       const response = await fetch('/api/sessions')
       if (response.ok) {
-        const { data } = await response.json()
-        setSessions(data.sessions || [])
+        const result = await response.json()
+        const sessionsData = result.data?.sessions || []
+        console.log(`📊 Fetched ${sessionsData.length} sessions:`, sessionsData.map((s: Session) => `${s.name} (${s.id.slice(0,8)})`))
+        setSessions(sessionsData)
       } else {
+        console.error(`❌ Failed to fetch sessions: ${response.status}`)
         showError('Failed to load sessions')
       }
     } catch (error) {
@@ -73,8 +117,8 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
     try {
       const response = await fetch('/api/sessions')
       if (response.ok) {
-        const data = await response.json()
-        const sessions = data.sessions || []
+        const result = await response.json()
+        const sessions = result.data?.sessions || []
         
         const totalCost = sessions.reduce((sum: number, session: Session) => 
           sum + (session.totalCostUsd || 0), 0)
@@ -94,6 +138,7 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
   }
 
   const handleCreateSession = async () => {
+    console.log(`🆕 Creating new session...`)
     try {
       const response = await fetch('/api/sessions', {
         method: 'POST',
@@ -101,7 +146,7 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: `New Chat ${new Date().toLocaleDateString()}`,
+          name: 'New Chat',
           description: 'New conversation'
         }),
       })
@@ -109,10 +154,23 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
       if (response.ok) {
         const { data } = await response.json()
         const session = data.session
-        await fetchSessions()
+        console.log(`✅ Session created: ${session.id}, name: "${session.name}"`)
+        
+        // Add the new session to the list immediately for instant feedback
+        setSessions(prevSessions => {
+          const newSessions = [session, ...prevSessions]
+          console.log(`📝 Added new session to sidebar. Total sessions: ${newSessions.length}`)
+          return newSessions
+        })
+        
+        // Also refetch sessions to ensure data consistency
+        console.log(`🔄 Refetching sessions for sidebar to ensure consistency...`)
+        setTimeout(() => fetchSessions(), 100) // Small delay to ensure UI updates first
+        
         onNewSession()
         onSessionSelect(session.id)
       } else {
+        console.error(`❌ Failed to create session: ${response.status}`)
         showError('Failed to create session')
       }
     } catch (error) {
@@ -122,12 +180,14 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
   }
 
   const handleDeleteSession = async (sessionId: string) => {
+    console.log(`🗑️ Attempting to delete session: ${sessionId}`)
     try {
       const response = await fetch(`/api/sessions/${sessionId}`, {
         method: 'DELETE',
       })
 
       if (response.ok) {
+        console.log(`✅ Session deleted successfully: ${sessionId}`)
         setSessions(sessions.filter(s => s.id !== sessionId))
         
         if (currentSessionId === sessionId) {
@@ -136,8 +196,21 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
         
         await fetchDashboardData()
         showError('Session deleted successfully')
+      } else if (response.status === 404) {
+        // Session doesn't exist in database, remove from UI
+        console.log(`⚠️ Session not found in database, removing from UI: ${sessionId}`)
+        setSessions(sessions.filter(s => s.id !== sessionId))
+        
+        if (currentSessionId === sessionId) {
+          onNewSession()
+        }
+        
+        await fetchDashboardData()
+        showError('Session was already removed')
       } else {
-        showError('Failed to delete session')
+        console.error(`❌ Delete failed with status ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        showError(errorData.error || 'Failed to delete session')
       }
     } catch (error) {
       console.error('Error deleting session:', error)
@@ -424,6 +497,17 @@ export function LeftSidebar({ currentSessionId, onSessionSelect, onNewSession, i
               }`} />
             </button>
           ))}
+        </div>
+
+        {/* Dashboard */}
+        <div className="p-3 border-t border-white/10">
+          <button
+            onClick={() => setShowDashboard(true)}
+            className="w-full p-2 rounded-lg text-gray-600 hover:text-blue-600 transition-all duration-200 group"
+            title="Dashboard"
+          >
+            <Activity className="w-4 h-4 mx-auto group-hover:text-blue-600 transition-colors duration-200" />
+          </button>
         </div>
 
         {/* Sign Out */}
