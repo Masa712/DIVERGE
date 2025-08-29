@@ -55,6 +55,7 @@ function CompactTreeViewInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const { fitView, setCenter, getZoom } = useReactFlow()
   const prevNodeCountRef = useRef(0)
+  const prevSessionIdRef = useRef<string | null>(null)
 
   // Initialize layout engine
   const layoutEngine = useMemo(() => {
@@ -64,56 +65,54 @@ function CompactTreeViewInner({
   // Store positions for centering when clicking nodes
   const positionsRef = useRef<Map<string, { x: number, y: number }>>(new Map())
 
-  // Calculate dynamic centering offset based on layout state
-  const calculateCenteringOffset = useCallback(() => {
+  // Calculate centering settings based on device type and layout state
+  const calculateCenteringSettings = useCallback(() => {
     const screenWidth = window.innerWidth
     const isMobile = screenWidth < 768 // md breakpoint
     const isTablet = screenWidth >= 768 && screenWidth < 1024 // lg breakpoint
-    
-    let xOffset = 140 // Half of node width (280/2)
-    let yOffset = 50  // Base vertical offset
 
     if (isMobile || isTablet) {
-      // Mobile/Tablet: Simpler centering approach
-      // For mobile/tablet, we want to center more precisely
-      // Reduce the base offset since mobile doesn't have sidebar complications
-      xOffset = 140 // Base node half-width
-      
-      // Apply smaller adjustment for mobile to prevent over-shifting
-      const mobileAdjustment = isMobile ? 50 : 75 // Less aggressive adjustment for mobile
-      xOffset += mobileAdjustment
-      yOffset += 200 // User requested 200px up adjustment
-      
-      console.log(`📱 Mobile/Tablet centering: screenWidth=${screenWidth}, xOffset=${xOffset}, yOffset=${yOffset}`)
+      // Mobile/Tablet: Fixed settings for consistent centering
+      return {
+        xOffset: 150,     // Consistent with current working values
+        yOffset: 150,     // Consistent with current working values
+        zoom: 0.65,       // Standard zoom for mobile/tablet
+        minZoom: 0.65,    // Minimum zoom level
+        duration: 800,    // Animation duration
+        device: 'mobile'  // Device type identifier
+      }
     } else {
-      // Desktop: Calculate the actual available content area
-      const leftSidebarWidth = isLeftSidebarCollapsed ? 64 : 256
-      const rightSidebarWidth_actual = isRightSidebarOpen ? rightSidebarWidth : 0
+      // Desktop: Dynamic calculation based on sidebar states
+      const leftSidebarWidth = isLeftSidebarCollapsed ? 94 : 410
+      const rightSidebarWidth_actual = isRightSidebarOpen ? (rightSidebarWidth + 30) : 0
       
       // Calculate the center of the available content area
       const availableWidth = screenWidth - leftSidebarWidth - rightSidebarWidth_actual
       const contentAreaCenterX = leftSidebarWidth + (availableWidth / 2)
-      
-      // Calculate how much to shift from screen center to content area center
       const screenCenterX = screenWidth / 2
-      let centerAdjustment = contentAreaCenterX - screenCenterX
+      const pixelOffsetNeeded = contentAreaCenterX - screenCenterX
+      const reactFlowOffsetX = pixelOffsetNeeded * -1
       
-      // Special adjustment for collapsed left sidebar to compensate for left shift
-      if (isLeftSidebarCollapsed) {
-        centerAdjustment += 320 // Add rightward shift when left sidebar is collapsed to center properly
+      return {
+        xOffset: 140 + reactFlowOffsetX,  // Dynamic offset for desktop
+        yOffset: 250,                     // Desktop Y offset
+        zoom: 0.8,                        // Desktop zoom
+        minZoom: 0.8,                     // Desktop minimum zoom
+        duration: 800,                    // Animation duration
+        device: 'desktop',                // Device type identifier
+        // Debug info for desktop
+        debugInfo: {
+          screenWidth,
+          leftSidebarWidth,
+          rightSidebarWidth_actual,
+          availableWidth,
+          contentAreaCenterX,
+          screenCenterX,
+          pixelOffsetNeeded,
+          reactFlowOffsetX
+        }
       }
-      
-      // Apply the adjustment
-      xOffset = 140 + centerAdjustment // 140 = half node width
-      
-      // Apply user's preferred offset adjustments for desktop
-      xOffset += 100 // User requested 100px left adjustment
-      yOffset += 200 // User requested 200px up adjustment
-      
-      console.log(`🖥️ Desktop centering: screenWidth=${screenWidth}, leftSidebarWidth=${leftSidebarWidth}, rightSidebarWidth=${rightSidebarWidth_actual}, availableWidth=${availableWidth}, contentAreaCenterX=${contentAreaCenterX}, centerAdjustment=${centerAdjustment}, isCollapsed=${isLeftSidebarCollapsed}, finalXOffset=${xOffset}`)
     }
-
-    return { x: xOffset, y: yOffset }
   }, [isLeftSidebarCollapsed, isRightSidebarOpen, rightSidebarWidth])
 
   // Convert ChatNodes to TreeNodes
@@ -126,27 +125,12 @@ function CompactTreeViewInner({
     }))
   }, [])
   
-  // Enhanced node click handler that also centers the clicked node
+  // Node click handler (without centering)
   const handleNodeClick = useCallback((nodeId: string) => {
-    // Call original handler
+    // Call original handler only - no centering on click
     onNodeClick?.(nodeId)
-    
-    // Center on clicked node
-    const position = positionsRef.current.get(nodeId)
-    if (position) {
-      const currentZoom = getZoom()
-      const offset = calculateCenteringOffset()
-      setCenter(
-        position.x + offset.x,
-        position.y + offset.y,
-        { 
-          zoom: currentZoom,
-          duration: 500 
-        }
-      )
-      console.log(`🎯 Centered on clicked node: ${nodeId}`)
-    }
-  }, [onNodeClick, setCenter, getZoom, calculateCenteringOffset])
+    console.log(`👆 Node clicked: ${nodeId} (no centering)`)
+  }, [onNodeClick])
 
   // Convert chat nodes to React Flow nodes and edges with balanced layout
   useEffect(() => {
@@ -232,29 +216,91 @@ function CompactTreeViewInner({
       setNodes(reactFlowNodes)
       setEdges(reactFlowEdges)
 
-      // Check if a new node was added (node count increased) or if current node is streaming
-      if (chatNodes.length > prevNodeCountRef.current || 
+      // Detect session change by checking if the first node's session ID changed
+      const currentSessionId = chatNodes[0]?.sessionId || null
+      const isSessionChanged = currentSessionId && currentSessionId !== prevSessionIdRef.current
+      
+      // Check if this is a new session or if a new node was added
+      if (isSessionChanged) {
+        // New session opened - center on the first/root node
+        console.log(`📂 New session opened: ${currentSessionId}`)
+        const rootNode = chatNodes.find(n => n.parentId === null) || chatNodes[0]
+        
+        if (rootNode && positions.has(rootNode.id)) {
+          const position = positions.get(rootNode.id)!
+          setTimeout(() => {
+            // Get centering settings from centralized function
+            const settings = calculateCenteringSettings()
+            
+            setCenter(
+              position.x + settings.xOffset,
+              position.y + settings.yOffset,
+              { 
+                zoom: settings.zoom,
+                duration: settings.duration
+              }
+            )
+            
+            // Logging based on device type
+            if (settings.device === 'mobile') {
+              console.log(`📱 Centered root node (Mobile/Tablet): ${rootNode.id}`)
+              console.log(`  - Fixed offset: (${settings.xOffset}, ${settings.yOffset})`)
+              console.log(`  - Zoom: ${settings.zoom}`)
+            } else {
+              console.log(`🖥️ Centered root node (Desktop): ${rootNode.id}`)
+              const debug = settings.debugInfo!
+              console.log(`  - Screen width: ${debug.screenWidth}px`)
+              console.log(`  - Left sidebar: ${debug.leftSidebarWidth}px, Right sidebar: ${debug.rightSidebarWidth_actual}px`)
+              console.log(`  - Available width: ${debug.availableWidth}px`)
+              console.log(`  - Content center: ${debug.contentAreaCenterX}px, Screen center: ${debug.screenCenterX}px`)
+              console.log(`  - Pixel offset needed: ${debug.pixelOffsetNeeded}px`)
+              console.log(`  - ReactFlow offset: ${debug.reactFlowOffsetX}px`)
+              console.log(`  - Final target: (${position.x + settings.xOffset}, ${position.y + settings.yOffset})`)
+            }
+          }, 100)
+        }
+        
+        // Update session ID reference
+        prevSessionIdRef.current = currentSessionId
+      } else if (chatNodes.length > prevNodeCountRef.current || 
           (currentNodeId && chatNodes.find(n => n.id === currentNodeId && n.status === 'streaming'))) {
-        // Find the node to center (prioritize streaming nodes, then current node, then newest)
+        // New node was added (not a new session) - center on streaming/newest node
         const nodeToCenter = chatNodes.find(n => n.status === 'streaming') || 
                             (currentNodeId ? chatNodes.find(n => n.id === currentNodeId) : null) ||
                             chatNodes[chatNodes.length - 1]
         
         if (nodeToCenter && positions.has(nodeToCenter.id)) {
           const position = positions.get(nodeToCenter.id)!
-          // Center the node with a slight delay to ensure ReactFlow has processed the nodes
           setTimeout(() => {
             const currentZoom = getZoom()
-            const offset = calculateCenteringOffset()
+            
+            // Get centering settings from centralized function
+            const settings = calculateCenteringSettings()
+            
+            // Use current zoom if it's higher than minimum, otherwise use settings zoom
+            const finalZoom = currentZoom > settings.minZoom ? currentZoom : settings.zoom
+            
             setCenter(
-              position.x + offset.x,
-              position.y + offset.y,
+              position.x + settings.xOffset,
+              position.y + settings.yOffset,
               { 
-                zoom: currentZoom > 0.8 ? currentZoom : 0.8,
-                duration: 800 
+                zoom: finalZoom,
+                duration: settings.duration
               }
             )
-            console.log(`🎯 Centered on node: ${nodeToCenter.id} (status: ${nodeToCenter.status})`)
+            
+            // Logging based on device type
+            if (settings.device === 'mobile') {
+              console.log(`📱 Centered on new node (Mobile/Tablet): ${nodeToCenter.id}`)
+              console.log(`  - Fixed offset: (${settings.xOffset}, ${settings.yOffset})`)
+              console.log(`  - Zoom: ${finalZoom}`)
+            } else {
+              console.log(`🖥️ Centered on new node (Desktop): ${nodeToCenter.id}`)
+              const debug = settings.debugInfo!
+              console.log(`  - Pixel offset needed: ${debug.pixelOffsetNeeded}px`)
+              console.log(`  - ReactFlow offset: ${debug.reactFlowOffsetX}px`)
+              console.log(`  - Final zoom: ${finalZoom}`)
+            }
           }, 100)
         }
       }
@@ -267,7 +313,7 @@ function CompactTreeViewInner({
       setNodes([])
       setEdges([])
     }
-  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, handleNodeClick, onNodeIdClick, setCenter, getZoom, calculateCenteringOffset])
+  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, handleNodeClick, setCenter, getZoom, calculateCenteringSettings])
 
   // Check if a node is in the current path
   const isCurrentPath = useCallback((nodeId: string, currentNodeId: string | undefined, nodes: ChatNode[]): boolean => {

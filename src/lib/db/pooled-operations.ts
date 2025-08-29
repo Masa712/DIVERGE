@@ -79,6 +79,29 @@ export async function createChatNode(nodeData: {
         )
       }
 
+      // Update session's updated_at timestamp to reflect new node creation
+      // Also increment node_count for accurate tracking
+      const { data: currentSession } = await supabase
+        .from('sessions')
+        .select('node_count')
+        .eq('id', nodeData.sessionId)
+        .single()
+      
+      const { error: sessionUpdateError } = await supabase
+        .from('sessions')
+        .update({ 
+          updated_at: new Date().toISOString(),
+          node_count: (currentSession?.node_count || 0) + 1
+        })
+        .eq('id', nodeData.sessionId)
+
+      if (sessionUpdateError) {
+        console.warn('Failed to update session timestamp:', sessionUpdateError)
+        // Don't throw - this is not critical
+      } else {
+        console.log(`📝 Updated session ${nodeData.sessionId} updated_at for new node`)
+      }
+
       return chatNodeRaw
     }, `create_${nodeData.sessionId}`)
   } catch (error) {
