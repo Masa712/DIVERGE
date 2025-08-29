@@ -352,6 +352,13 @@ export default function ChatPage() {
             })
             console.log(`✅ Node ${nodeId} updated with status: ${updatedNode.status}`)
             console.log(`🏁 Polling completed for node: ${nodeId}`)
+            
+            // Trigger session list refresh when node completes
+            if (typeof window !== 'undefined') {
+              console.log(`📡 Triggering session list refresh after node completion`)
+              window.dispatchEvent(new CustomEvent('session-sync-needed'))
+            }
+            
             return // Stop polling
           }
           
@@ -436,7 +443,23 @@ export default function ChatPage() {
             />
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
+          <div 
+            className="flex-1 flex items-center justify-center"
+            style={{
+              marginLeft: (() => {
+                const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1024
+                const isMobile = screenWidth < 768
+                const isTablet = screenWidth >= 768 && screenWidth < 1024
+                
+                if (isMobile || isTablet) {
+                  return '0px'
+                } else {
+                  return isLeftSidebarCollapsed ? '64px' : '350px'
+                }
+              })(),
+              marginRight: isSidebarOpen ? `${rightSidebarWidth}px` : '0px'
+            }}
+          >
             <div className="text-center">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
                 Welcome to Diverge

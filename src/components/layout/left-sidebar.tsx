@@ -51,19 +51,12 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
 
   useEffect(() => {
     console.log(`📍 LeftSidebar useEffect triggered - fetching initial data`)
-    fetchSessions()
-    fetchDashboardData()
-
-    // Periodically sync sessions to catch any database inconsistencies
-    const syncInterval = setInterval(() => {
-      console.log(`🔄 Periodic session sync`)
-      fetchSessions()
-    }, 30000) // Every 30 seconds
+    fetchSessionsAndDashboard()
 
     // Listen for session sync events from other components
     const handleSessionSyncNeeded = () => {
       console.log(`🔄 Session sync requested by external event`)
-      fetchSessions()
+      fetchSessionsAndDashboard()
     }
 
     if (typeof window !== 'undefined') {
@@ -71,7 +64,6 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
     }
 
     return () => {
-      clearInterval(syncInterval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('session-sync-needed', handleSessionSyncNeeded)
       }
@@ -92,15 +84,28 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
     }
   }, [currentSession?.name, currentSessionId])
 
-  const fetchSessions = async () => {
+  const fetchSessionsAndDashboard = async () => {
     try {
-      console.log(`📡 Fetching sessions for sidebar...`)
+      console.log(`📡 Fetching sessions and dashboard data for sidebar...`)
       const response = await fetch('/api/sessions')
       if (response.ok) {
         const result = await response.json()
         const sessionsData = result.data?.sessions || []
         console.log(`📊 Fetched ${sessionsData.length} sessions:`, sessionsData.map((s: Session) => `${s.name} (${s.id.slice(0,8)})`))
         setSessions(sessionsData)
+        
+        // Calculate dashboard data from the same response
+        const totalCost = sessionsData.reduce((sum: number, session: Session) => 
+          sum + (session.totalCostUsd || 0), 0)
+        const totalTokens = sessionsData.reduce((sum: number, session: Session) => 
+          sum + (session.totalTokens || 0), 0)
+        
+        setDashboardData({
+          totalSessions: sessionsData.length,
+          totalCost,
+          totalTokens,
+          monthlyUsage: totalCost
+        })
       } else {
         console.error(`❌ Failed to fetch sessions: ${response.status}`)
         showError('Failed to load sessions')
@@ -110,30 +115,6 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
       showError('Failed to load sessions')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchDashboardData = async () => {
-    try {
-      const response = await fetch('/api/sessions')
-      if (response.ok) {
-        const result = await response.json()
-        const sessions = result.data?.sessions || []
-        
-        const totalCost = sessions.reduce((sum: number, session: Session) => 
-          sum + (session.totalCostUsd || 0), 0)
-        const totalTokens = sessions.reduce((sum: number, session: Session) => 
-          sum + (session.totalTokens || 0), 0)
-        
-        setDashboardData({
-          totalSessions: sessions.length,
-          totalCost,
-          totalTokens,
-          monthlyUsage: totalCost
-        })
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error)
     }
   }
 
@@ -165,7 +146,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
         
         // Also refetch sessions to ensure data consistency
         console.log(`🔄 Refetching sessions for sidebar to ensure consistency...`)
-        setTimeout(() => fetchSessions(), 100) // Small delay to ensure UI updates first
+        setTimeout(() => fetchSessionsAndDashboard(), 100) // Small delay to ensure UI updates first
         
         onNewSession()
         onSessionSelect(session.id)
@@ -194,7 +175,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           onNewSession()
         }
         
-        await fetchDashboardData()
+        await fetchSessionsAndDashboard()
         showError('Session deleted successfully')
       } else if (response.status === 404) {
         // Session doesn't exist in database, remove from UI
@@ -205,7 +186,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           onNewSession()
         }
         
-        await fetchDashboardData()
+        await fetchSessionsAndDashboard()
         showError('Session was already removed')
       } else {
         console.error(`❌ Delete failed with status ${response.status}`)

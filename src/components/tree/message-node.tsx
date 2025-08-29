@@ -49,7 +49,19 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
       {/* Model Badge and Node ID */}
       <div className="mb-2 flex items-center justify-between">
         <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium">
-          {node.model.split('/')[1] || node.model}
+          {(() => {
+            // Extract model name from format like "openai/gpt-4o-2024-11-20"
+            const modelParts = node.model.split('/')
+            const modelName = modelParts[1] || node.model
+            
+            // If it's a GPT-4o variant, show only "gpt-4o"
+            if (modelName.startsWith('gpt-4o')) {
+              return 'gpt-4o'
+            }
+            
+            // For other models, return as is (e.g., "claude-3.5-sonnet", "gemini-pro")
+            return modelName
+          })()}
         </span>
         <div className="flex items-center gap-2">
           <span 
