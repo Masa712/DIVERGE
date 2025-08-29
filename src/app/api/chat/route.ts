@@ -16,6 +16,7 @@ import {
 } from '@/lib/errors/error-handler'
 import { recordError } from '@/lib/errors/error-monitoring'
 import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
+import { log } from '@/lib/utils/logger'
 
 // Background processing function for AI responses
 async function processAIResponseInBackground(
@@ -34,16 +35,12 @@ async function processAIResponseInBackground(
     let finalMessages = messages
     let contextMetadata = null
     
-    // Debug: Enhanced context evaluation
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🧠 Enhanced context: ${useEnhancedContext}, parent: ${parentNodeId ? 'present' : 'none'}`)
-    }
+    // Enhanced context evaluation
+    log.debug('Enhanced context evaluation', { useEnhancedContext, hasParent: !!parentNodeId })
     
     if (useEnhancedContext && parentNodeId) {
       try {
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`🚀 Building enhanced context for: ${parentNodeId}`)
-        }
+        log.debug('Building enhanced context', { parentNodeId })
         
         // Extract node references from user prompt
         const referencedNodes = extractNodeReferences(userPrompt)
@@ -64,9 +61,11 @@ async function processAIResponseInBackground(
           { role: 'user', content: userPrompt }
         ]
         
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`✅ Enhanced context: ${enhancedContext.metadata.totalTokens} tokens, ${enhancedContext.metadata.siblingCount} siblings, ${referencedNodes.length} references`)
-        }
+        log.info('Enhanced context built successfully', { 
+          tokens: enhancedContext.metadata.totalTokens, 
+          siblings: enhancedContext.metadata.siblingCount, 
+          references: referencedNodes.length 
+        })
         
       } catch (contextError) {
         // Log but don't fail - enhanced context is optional
@@ -80,11 +79,11 @@ async function processAIResponseInBackground(
             severity: 'medium' as any
           }
         ))
-        console.warn('Enhanced context failed, falling back to simple messages:', contextError)
+        log.warn('Enhanced context failed, falling back to simple messages', contextError)
         // Keep original messages as fallback
       }
-    } else if (process.env.NODE_ENV === 'development') {
-      console.log(`⏩ Enhanced context skipped - useEnhancedContext: ${useEnhancedContext}, parentNodeId: ${parentNodeId}`)
+    } else {
+      log.debug('Enhanced context skipped', { useEnhancedContext, parentNodeId })
     }
 
     // Initialize OpenRouter client and create completion with timeout and retry
@@ -163,22 +162,22 @@ async function processAIResponseInBackground(
             .single()
           
           if (updateError) {
-            console.error('Failed to update session name:', updateError)
+            log.error('Failed to update session name', updateError)
           } else {
-            console.log(`✨ Updated session title to: "${title}" (Verified: ${updatedSession?.name})`)
+            log.info('Updated session title', { title, verified: updatedSession?.name })
             
             // Force clear all related caches
             try {
               const { clearQueryCache } = await import('@/lib/db/query-optimizer')
               clearQueryCache()
-              console.log(`🧹 Cleared query cache to force fresh data`)
+              log.debug('Cleared query cache to force fresh data')
             } catch (error) {
-              console.warn('Failed to clear query cache:', error)
+              log.warn('Failed to clear query cache', error)
             }
           }
         }
       } catch (error) {
-        console.error('Failed to generate AI title:', error)
+        log.error('Failed to generate AI title', error)
         // Don't throw - this is a non-critical feature
       }
     }
@@ -202,9 +201,9 @@ async function processAIResponseInBackground(
     }
 
   } catch (error) {
-    console.error('Background AI processing failed:', error)
+    log.error('Background AI processing failed', error)
     // Update node status to failed
-    await updateChatNodeResponse(chatNode.id, '', null, model, 'failed', error instanceof Error ? error.message : 'Unknown error').catch(console.error)
+    await updateChatNodeResponse(chatNode.id, '', undefined, model, 'failed', error instanceof Error ? error.message : 'Unknown error').catch(err => log.error('Failed to update node status to failed', err))
     
     // Record error for monitoring
     recordError(createAppError(
@@ -269,7 +268,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       }, { maxAttempts: 2 })
     } catch (error) {
       // Log but don't fail - use depth 0 as fallback
-      console.warn('Failed to get parent depth, using 0:', error)
+      log.warn('Failed to get parent depth, using 0', error)
       recordError(createAppError(
         'Failed to retrieve parent node depth',
         classifyDatabaseError(error),
@@ -347,9 +346,9 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     useEnhancedContext, 
     userPrompt
   ).catch(error => {
-    console.error('Background AI processing failed:', error)
+    log.error('Background AI processing failed', error)
     // Update node status to failed
-    updateChatNodeResponse(chatNode.id, '', null, model, 'failed', error.message).catch(console.error)
+    updateChatNodeResponse(chatNode.id, '', undefined, model, 'failed', error.message).catch(err => log.error('Failed to update node status to failed', err))
   })
 
   return immediateResponse

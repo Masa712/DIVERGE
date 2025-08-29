@@ -7,7 +7,7 @@ import { useError } from '@/components/providers/error-provider'
 import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
 
 import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-input'
-
+import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 
@@ -86,14 +86,14 @@ export default function ChatSessionPage({ params }: Props) {
   }
 
   const handleNodeIdClick = (nodeReference: string) => {
-    console.log('🔍 Node ID clicked:', nodeReference, 'Input focused:', isInputFocused, 'Insert function:', !!insertTextFunction)
+    log.debug('Node ID clicked', { nodeReference, isInputFocused, hasInsertFunction: !!insertTextFunction })
     if (isInputFocused && insertTextFunction) {
       insertTextFunction(nodeReference + ' ')
     } else {
       // Copy to clipboard as fallback
       navigator.clipboard.writeText(nodeReference)
-        .then(() => console.log('📋 Copied to clipboard:', nodeReference))
-        .catch(err => console.error('Failed to copy:', err))
+        .then(() => log.debug('Copied to clipboard', { nodeReference }))
+        .catch(err => log.error('Failed to copy to clipboard', err))
     }
   }
 
@@ -112,7 +112,7 @@ export default function ChatSessionPage({ params }: Props) {
         )
       }
 
-      console.log(`Frontend debug: parentNode=${parentNode?.id}, currentNodeId=${currentNodeId}`)
+      log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId })
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -174,7 +174,7 @@ export default function ChatSessionPage({ params }: Props) {
       // Use the same parent as the failed node
       const parentNode = failedNode.parentId ? chatNodes.find(node => node.id === failedNode.parentId) : null
 
-      console.log(`Retrying failed node: ${nodeId} with prompt: ${originalPrompt}`)
+      log.info('Retrying failed node', { nodeId, promptLength: originalPrompt.length })
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -200,9 +200,9 @@ export default function ChatSessionPage({ params }: Props) {
           await fetch(`/api/nodes/${nodeId}`, {
             method: 'DELETE',
           })
-          console.log(`Successfully deleted failed node: ${nodeId}`)
+          log.info('Successfully deleted failed node', { nodeId })
         } catch (deleteError) {
-          console.warn('Failed to delete node from database:', deleteError)
+          log.warn('Failed to delete node from database', deleteError)
           // Continue with UI update even if deletion fails
         }
         
@@ -241,13 +241,13 @@ export default function ChatSessionPage({ params }: Props) {
         return
       }
 
-      console.log(`Deleting node: ${nodeId}`)
+      log.info('Deleting node', { nodeId })
       
       const response = await fetch(`/api/nodes/${nodeId}`, {
         method: 'DELETE',
       })
       
-      console.log(`Delete response status: ${response.status}`)
+      log.debug('Delete response status', { status: response.status })
 
       if (response.ok) {
         // Remove node from UI
@@ -269,14 +269,14 @@ export default function ChatSessionPage({ params }: Props) {
           }
         }
         
-        console.log(`Successfully deleted node: ${nodeId}`)
+        log.info('Successfully deleted node', { nodeId })
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || `HTTP ${response.status}: Failed to delete node`
         showError(errorMessage)
       }
     } catch (error) {
-      console.error('Error deleting node:', error)
+      log.error('Error deleting node', error)
       showError('Network error. Please check your connection.')
     }
   }
@@ -288,7 +288,7 @@ export default function ChatSessionPage({ params }: Props) {
 
     const checkStatus = async () => {
       if (attempts >= maxAttempts) {
-        console.log('Polling timeout for node:', nodeId)
+        log.warn('Polling timeout for node', { nodeId })
         return
       }
 
@@ -305,7 +305,7 @@ export default function ChatSessionPage({ params }: Props) {
               // Check if the node still exists in our local state (not deleted)
               const nodeExists = prev.some(node => node.id === nodeId)
               if (!nodeExists) {
-                console.log(`Node ${nodeId} was deleted locally, skipping update`)
+                log.debug('Node was deleted locally, skipping update', { nodeId })
                 return prev // Don't update if node was deleted
               }
               
@@ -314,7 +314,7 @@ export default function ChatSessionPage({ params }: Props) {
                 node.id === nodeId ? updatedNode : node
               )
             })
-            console.log(`Node ${nodeId} updated with status: ${updatedNode.status}`)
+            log.info('Node polling completed', { nodeId, status: updatedNode.status })
             return // Stop polling
           }
           
@@ -323,7 +323,7 @@ export default function ChatSessionPage({ params }: Props) {
           setTimeout(checkStatus, 5000) // Poll every 5 seconds
         }
       } catch (error) {
-        console.error('Error polling node status:', error)
+        log.error('Error polling node status', error)
         attempts++
         if (attempts < maxAttempts) {
           setTimeout(checkStatus, 5000)

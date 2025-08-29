@@ -6,16 +6,16 @@ import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
 import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
 import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-input'
-
+import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { LeftSidebar } from '@/components/layout/left-sidebar'
 
 export default function ChatPage() {
-  console.log(`🚀 ChatPage component loaded at ${new Date().toISOString()}`)
+  log.debug('ChatPage component loaded')
   if (typeof window !== 'undefined') {
     (window as any).debugChatPageLoaded = true
-    console.log(`🌐 Browser environment detected, set window.debugChatPageLoaded = true`)
+    log.debug('Browser environment detected, set window.debugChatPageLoaded = true')
   }
   const { user, loading } = useAuth()
   const router = useRouter()
@@ -34,22 +34,22 @@ export default function ChatPage() {
   const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
 
   useEffect(() => {
-    console.log(`🔐 Auth check - loading: ${loading}, user: ${user ? 'present' : 'null'}`)
+    log.debug('Auth check', { loading, userPresent: !!user })
     if (!loading && !user) {
-      console.log(`🚪 Redirecting to /auth`)
+      log.info('Redirecting unauthenticated user to /auth')
       router.push('/auth')
     }
   }, [user, loading, router])
 
   const fetchSession = async (sessionId: string) => {
-    console.log(`📡 Fetching session: ${sessionId}`)
+    log.info('Fetching session', { sessionId })
     setLoadingSession(true)
     try {
       const response = await fetch(`/api/sessions/${sessionId}`)
       if (response.ok) {
         const { data } = await response.json()
         const { session, chatNodes } = data
-        console.log(`✅ Session loaded: ${session.id}, name: "${session.name}", nodes: ${chatNodes?.length || 0}`)
+        log.info('Session loaded successfully', { sessionId: session.id, sessionName: session.name, nodeCount: chatNodes?.length || 0 })
         setCurrentSession(session)
         setChatNodes(chatNodes || [])
         // Set current node to the last node
@@ -57,7 +57,7 @@ export default function ChatPage() {
           setCurrentNodeId(chatNodes[chatNodes.length - 1].id)
         }
       } else if (response.status === 404) {
-        console.log(`❌ Session not found: ${sessionId}`)
+        log.warn('Session not found', { sessionId })
         showError('Session not found. It may have been deleted.')
         // Clear current session and trigger sidebar refresh
         setCurrentSession(null)
@@ -68,11 +68,11 @@ export default function ChatPage() {
           window.dispatchEvent(new CustomEvent('session-sync-needed'))
         }
       } else {
-        console.error(`❌ Session fetch failed: ${response.status}`)
+        log.error('Session fetch failed', { status: response.status })
         showError('Failed to load session')
       }
     } catch (error) {
-      console.error('Error fetching session:', error)
+      log.error('Error fetching session', error)
       showError('Failed to load session')
     } finally {
       setLoadingSession(false)
@@ -116,9 +116,9 @@ export default function ChatPage() {
   }
 
   const handleSendMessage = async (message: string) => {
-    console.log(`💬 handleSendMessage called: "${message.substring(0, 50)}..."`)
+    log.info('Sending message', { messageLength: message.length, sessionId: currentSession?.id })
     if (!currentSession) {
-      console.log(`❌ No current session, aborting`)
+      log.warn('No current session, aborting message send')
       return
     }
 
@@ -134,7 +134,7 @@ export default function ChatPage() {
         )
       }
 
-      console.log(`Frontend debug: parentNode=${parentNode?.id}, currentNodeId=${currentNodeId}`)
+      log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId })
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -154,7 +154,7 @@ export default function ChatPage() {
       if (response.ok) {
         const result = await response.json()
         const newNode = result.data.node
-        console.log(`✅ Chat response received, new node: ${newNode.id}, status: ${newNode.status}`)
+        log.info('Chat response received', { nodeId: newNode.id, status: newNode.status })
         
         // Immediately add the streaming node to the UI
         setChatNodes(prev => [...prev, newNode])
@@ -165,7 +165,7 @@ export default function ChatPage() {
         setIsSidebarOpen(true)
         
         // Start polling for node updates
-        console.log(`📡 Initiating polling for new node: ${newNode.id}`)
+        log.debug('Initiating node polling', { nodeId: newNode.id })
         pollNodeStatus(newNode.id)
       } else {
         const errorData = await response.json().catch(() => ({}))
@@ -174,7 +174,7 @@ export default function ChatPage() {
         throw new Error(errorMessage)
       }
     } catch (error) {
-      console.error('Error sending message:', error)
+      log.error('Error sending message', error)
       if (error instanceof Error) {
         // Error already handled above or network error
         if (!error.message.includes('HTTP')) {
@@ -198,7 +198,7 @@ export default function ChatPage() {
       // Use the same parent as the failed node
       const parentNode = failedNode.parentId ? chatNodes.find(node => node.id === failedNode.parentId) : null
 
-      console.log(`Retrying failed node: ${nodeId} with prompt: ${originalPrompt}`)
+      log.info('Retrying failed node', { nodeId, promptLength: originalPrompt.length })
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -224,9 +224,9 @@ export default function ChatPage() {
           await fetch(`/api/nodes/${nodeId}`, {
             method: 'DELETE',
           })
-          console.log(`Successfully deleted failed node: ${nodeId}`)
+          log.info('Successfully deleted failed node', { nodeId })
         } catch (deleteError) {
-          console.warn('Failed to delete node from database:', deleteError)
+          log.warn('Failed to delete node from database', deleteError)
           // Continue with UI update even if deletion fails
         }
         
@@ -249,7 +249,7 @@ export default function ChatPage() {
         showError(errorMessage)
       }
     } catch (error) {
-      console.error('Error retrying message:', error)
+      log.error('Error retrying message', error)
       showError('Network error. Please check your connection.')
     }
   }
@@ -265,13 +265,13 @@ export default function ChatPage() {
         return
       }
 
-      console.log(`Deleting node: ${nodeId}`)
+      log.info('Deleting node', { nodeId })
       
       const response = await fetch(`/api/nodes/${nodeId}`, {
         method: 'DELETE',
       })
       
-      console.log(`Delete response status: ${response.status}`)
+      log.debug('Delete response status', { status: response.status })
 
       if (response.ok) {
         // Remove node from UI
@@ -293,32 +293,32 @@ export default function ChatPage() {
           }
         }
         
-        console.log(`Successfully deleted node: ${nodeId}`)
+        log.info('Successfully deleted node', { nodeId })
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || `HTTP ${response.status}: Failed to delete node`
         showError(errorMessage)
       }
     } catch (error) {
-      console.error('Error deleting node:', error)
+      log.error('Error deleting node', error)
       showError('Network error. Please check your connection.')
     }
   }
 
   // Poll for node status updates
   const pollNodeStatus = async (nodeId: string) => {
-    console.log(`🚀 Starting polling for node: ${nodeId}`)
+    log.debug('Starting node polling', { nodeId })
     const maxAttempts = 60 // 5 minutes maximum (5s * 60)
     let attempts = 0
 
     const checkStatus = async () => {
       if (attempts >= maxAttempts) {
-        console.log('Polling timeout for node:', nodeId)
+        log.warn('Polling timeout for node', { nodeId })
         return
       }
 
       try {
-        console.log(`🔍 Polling attempt ${attempts + 1} for node: ${nodeId}`)
+        log.debug('Polling attempt', { attempt: attempts + 1, nodeId })
         const response = await fetch(`/api/sessions/${currentSession?.id}`)
         if (response.ok) {
           const { data } = await response.json()
@@ -326,13 +326,17 @@ export default function ChatPage() {
           const updatedNode = updatedNodes.find((n: any) => n.id === nodeId)
           
           // Debug: Log session name comparison
-          console.log(`🔍 Polling check - Current: "${currentSession?.name}" vs Fetched: "${session?.name}"`)
-          console.log(`🔍 Node status check - NodeID: ${nodeId}, Status: ${updatedNode?.status}`)
+          log.debug('Polling status check', { 
+            currentSessionName: currentSession?.name, 
+            fetchedSessionName: session?.name,
+            nodeId, 
+            nodeStatus: updatedNode?.status 
+          })
           
           // Update session info if name changed (e.g., AI-generated title)
           if (session && session.name !== currentSession?.name) {
             setCurrentSession(session)
-            console.log(`✨ Session title updated to: "${session.name}"`)
+            log.info('Session title updated', { sessionName: session.name })
           }
           
           if (updatedNode && updatedNode.status !== 'streaming') {
@@ -341,7 +345,7 @@ export default function ChatPage() {
               // Check if the node still exists in our local state (not deleted)
               const nodeExists = prev.some(node => node.id === nodeId)
               if (!nodeExists) {
-                console.log(`Node ${nodeId} was deleted locally, skipping update`)
+                log.debug('Node was deleted locally, skipping update', { nodeId })
                 return prev // Don't update if node was deleted
               }
               
@@ -350,12 +354,11 @@ export default function ChatPage() {
                 node.id === nodeId ? updatedNode : node
               )
             })
-            console.log(`✅ Node ${nodeId} updated with status: ${updatedNode.status}`)
-            console.log(`🏁 Polling completed for node: ${nodeId}`)
+            log.info('Node polling completed', { nodeId, status: updatedNode.status })
             
             // Trigger session list refresh when node completes
             if (typeof window !== 'undefined') {
-              console.log(`📡 Triggering session list refresh after node completion`)
+              log.debug('Triggering session list refresh after node completion')
               window.dispatchEvent(new CustomEvent('session-sync-needed'))
             }
             
@@ -369,7 +372,7 @@ export default function ChatPage() {
           setTimeout(checkStatus, pollInterval)
         }
       } catch (error) {
-        console.error('Error polling node status:', error)
+        log.error('Error polling node status', error)
         attempts++
         if (attempts < maxAttempts) {
           const pollInterval = attempts <= 10 ? 1000 : 3000 // First 10 attempts: 1s, then 3s
@@ -383,7 +386,7 @@ export default function ChatPage() {
   }
 
   if (loading || !user) {
-    console.log(`⏳ ChatPage showing loading state`)
+    log.debug('ChatPage showing loading state')
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -391,7 +394,7 @@ export default function ChatPage() {
     )
   }
 
-  console.log(`🎨 ChatPage rendering main content - currentSession: ${currentSession?.id || 'null'}`)
+  log.debug('ChatPage rendering main content', { currentSessionId: currentSession?.id })
 
   return (
     <div className="flex h-screen bg-background">

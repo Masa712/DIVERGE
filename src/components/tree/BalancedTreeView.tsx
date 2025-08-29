@@ -17,6 +17,7 @@ import { ChatNode } from '@/types'
 import { MessageNode } from './message-node'
 import { CompactTreeLayout, TreeNode } from './CompactTreeLayout'
 import { GradientBackground } from './GradientBackground'
+import { log } from '@/lib/utils/logger'
 
 interface Props {
   nodes: ChatNode[]
@@ -129,7 +130,7 @@ function CompactTreeViewInner({
   const handleNodeClick = useCallback((nodeId: string) => {
     // Call original handler only - no centering on click
     onNodeClick?.(nodeId)
-    console.log(`👆 Node clicked: ${nodeId} (no centering)`)
+    log.debug('Node clicked', { nodeId })
   }, [onNodeClick])
 
   // Convert chat nodes to React Flow nodes and edges with balanced layout
@@ -223,7 +224,7 @@ function CompactTreeViewInner({
       // Check if this is a new session or if a new node was added
       if (isSessionChanged) {
         // New session opened - center on the first/root node
-        console.log(`📂 New session opened: ${currentSessionId}`)
+        log.info('New session opened', { sessionId: currentSessionId })
         const rootNode = chatNodes.find(n => n.parentId === null) || chatNodes[0]
         
         if (rootNode && positions.has(rootNode.id)) {
@@ -241,22 +242,13 @@ function CompactTreeViewInner({
               }
             )
             
-            // Logging based on device type
-            if (settings.device === 'mobile') {
-              console.log(`📱 Centered root node (Mobile/Tablet): ${rootNode.id}`)
-              console.log(`  - Fixed offset: (${settings.xOffset}, ${settings.yOffset})`)
-              console.log(`  - Zoom: ${settings.zoom}`)
-            } else {
-              console.log(`🖥️ Centered root node (Desktop): ${rootNode.id}`)
-              const debug = settings.debugInfo!
-              console.log(`  - Screen width: ${debug.screenWidth}px`)
-              console.log(`  - Left sidebar: ${debug.leftSidebarWidth}px, Right sidebar: ${debug.rightSidebarWidth_actual}px`)
-              console.log(`  - Available width: ${debug.availableWidth}px`)
-              console.log(`  - Content center: ${debug.contentAreaCenterX}px, Screen center: ${debug.screenCenterX}px`)
-              console.log(`  - Pixel offset needed: ${debug.pixelOffsetNeeded}px`)
-              console.log(`  - ReactFlow offset: ${debug.reactFlowOffsetX}px`)
-              console.log(`  - Final target: (${position.x + settings.xOffset}, ${position.y + settings.yOffset})`)
-            }
+            // Log centering action
+            log.debug('Centered root node', {
+              nodeId: rootNode.id,
+              device: settings.device,
+              offset: { x: settings.xOffset, y: settings.yOffset },
+              zoom: settings.zoom
+            })
           }, 100)
         }
         
@@ -290,17 +282,13 @@ function CompactTreeViewInner({
             )
             
             // Logging based on device type
-            if (settings.device === 'mobile') {
-              console.log(`📱 Centered on new node (Mobile/Tablet): ${nodeToCenter.id}`)
-              console.log(`  - Fixed offset: (${settings.xOffset}, ${settings.yOffset})`)
-              console.log(`  - Zoom: ${finalZoom}`)
-            } else {
-              console.log(`🖥️ Centered on new node (Desktop): ${nodeToCenter.id}`)
-              const debug = settings.debugInfo!
-              console.log(`  - Pixel offset needed: ${debug.pixelOffsetNeeded}px`)
-              console.log(`  - ReactFlow offset: ${debug.reactFlowOffsetX}px`)
-              console.log(`  - Final zoom: ${finalZoom}`)
-            }
+            // Log centering on new node
+            log.debug('Centered on new node', {
+              nodeId: nodeToCenter.id,
+              device: settings.device,
+              offset: { x: settings.xOffset, y: settings.yOffset },
+              zoom: finalZoom
+            })
           }, 100)
         }
       }
@@ -309,7 +297,7 @@ function CompactTreeViewInner({
       prevNodeCountRef.current = chatNodes.length
 
     } catch (error) {
-      console.error('❌ Error in BalancedTreeView layout calculation:', error)
+      log.error('Error in BalancedTreeView layout calculation', error)
       setNodes([])
       setEdges([])
     }

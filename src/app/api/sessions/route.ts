@@ -9,6 +9,7 @@ import {
   withRetry 
 } from '@/lib/errors/error-handler'
 import { loadOptimizedSessions, executeOptimizedQuery } from '@/lib/db/query-optimizer'
+import { log } from '@/lib/utils/logger'
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const supabase = createClient()
@@ -126,7 +127,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   }
 
   // Create new session with optimized insert operation
-  console.log('📝 Creating new session:', { name: name.trim(), userId: user.id })
+  log.info('Creating new session', { name: name.trim(), userId: user.id })
   
   const sessionRaw = await executeOptimizedQuery(
     `create_session_${user.id}_${Date.now()}`, // Unique cache key
@@ -174,7 +175,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         )
       }
       
-      console.log('✅ Session created successfully:', data?.id)
+      log.info('Session created successfully', { sessionId: data?.id })
       return data
     },
     { poolKey: `create_${user.id}`, skipCache: true } // Don't cache create operations

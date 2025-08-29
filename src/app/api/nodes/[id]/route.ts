@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { clearQueryCache } from '@/lib/db/query-optimizer'
+import { log } from '@/lib/utils/logger'
 
 export async function DELETE(
   request: NextRequest,
@@ -18,7 +19,7 @@ export async function DELETE(
     }
 
     const nodeId = params.id
-    console.log(`DELETE request for node: ${nodeId}`)
+    log.info('DELETE request for node', { nodeId })
 
     // First, check if the node exists
     const { data: nodeData, error: nodeError } = await supabase
@@ -71,7 +72,7 @@ export async function DELETE(
       .eq('id', nodeId)
       .single()
     
-    console.log(`Pre-delete check - Node ${nodeId} exists:`, !!preDeleteCheck)
+    log.debug('Pre-delete check', { nodeId, exists: !!preDeleteCheck })
 
     // Delete the node using service role client to bypass RLS
     const serviceSupabase = createServiceRoleClient()
@@ -80,20 +81,20 @@ export async function DELETE(
       .delete({ count: 'exact' })
       .eq('id', nodeId)
 
-    console.log(`Delete operation result:`, {
-      data: deleteData,
-      error: deleteError,
+    log.debug('Delete operation result', {
+      hasData: !!deleteData,
+      hasError: !!deleteError,
       count,
       nodeId
     })
 
     if (deleteError) {
-      console.error('Error deleting node:', deleteError)
+      log.error('Error deleting node', deleteError)
       return NextResponse.json({ error: 'Failed to delete node' }, { status: 500 })
     }
 
     if (count === 0) {
-      console.error('❌ Delete operation succeeded but no rows were deleted')
+      log.error('Delete operation succeeded but no rows were deleted', { nodeId })
       return NextResponse.json({ error: 'No rows were deleted - possible permission issue' }, { status: 500 })
     }
     
@@ -104,33 +105,33 @@ export async function DELETE(
       .eq('id', nodeId)
       .single()
     
-    console.log(`Post-delete verification - Node ${nodeId}:`, {
-      data: verifyData,
-      error: verifyError?.code,
+    log.debug('Post-delete verification', {
+      nodeId,
+      hasData: !!verifyData,
+      errorCode: verifyError?.code,
       errorMessage: verifyError?.message
     })
     
     if (verifyData) {
-      console.error('⚠️ Node still exists after deletion attempt:', nodeId)
-      console.error('Node data:', verifyData)
+      log.error('Node still exists after deletion attempt', { nodeId, nodeData: verifyData })
       return NextResponse.json({ error: 'Node deletion failed - node still exists' }, { status: 500 })
     }
     
     if (verifyError && verifyError.code !== 'PGRST116') {
-      console.error('Unexpected error during verification:', verifyError)
+      log.error('Unexpected error during verification', verifyError)
     } else if (verifyError && verifyError.code === 'PGRST116') {
-      console.log(`✅ Node successfully deleted: ${nodeId} (PGRST116 = not found)`)
+      log.info('Node successfully deleted', { nodeId })
     }
 
     // Clear query cache to ensure deleted nodes don't appear in subsequent requests
     // This is necessary because the chatNodesLoader caches results
     clearQueryCache()
-    console.log(`🗑️ Successfully deleted node ${nodeId} from session ${nodeData.session_id} and cleared cache`)
+    log.info('Successfully deleted node and cleared cache', { nodeId, sessionId: nodeData.session_id })
     
     return NextResponse.json({ success: true })
 
   } catch (error) {
-    console.error('Error in DELETE /api/nodes/[id]:', error)
+    log.error('Error in DELETE /api/nodes/[id]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

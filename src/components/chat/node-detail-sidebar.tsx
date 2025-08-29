@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw } from 'lucide-react'
 import { ChatNode } from '@/types'
+import { log } from '@/lib/utils/logger'
 import { useComments } from '@/hooks/useComments'
+import { useNodeChain } from '@/hooks/useNodeChain'
+import { useSidebarResize } from '@/hooks/useSidebarResize'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
 
 interface Props {
@@ -19,23 +22,12 @@ interface Props {
 }
 
 export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange, onRetryNode, onDeleteNode }: Props) {
-  const [currentNodeIndex, setCurrentNodeIndex] = useState(0)
-  const [nodeChain, setNodeChain] = useState<ChatNode[]>([])
-  const [width, setWidth] = useState(400) // Default width 400px (min 400px)
-  const [isResizing, setIsResizing] = useState(false)
   const [comment, setComment] = useState('')
   const [isCommentLoading, setIsCommentLoading] = useState(false)
-  const sidebarRef = useRef<HTMLDivElement>(null)
   
-  // Get current display node (always get the latest version from allNodes)
-  const currentDisplayNode = (() => {
-    const chainNode = nodeChain[currentNodeIndex]
-    if (!chainNode) return chainNode
-    
-    // Find the latest version of this node from allNodes
-    const latestNode = allNodes.find(n => n.id === chainNode.id)
-    return latestNode || chainNode
-  })()
+  // Use custom hooks for better separation of concerns
+  const { currentDisplayNode, nodeChain, currentNodeIndex, canNavigate, navigate } = useNodeChain(node, allNodes)
+  const { width, isResizing, sidebarRef, handleMouseDown } = useSidebarResize({ onWidthChange })
 
   // Check if current node has children (to determine if deletion is allowed)
   const hasChildren = useCallback((nodeId: string) => {
@@ -51,65 +43,15 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
     sessionId: session?.id
   })
 
-  // Build the parent chain when node changes
-  useEffect(() => {
-    if (!node || !allNodes.length) {
-      setNodeChain([])
-      setCurrentNodeIndex(0)
-      return
-    }
-
-    const chain: ChatNode[] = []
-    let currentNode: ChatNode | undefined = node
-    const nodeMap = new Map(allNodes.map(n => [n.id, n]))
-
-    // Build chain from current node to root
-    while (currentNode) {
-      chain.unshift(currentNode) // Add to beginning to maintain order
-      currentNode = currentNode.parentId ? nodeMap.get(currentNode.parentId) : undefined
-    }
-
-    setNodeChain(chain)
-    setCurrentNodeIndex(chain.length - 1) // Start with the clicked node
-    setComment('') // Reset comment when switching nodes
-  }, [node, allNodes])
-
-  // Resize handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    setIsResizing(true)
+  // Reset comment when node changes
+  const resetComment = useCallback(() => {
+    setComment('')
   }, [])
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing || typeof window === 'undefined') return
-    
-    // Calculate width based on sidebar's right edge position (fixed at 30px from screen right)
-    const sidebarRightEdge = window.innerWidth - 30
-    const newWidth = Math.max(400, Math.min(800, sidebarRightEdge - e.clientX))
-    
-    setWidth(newWidth)
-    onWidthChange?.(newWidth)
-  }, [isResizing, onWidthChange])
-
-  const handleMouseUp = useCallback(() => {
-    setIsResizing(false)
-  }, [])
-
-  useEffect(() => {
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'ew-resize'
-      document.body.style.userSelect = 'none'
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-      }
-    }
-  }, [isResizing, handleMouseMove, handleMouseUp])
+  
+  // Reset comment when switching nodes
+  if (currentDisplayNode && comment) {
+    resetComment()
+  }
 
   // Notify parent of width changes
   useEffect(() => {
@@ -177,7 +119,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   }
 
   const navigateToNode = (index: number) => {
-    setCurrentNodeIndex(index)
+    navigate.toIndex(index)
   }
 
   const handleModelChange = (model: string) => {
@@ -304,7 +246,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                   <button
                     onClick={() => {
                       // For now, just show the model. Later we can add model selection dropdown
-                      console.log('Model change clicked for:', currentDisplayNode.model)
+                      log.debug('Model change clicked', { model: currentDisplayNode.model })
                     }}
                     className="px-2 py-1 text-xs font-medium bg-green-100/70 text-green-800 rounded-full hover:bg-green-200/70 transition-colors"
                     title="Click to change model (coming soon)"

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getPooledServerClient } from '@/lib/supabase/connection-pool'
 import { createAppError, ErrorCategory } from '@/lib/errors/error-handler'
 import { performanceMonitor } from '@/lib/utils/performance-optimizer'
+import { log } from '@/lib/utils/logger'
 
 export async function GET(request: NextRequest) {
   const stopTimer = performanceMonitor.startTimer('comments_get')
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('❌ Comments GET error:', error)
+    log.error('Comments GET error', error)
     
     if (error instanceof Error) {
       return NextResponse.json(
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { nodeId, sessionId, content, commentType = 'user_comment', parentCommentId } = body
     
-    console.log('📝 Comment POST request:', { nodeId, sessionId, contentLength: content?.length })
+    log.info('Comment POST request', { nodeId, sessionId, contentLength: content?.length })
     
     if (!nodeId || !sessionId || !content?.trim()) {
       return NextResponse.json(
@@ -91,14 +92,14 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
     if (authError || !user) {
-      console.error('Authentication failed:', authError)
+      log.error('Authentication failed', authError)
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
     
-    console.log('👤 Authenticated user:', user.id)
+    log.debug('Authenticated user', { userId: user.id })
     
     // First verify the node exists
     const { data: nodeData, error: nodeError } = await supabase
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (nodeError || !nodeData) {
-      console.error('Node verification failed:', nodeError)
+      log.error('Node verification failed', nodeError)
       return NextResponse.json(
         { success: false, error: 'Node not found' },
         { status: 404 }
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (sessionError || !sessionData) {
-      console.error('Session verification failed:', sessionError)
+      log.error('Session verification failed', sessionError)
       return NextResponse.json(
         { success: false, error: 'Session not found' },
         { status: 404 }
@@ -136,21 +137,21 @@ export async function POST(request: NextRequest) {
     const isSessionOwner = sessionData.user_id === user.id
     
     if (!isSessionOwner) {
-      console.log('❌ User is not session owner:', { userId: user.id, sessionOwnerId: sessionData.user_id })
+      log.warn('User is not session owner', { userId: user.id, sessionOwnerId: sessionData.user_id })
       return NextResponse.json(
         { success: false, error: 'Permission denied: only session owner can comment for now' },
         { status: 403 }
       )
     }
     
-    console.log('✅ User authorized to comment')
+    log.debug('User authorized to comment')
     
     // Create the comment
-    console.log('💾 Creating comment with data:', {
-      node_id: nodeId,
-      session_id: sessionId,
-      user_id: user.id,
-      content_preview: content.trim().substring(0, 50)
+    log.debug('Creating comment', {
+      nodeId,
+      sessionId,
+      userId: user.id,
+      contentPreview: content.trim().substring(0, 50)
     })
     
     // Insert with only the basic fields that exist in simplified table
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
       content: content.trim()
     }
     
-    console.log('📦 Inserting data:', insertData)
+    log.debug('Inserting comment data', insertData)
     
     const { data: comment, error: insertError } = await supabase
       .from('node_comments')
@@ -170,15 +171,15 @@ export async function POST(request: NextRequest) {
       .single()
     
     if (insertError || !comment) {
-      console.error('❌ Failed to insert comment:', insertError)
+      log.error('Failed to insert comment', insertError)
       throw createAppError(
         'Failed to create comment',
         ErrorCategory.DATABASE,
-        { context: { nodeId, sessionId, userId: user.id }, cause: insertError }
+        { context: { nodeId, sessionId, userId: user.id }, cause: insertError as Error }
       )
     }
     
-    console.log('✅ Comment created successfully:', comment.id)
+    log.info('Comment created successfully', { commentId: comment.id })
     
     return NextResponse.json({
       success: true,
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('❌ Comments POST error:', error)
+    log.error('Comments POST error', error)
     
     if (error instanceof Error) {
       return NextResponse.json(
@@ -296,7 +297,7 @@ export async function PUT(request: NextRequest) {
       throw createAppError(
         'Failed to update comment',
         ErrorCategory.DATABASE,
-        { context: { commentId, updateData }, cause: updateError }
+        { context: { commentId, updateData }, cause: updateError as Error }
       )
     }
     
@@ -306,7 +307,7 @@ export async function PUT(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('❌ Comments PUT error:', error)
+    log.error('Comments PUT error', error)
     
     if (error instanceof Error) {
       return NextResponse.json(
@@ -406,7 +407,7 @@ export async function DELETE(request: NextRequest) {
     })
     
   } catch (error) {
-    console.error('❌ Comments DELETE error:', error)
+    log.error('Comments DELETE error', error)
     
     if (error instanceof Error) {
       return NextResponse.json(

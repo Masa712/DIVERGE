@@ -8,6 +8,7 @@ import {
   classifyDatabaseError 
 } from '@/lib/errors/error-handler'
 import { executeOptimizedQuery, chatNodesLoader } from '@/lib/db/query-optimizer'
+import { log } from '@/lib/utils/logger'
 
 export const GET = withErrorHandler(async (
   request: NextRequest,
@@ -117,19 +118,13 @@ export const GET = withErrorHandler(async (
       .update({ last_accessed_at: new Date().toISOString() })
       .eq('id', sessionId)
   ).then(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`📈 Updated last access time for session: ${sessionId}`)
-    }
+    log.debug('Updated last access time for session', { sessionId })
   }).catch(error => {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('⚠️ Failed to update last access time:', error)
-    }
+    log.warn('Failed to update last access time', error)
   })
 
-  // Debug: Log session name when fetched
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`📋 Session fetched: "${session.name}" (ID: ${sessionId})`)
-  }
+  // Log session fetch
+  log.debug('Session fetched', { sessionName: session.name, sessionId })
 
   return NextResponse.json({
     success: true,
