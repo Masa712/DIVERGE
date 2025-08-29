@@ -8,6 +8,7 @@ import { useComments } from '@/hooks/useComments'
 import { useNodeChain } from '@/hooks/useNodeChain'
 import { useSidebarResize } from '@/hooks/useSidebarResize'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
+import { useAuth } from '@/components/providers/auth-provider'
 
 interface Props {
   node: ChatNode | null
@@ -24,6 +25,7 @@ interface Props {
 export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange, onRetryNode, onDeleteNode }: Props) {
   const [comment, setComment] = useState('')
   const [isCommentLoading, setIsCommentLoading] = useState(false)
+  const { displayName } = useAuth()
   
   // Use custom hooks for better separation of concerns
   const { currentDisplayNode, nodeChain, currentNodeIndex, canNavigate, navigate } = useNodeChain(node, allNodes)
@@ -91,13 +93,14 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
 
   const formatDate = (date: Date) => {
     try {
-      return date.toLocaleString('ja-JP', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      const d = new Date(date)
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      const hours = String(d.getHours()).padStart(2, '0')
+      const minutes = String(d.getMinutes()).padStart(2, '0')
+      const seconds = String(d.getSeconds()).padStart(2, '0')
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
     } catch (error) {
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString()
     }
@@ -135,7 +138,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
       {/* Mobile/Tablet Overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-transparent z-40 lg:hidden"
           onClick={onClose}
         />
       )}
@@ -218,7 +221,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                 <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
                   <User className="w-3.5 h-3.5 text-blue-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900">User Prompt</h3>
+                <h3 className="font-semibold text-gray-900">{displayName || 'User'}</h3>
                 <button
                   onClick={() => copyToClipboard(currentDisplayNode.prompt)}
                   className="p-1 hover:bg-white/10 rounded transition-colors"
@@ -251,7 +254,44 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                     className="px-2 py-1 text-xs font-medium bg-green-100/70 text-green-800 rounded-full hover:bg-green-200/70 transition-colors"
                     title="Click to change model (coming soon)"
                   >
-                    {currentDisplayNode.model.split('/')[1] || currentDisplayNode.model}
+                    {(() => {
+                      const model = currentDisplayNode.model
+                      
+                      // Extract model name after provider prefix (e.g., openai/, anthropic/)
+                      let modelName: string = model
+                      if (model.includes('/')) {
+                        const parts = model.split('/')
+                        modelName = parts[1] || model
+                      }
+                      
+                      // Handle OpenAI models
+                      if (modelName.startsWith('gpt-4o-')) {
+                        return 'gpt-4o'
+                      }
+                      if (modelName.startsWith('gpt-4-')) {
+                        return 'gpt-4'
+                      }
+                      if (modelName.startsWith('gpt-3.5-')) {
+                        return 'gpt-3.5'
+                      }
+                      
+                      // Handle Claude models
+                      if (modelName.startsWith('claude-3-opus')) {
+                        return 'claude-3-opus'
+                      }
+                      if (modelName.startsWith('claude-3-sonnet')) {
+                        return 'claude-3-sonnet'
+                      }
+                      if (modelName.startsWith('claude-3-haiku')) {
+                        return 'claude-3-haiku'
+                      }
+                      if (modelName.startsWith('claude-2')) {
+                        return 'claude-2'
+                      }
+                      
+                      // Return the extracted model name or original
+                      return modelName
+                    })()}
                   </button>
                   
                   <button

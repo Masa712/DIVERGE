@@ -92,7 +92,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
         {/* Mobile Overlay */}
         {isMobileOpen && (
           <div 
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            className="fixed inset-0 bg-transparent z-40 lg:hidden"
             onClick={() => setIsMobileOpen(false)}
           />
         )}
@@ -285,6 +285,21 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           </button>
         </div>
       </aside>
+      
+      {/* Dashboard Overlay - Available in collapsed state */}
+      {showDashboard && (
+        <DashboardStats
+          dashboardData={dashboardData}
+          onClose={() => setShowDashboard(false)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal - Available in collapsed state */}
+      <DeleteConfirmationModal
+        sessionId={sessionToDelete}
+        onConfirm={handleSessionDelete}
+        onCancel={() => setSessionToDelete(null)}
+      />
       </div>
     )
   }
@@ -304,7 +319,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
       {/* Mobile Overlay */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-transparent z-40 lg:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
@@ -452,7 +467,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
         <div className="border-t border-white/10 p-4">
           {/* New Chat Button */}
           <button 
-            onClick={handleNewSession}
+            onClick={() => handleCreateSession(onNewSession, onSessionSelect)}
             className="
               w-full mb-3 px-4 py-2.5 rounded-lg
               bg-gradient-to-r from-blue-500/20 to-purple-500/20

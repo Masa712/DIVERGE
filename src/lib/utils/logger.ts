@@ -1,10 +1,11 @@
 import pino from 'pino'
 
 const isDevelopment = process.env.NODE_ENV === 'development'
+const isServer = typeof window === 'undefined'
 
 export const logger = pino({
   level: isDevelopment ? 'debug' : 'info',
-  transport: isDevelopment ? {
+  transport: isDevelopment && !isServer ? {
     target: 'pino-pretty',
     options: {
       colorize: true,
@@ -16,7 +17,19 @@ export const logger = pino({
     level(level) {
       return { level }
     }
-  }
+  },
+  // For server-side, use simple formatting
+  ...(isServer && {
+    transport: undefined,
+    formatters: {
+      level(level) {
+        return { level }
+      },
+      log(object) {
+        return object
+      }
+    }
+  })
 })
 
 // Convenience methods
