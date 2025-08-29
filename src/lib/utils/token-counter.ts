@@ -57,10 +57,15 @@ function getEncoder(model: string) {
 }
 
 /**
- * Count tokens accurately using tiktoken
+ * Count tokens accurately using tiktoken (with Vercel compatibility)
  */
 export function countTokens(text: string, model: string = 'gpt-4o'): number {
   if (!text) return 0
+  
+  // In production/serverless environments, use fallback estimation
+  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
+    return estimateTokensFallback(text)
+  }
   
   try {
     const encoder = getEncoder(model)
@@ -77,6 +82,11 @@ export function countTokens(text: string, model: string = 'gpt-4o'): number {
  */
 export function countTokensBatch(texts: string[], model: string = 'gpt-4o'): number[] {
   if (texts.length === 0) return []
+  
+  // In production/serverless environments, use fallback estimation
+  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
+    return texts.map(estimateTokensFallback)
+  }
   
   try {
     const encoder = getEncoder(model)
@@ -98,6 +108,13 @@ export function countMessageTokens(
   model: string = 'gpt-4o'
 ): number {
   if (messages.length === 0) return 0
+  
+  // In production/serverless environments, use fallback estimation
+  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
+    return messages.reduce((total, msg) => 
+      total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
+    )
+  }
   
   try {
     const encoder = getEncoder(model)
