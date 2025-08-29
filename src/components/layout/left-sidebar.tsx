@@ -260,7 +260,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           />
         )}
 
-        {/* Mobile Sidebar when opened - Mobile/Tablet only */}
+        {/* Mobile/Tablet - Use Original PC Design */}
         <aside className={`
           fixed z-50 flex flex-col
           glass-test glass-blur
@@ -269,7 +269,7 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           transform transition-all duration-300 ease-in-out
           lg:hidden
           
-          /* Tablet/Mobile centered positioning */
+          /* Mobile/Tablet centered positioning */
           left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
           w-[90vw] max-w-[400px] h-[85vh] max-h-[700px]
           md:w-[80vw] md:max-w-[400px] md:h-[80vh]
@@ -279,172 +279,177 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
         `}>
           {/* Header - Logo */}
           <div className="px-6 pt-9 pb-6 border-b border-white/10 relative">
-            {/* Logo - Centered */}
             <div className="text-center">
               <h1 className="text-4xl font-bold text-gray-900">
                 Diverge
               </h1>
             </div>
             
-            {/* Controls - Positioned absolutely */}
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center space-x-2">
-              {/* Collapse Button - Desktop Only */}
+            <div className="absolute top-4 right-4">
               <button
                 onClick={onToggleCollapse}
-                className="p-2 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 hidden lg:block"
-                title="Collapse sidebar"
+                className="p-2 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200"
+                title="Expand sidebar"
               >
-                <Menu className="w-4 h-4" />
+                <Menu className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1 overflow-y-auto">
-            {/* New Session Button */}
-            <div className="p-6">
-              <button
-                onClick={handleCreateSession}
-                className="w-full p-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] flex items-center justify-center space-x-2"
-              >
-                <PlusIcon className="w-5 h-5" />
-                <span className="font-medium">New Chat</span>
-              </button>
-            </div>
-
-            {/* Sessions List */}
-            <div className="px-6 pb-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Recent Sessions</h3>
-              {loading ? (
-                <div className="space-y-3">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-12 bg-white/10 rounded-lg animate-pulse" />
-                  ))}
+          {/* User Info Section */}
+          <div className="px-6 py-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center">
+                <span className="text-gray-900 text-sm font-medium">
+                  {user?.email?.[0]?.toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-gray-800">
+                  {user?.email || 'User'}
                 </div>
-              ) : sessions.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No chat sessions yet</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-xs text-gray-600">Online</span>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {sessions.map((session) => (
-                    <div key={session.id} className="relative group">
-                      <button
-                        onClick={() => onSessionSelect(session.id)}
-                        className={`w-full p-3 rounded-lg text-left transition-all duration-200 ${
-                          currentSessionId === session.id
-                            ? 'bg-white/20 shadow-lg'
-                            : 'hover:bg-white/10'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-medium truncate ${
-                              currentSessionId === session.id ? 'text-gray-900' : 'text-gray-700'
-                            }`}>
-                              {session.name}
-                            </h4>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {formatDate(session.updatedAt)}
-                            </p>
-                          </div>
-                        </div>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSessionToDelete(session.id)
-                        }}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 hover:text-red-600 transition-all duration-200"
-                        title="Delete session"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              </div>
             </div>
           </div>
 
-          {/* Bottom Section */}
-          <div className="p-6 border-t border-white/10">
-            {showDashboard ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/10 rounded-lg p-3">
-                    <div className="text-xs text-gray-600">Sessions</div>
-                    <div className="text-lg font-semibold text-gray-900">{dashboardData.totalSessions}</div>
-                  </div>
-                  <div className="bg-white/10 rounded-lg p-3">
-                    <div className="text-xs text-gray-600">Cost</div>
-                    <div className="text-lg font-semibold text-gray-900">${dashboardData.totalCost.toFixed(3)}</div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/10 rounded-lg p-3">
-                    <div className="text-xs text-gray-600">Tokens</div>
-                    <div className="text-lg font-semibold text-gray-900">{dashboardData.totalTokens.toLocaleString()}</div>
-                  </div>
-                  <div className="bg-white/10 rounded-lg p-3">
-                    <div className="text-xs text-gray-600">Monthly</div>
-                    <div className="text-lg font-semibold text-gray-900">${dashboardData.monthlyUsage.toFixed(2)}</div>
-                  </div>
-                </div>
-                
+          {/* Chat Sessions List */}
+          <div className="flex-1 overflow-y-auto px-3 py-4 sidebar-scroll">
+            <div className="mb-4 px-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Recent Chats
+                </h2>
+                <span className="text-xs text-gray-400">{sessions.length}</span>
+              </div>
+            </div>
+            
+            {loading ? (
+              <div className="space-y-2 px-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-16 bg-white/10 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : sessions.length === 0 ? (
+              <div className="text-center py-8 px-3">
+                <MessageSquare className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                <p className="text-sm text-gray-600 mb-2">No chats yet</p>
                 <button
-                  onClick={() => setShowDashboard(false)}
-                  className="w-full p-2 text-xs text-gray-600 hover:text-gray-900 transition-colors"
+                  onClick={handleCreateSession}
+                  className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
                 >
-                  Hide Dashboard
+                  Start your first chat
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                <button
-                  onClick={() => setShowDashboard(true)}
-                  className="w-full p-3 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 flex items-center space-x-2 group"
-                >
-                  <Activity className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
-                  <span className="text-sm group-hover:text-blue-600 transition-colors duration-200">Dashboard</span>
-                </button>
-                
-                <button
-                  onClick={handleSignOut}
-                  className="w-full p-3 rounded-lg text-gray-600 hover:text-red-600 transition-all duration-200 flex items-center space-x-2 group"
-                >
-                  <LogOut className="w-4 h-4 group-hover:text-red-600 transition-colors duration-200" />
-                  <span className="text-sm group-hover:text-red-600 transition-colors duration-200">Sign Out</span>
-                </button>
+              <div className="space-y-1">
+                {sessions.map((session) => (
+                  <div key={session.id} className="relative group">
+                    <button
+                      onClick={() => {
+                        onSessionSelect(session.id)
+                        setIsMobileOpen(false)
+                      }}
+                      className={`
+                        w-full text-left px-3 py-2.5 rounded-lg mb-1
+                        transition-all duration-200
+                        transform hover:translate-x-1
+                        ${currentSessionId === session.id 
+                          ? 'bg-white/20 shadow-lg' 
+                          : 'hover:bg-white/10'
+                        }
+                      `}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-800 truncate">
+                            {session.name || `Chat ${formatDate(session.createdAt)}`}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-0.5">
+                            {session.nodeCount} messages • ${(session.totalCostUsd || 0).toFixed(4)}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {formatDate(session.lastAccessedAt)}
+                          </div>
+                        </div>
+                        {currentSessionId === session.id && (
+                          <div className="w-2 h-2 rounded-full bg-blue-400" />
+                        )}
+                      </div>
+                    </button>
+                    
+                    {/* Delete button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSessionToDelete(session.id)
+                      }}
+                      className="absolute top-2 right-2 p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
+                      title="Delete session"
+                    >
+                      <Trash2 className="w-3 h-3 text-red-600" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
-          {/* Delete Confirmation Modal */}
-          {sessionToDelete && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-              <div className="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-2xl">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Session</h3>
-                <p className="text-gray-600 mb-6">Are you sure you want to delete this chat session? This action cannot be undone.</p>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => setSessionToDelete(null)}
-                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmDelete}
-                    className="flex-1 px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Footer */}
+          <div className="border-t border-white/10 p-4">
+            {/* New Chat Button */}
+            <button 
+              onClick={handleCreateSession}
+              className="
+                w-full mb-3 px-4 py-2.5 rounded-lg
+                bg-gradient-to-r from-blue-500/20 to-purple-500/20
+                border border-white/20
+                text-gray-800 text-sm font-medium
+                hover:from-blue-500/30 hover:to-purple-500/30
+                transition-all duration-200
+                flex items-center justify-center gap-2
+              "
+            >
+              <PlusIcon className="w-4 h-4" />
+              New Chat
+            </button>
+            
+            {/* Dashboard Button */}
+            <button 
+              onClick={() => {
+                setShowDashboard(!showDashboard)
+                setIsMobileOpen(false)
+              }}
+              className="
+                w-full mb-2 px-4 py-2 rounded-lg
+                text-gray-700 text-sm
+                hover:text-blue-600
+                transition-all duration-200
+                flex items-center gap-2 group
+              "
+            >
+              <Activity className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
+              <span className="group-hover:text-blue-600 transition-colors duration-200">Dashboard</span>
+            </button>
+            
+            {/* Sign Out Button */}
+            <button 
+              onClick={handleSignOut}
+              className="
+                w-full px-4 py-2 rounded-lg
+                text-gray-600 text-sm
+                hover:text-red-600
+                transition-all duration-200
+                flex items-center gap-2 group
+              "
+            >
+              <LogOut className="w-4 h-4 group-hover:text-red-600 transition-colors duration-200" />
+              <span className="group-hover:text-red-600 transition-colors duration-200">Sign Out</span>
+            </button>
+          </div>
         </aside>
 
         {/* Desktop Collapsed Sidebar */}
