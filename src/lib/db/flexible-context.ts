@@ -6,7 +6,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { ChatNode } from '@/types'
 import { getCachedSessionNodes, resolveNodeReferences } from './enhanced-context-cache'
-import { countTokensSync as countTokens, countMessageTokensSync as countMessageTokens } from '@/lib/utils/token-counter'
+import { countTokens, countMessageTokens } from '@/lib/utils/token-counter'
 import {
   ContextStrategy,
   ContentPriority,

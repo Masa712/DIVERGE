@@ -1,24 +1,7 @@
 /**
- * Accurate token counting using tiktoken library
- * Supports multiple model families with proper encoding
+ * Production-safe token counting with fallback estimation
+ * Uses intelligent estimation optimized for different model families
  */
-
-// Dynamic import for tiktoken to handle serverless environments
-let tiktoken: any = null
-
-const loadTiktoken = async () => {
-  // Only load tiktoken in development or client-side
-  if (typeof window !== 'undefined' || process.env.NODE_ENV !== 'production') {
-    try {
-      tiktoken = await import('tiktoken')
-      return tiktoken
-    } catch (error) {
-      console.warn('Failed to load tiktoken:', error)
-      return null
-    }
-  }
-  return null
-}
 
 // Model to encoding mapping for accurate token counting
 const MODEL_ENCODINGS = {
@@ -41,63 +24,14 @@ const MODEL_ENCODINGS = {
 
 type ModelKey = keyof typeof MODEL_ENCODINGS
 
-// Cache encoders to avoid repeated initialization
-const encoderCache = new Map<string, any>()
+// Production-safe implementation - always use fallback estimation
 
 /**
- * Get tiktoken encoder for a specific model
+ * Count tokens using production-safe estimation
  */
-async function getEncoder(model: string) {
-  if (encoderCache.has(model)) {
-    return encoderCache.get(model)
-  }
-  
-  const tiktokenLib = await loadTiktoken()
-  if (!tiktokenLib) {
-    return null // Will trigger fallback estimation
-  }
-  
-  let encoder
-  try {
-    // Try model-specific encoding first
-    if (model.startsWith('gpt-4') || model.startsWith('gpt-3.5')) {
-      encoder = tiktokenLib.encoding_for_model(model as any)
-    } else {
-      // Use appropriate base encoding
-      const encodingName = MODEL_ENCODINGS[model as ModelKey] || MODEL_ENCODINGS.default
-      encoder = tiktokenLib.get_encoding(encodingName)
-    }
-  } catch (error) {
-    console.warn(`Failed to get encoding for model ${model}, using fallback`, error)
-    return null
-  }
-  
-  encoderCache.set(model, encoder)
-  return encoder
-}
-
-/**
- * Count tokens accurately using tiktoken (with Vercel compatibility)
- */
-export async function countTokens(text: string, model: string = 'gpt-4o'): Promise<number> {
+export function countTokens(text: string, model: string = 'gpt-4o'): number {
   if (!text) return 0
-  
-  // In production/serverless environments, use fallback estimation
-  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
-    return estimateTokensFallback(text)
-  }
-  
-  try {
-    const encoder = await getEncoder(model)
-    if (!encoder) {
-      return estimateTokensFallback(text)
-    }
-    const tokens = encoder.encode(text)
-    return tokens.length
-  } catch (error) {
-    console.warn('Tiktoken encoding failed, falling back to estimation:', error)
-    return estimateTokensFallback(text)
-  }
+  return estimateTokensFallback(text)
 }
 
 /**
@@ -112,27 +46,9 @@ export function countTokensSync(text: string, model: string = 'gpt-4o'): number 
 /**
  * Count tokens for multiple texts efficiently
  */
-export async function countTokensBatch(texts: string[], model: string = 'gpt-4o'): Promise<number[]> {
+export function countTokensBatch(texts: string[], model: string = 'gpt-4o'): number[] {
   if (texts.length === 0) return []
-  
-  // In production/serverless environments, use fallback estimation
-  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
-    return texts.map(estimateTokensFallback)
-  }
-  
-  try {
-    const encoder = await getEncoder(model)
-    if (!encoder) {
-      return texts.map(estimateTokensFallback)
-    }
-    return texts.map(text => {
-      if (!text) return 0
-      return encoder.encode(text).length
-    })
-  } catch (error) {
-    console.warn('Batch tiktoken encoding failed, falling back to estimation:', error)
-    return texts.map(estimateTokensFallback)
-  }
+  return texts.map(estimateTokensFallback)
 }
 
 /**
@@ -146,49 +62,14 @@ export function countTokensBatchSync(texts: string[], model: string = 'gpt-4o'):
 /**
  * Count tokens for messages (with role tokens included)
  */
-export async function countMessageTokens(
+export function countMessageTokens(
   messages: Array<{ role: string; content: string }>,
   model: string = 'gpt-4o'
-): Promise<number> {
+): number {
   if (messages.length === 0) return 0
-  
-  // In production/serverless environments, use fallback estimation
-  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
-    return messages.reduce((total, msg) => 
-      total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
-    )
-  }
-  
-  try {
-    const encoder = await getEncoder(model)
-    if (!encoder) {
-      return messages.reduce((total, msg) => 
-        total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
-      )
-    }
-    
-    let totalTokens = 0
-    
-    for (const message of messages) {
-      // Count tokens for message content
-      totalTokens += encoder.encode(message.content).length
-      
-      // Add tokens for role and message formatting
-      // OpenAI format: {"role": "user", "content": "..."}
-      totalTokens += encoder.encode(message.role).length
-      totalTokens += 4 // Overhead for JSON structure and separators
-    }
-    
-    // Add tokens for conversation wrapper
-    totalTokens += 2
-    
-    return totalTokens
-  } catch (error) {
-    console.warn('Message token counting failed, falling back to estimation:', error)
-    return messages.reduce((total, msg) => 
-      total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
-    )
-  }
+  return messages.reduce((total, msg) => 
+    total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
+  )
 }
 
 /**
