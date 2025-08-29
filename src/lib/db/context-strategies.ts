@@ -4,7 +4,7 @@
  */
 
 import { ChatNode } from '@/types'
-import { countTokens, truncateToTokenLimit } from '@/lib/utils/token-counter'
+import { countTokensSync as countTokens, truncateToTokenLimit } from '@/lib/utils/token-counter'
 
 export type ContextStrategy = 
   | 'comprehensive'    // Full ancestor + sibling + references (default)

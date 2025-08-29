@@ -7,8 +7,8 @@ import { createClient } from '@/lib/supabase/server'
 import { ChatNode } from '@/types'
 import { getCachedSiblingNodes, resolveNodeReferences } from './enhanced-context-cache'
 import { 
-  countTokens, 
-  countMessageTokens, 
+  countTokensSync as countTokens, 
+  countMessageTokensSync as countMessageTokens, 
   getModelTokenLimit, 
   truncateToTokenLimit,
   estimateTokensFallback 

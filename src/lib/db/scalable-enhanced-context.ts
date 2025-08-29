@@ -33,7 +33,7 @@ import {
   type ContextStrategy,
   type ContentPriority
 } from './context-strategies'
-import { countMessageTokens } from '@/lib/utils/token-counter'
+import { countMessageTokensSync as countMessageTokens } from '@/lib/utils/token-counter'
 
 export interface ScalableContextOptions extends Partial<ContextBuildingOptions> {
   enableProfiling?: boolean

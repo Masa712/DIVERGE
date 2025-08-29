@@ -3,7 +3,22 @@
  * Supports multiple model families with proper encoding
  */
 
-import { encoding_for_model, get_encoding } from 'tiktoken'
+// Dynamic import for tiktoken to handle serverless environments
+let tiktoken: any = null
+
+const loadTiktoken = async () => {
+  // Only load tiktoken in development or client-side
+  if (typeof window !== 'undefined' || process.env.NODE_ENV !== 'production') {
+    try {
+      tiktoken = await import('tiktoken')
+      return tiktoken
+    } catch (error) {
+      console.warn('Failed to load tiktoken:', error)
+      return null
+    }
+  }
+  return null
+}
 
 // Model to encoding mapping for accurate token counting
 const MODEL_ENCODINGS = {
@@ -32,24 +47,29 @@ const encoderCache = new Map<string, any>()
 /**
  * Get tiktoken encoder for a specific model
  */
-function getEncoder(model: string) {
+async function getEncoder(model: string) {
   if (encoderCache.has(model)) {
     return encoderCache.get(model)
+  }
+  
+  const tiktokenLib = await loadTiktoken()
+  if (!tiktokenLib) {
+    return null // Will trigger fallback estimation
   }
   
   let encoder
   try {
     // Try model-specific encoding first
     if (model.startsWith('gpt-4') || model.startsWith('gpt-3.5')) {
-      encoder = encoding_for_model(model as any)
+      encoder = tiktokenLib.encoding_for_model(model as any)
     } else {
       // Use appropriate base encoding
       const encodingName = MODEL_ENCODINGS[model as ModelKey] || MODEL_ENCODINGS.default
-      encoder = get_encoding(encodingName)
+      encoder = tiktokenLib.get_encoding(encodingName)
     }
   } catch (error) {
-    console.warn(`Failed to get encoding for model ${model}, using default:`, error)
-    encoder = get_encoding('cl100k_base')
+    console.warn(`Failed to get encoding for model ${model}, using fallback`, error)
+    return null
   }
   
   encoderCache.set(model, encoder)
@@ -59,7 +79,7 @@ function getEncoder(model: string) {
 /**
  * Count tokens accurately using tiktoken (with Vercel compatibility)
  */
-export function countTokens(text: string, model: string = 'gpt-4o'): number {
+export async function countTokens(text: string, model: string = 'gpt-4o'): Promise<number> {
   if (!text) return 0
   
   // In production/serverless environments, use fallback estimation
@@ -68,7 +88,10 @@ export function countTokens(text: string, model: string = 'gpt-4o'): number {
   }
   
   try {
-    const encoder = getEncoder(model)
+    const encoder = await getEncoder(model)
+    if (!encoder) {
+      return estimateTokensFallback(text)
+    }
     const tokens = encoder.encode(text)
     return tokens.length
   } catch (error) {
@@ -78,9 +101,18 @@ export function countTokens(text: string, model: string = 'gpt-4o'): number {
 }
 
 /**
+ * Synchronous version that always uses fallback estimation
+ * Use this for production environments to avoid async issues
+ */
+export function countTokensSync(text: string, model: string = 'gpt-4o'): number {
+  if (!text) return 0
+  return estimateTokensFallback(text)
+}
+
+/**
  * Count tokens for multiple texts efficiently
  */
-export function countTokensBatch(texts: string[], model: string = 'gpt-4o'): number[] {
+export async function countTokensBatch(texts: string[], model: string = 'gpt-4o'): Promise<number[]> {
   if (texts.length === 0) return []
   
   // In production/serverless environments, use fallback estimation
@@ -89,7 +121,10 @@ export function countTokensBatch(texts: string[], model: string = 'gpt-4o'): num
   }
   
   try {
-    const encoder = getEncoder(model)
+    const encoder = await getEncoder(model)
+    if (!encoder) {
+      return texts.map(estimateTokensFallback)
+    }
     return texts.map(text => {
       if (!text) return 0
       return encoder.encode(text).length
@@ -101,12 +136,20 @@ export function countTokensBatch(texts: string[], model: string = 'gpt-4o'): num
 }
 
 /**
+ * Synchronous version for batch token counting
+ */
+export function countTokensBatchSync(texts: string[], model: string = 'gpt-4o'): number[] {
+  if (texts.length === 0) return []
+  return texts.map(estimateTokensFallback)
+}
+
+/**
  * Count tokens for messages (with role tokens included)
  */
-export function countMessageTokens(
+export async function countMessageTokens(
   messages: Array<{ role: string; content: string }>,
   model: string = 'gpt-4o'
-): number {
+): Promise<number> {
   if (messages.length === 0) return 0
   
   // In production/serverless environments, use fallback estimation
@@ -117,7 +160,13 @@ export function countMessageTokens(
   }
   
   try {
-    const encoder = getEncoder(model)
+    const encoder = await getEncoder(model)
+    if (!encoder) {
+      return messages.reduce((total, msg) => 
+        total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
+      )
+    }
+    
     let totalTokens = 0
     
     for (const message of messages) {
@@ -140,6 +189,19 @@ export function countMessageTokens(
       total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
     )
   }
+}
+
+/**
+ * Synchronous version for message token counting
+ */
+export function countMessageTokensSync(
+  messages: Array<{ role: string; content: string }>,
+  model: string = 'gpt-4o'
+): number {
+  if (messages.length === 0) return 0
+  return messages.reduce((total, msg) => 
+    total + estimateTokensFallback(msg.content) + estimateTokensFallback(msg.role) + 4, 2
+  )
 }
 
 /**
@@ -192,7 +254,7 @@ export function getModelTokenLimit(model: string): number {
  * Check if text would exceed model's token limit
  */
 export function exceedsTokenLimit(text: string, model: string): boolean {
-  const tokenCount = countTokens(text, model)
+  const tokenCount = countTokensSync(text, model)
   const limit = getModelTokenLimit(model)
   return tokenCount > limit
 }
@@ -206,7 +268,7 @@ export function truncateToTokenLimit(
   maxTokens?: number
 ): { text: string; tokenCount: number; truncated: boolean } {
   const limit = maxTokens || getModelTokenLimit(model)
-  const currentTokens = countTokens(text, model)
+  const currentTokens = countTokensSync(text, model)
   
   if (currentTokens <= limit) {
     return { text, tokenCount: currentTokens, truncated: false }
@@ -220,7 +282,7 @@ export function truncateToTokenLimit(
   while (left <= right) {
     const mid = Math.floor((left + right) / 2)
     const truncated = text.slice(0, mid)
-    const tokens = countTokens(truncated, model)
+    const tokens = countTokensSync(truncated, model)
     
     if (tokens <= limit) {
       bestTruncation = truncated
@@ -230,7 +292,7 @@ export function truncateToTokenLimit(
     }
   }
   
-  const finalTokens = countTokens(bestTruncation, model)
+  const finalTokens = countTokensSync(bestTruncation, model)
   
   return {
     text: bestTruncation,
@@ -240,4 +302,4 @@ export function truncateToTokenLimit(
 }
 
 // Export the old function name for backward compatibility
-export const estimateTokens = countTokens
+export const estimateTokens = countTokensSync
