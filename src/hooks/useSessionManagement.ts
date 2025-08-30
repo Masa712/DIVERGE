@@ -117,7 +117,12 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
         
         // Re-fetch sessions to restore the list
         await fetchSessionsAndDashboard()
-        showError(errorData.error || 'Failed to delete session')
+        
+        // Extract error message safely
+        const errorMessage = typeof errorData.error === 'string' 
+          ? errorData.error 
+          : errorData.error?.message || 'Failed to delete session'
+        showError(errorMessage)
       }
     } catch (error) {
       console.error('Error deleting session:', error)

@@ -153,7 +153,7 @@ export const DELETE = withErrorHandler(async (
   const sessionId = params.id
 
   // Verify session ownership with optimized query
-  await executeOptimizedQuery(
+  const ownershipCheck = await executeOptimizedQuery(
     `session_ownership_${sessionId}_${user.id}`,
     async (supabase) => {
       const { data, error } = await supabase
@@ -165,11 +165,8 @@ export const DELETE = withErrorHandler(async (
 
       if (error) {
         if (error.code === 'PGRST116') {
-          throw createAppError(
-            'Session not found',
-            ErrorCategory.NOT_FOUND,
-            { context: { sessionId, userId: user.id } }
-          )
+          // Session already deleted or doesn't exist - return success
+          return { alreadyDeleted: true }
         }
         throw createAppError(
           'Failed to verify session ownership',
@@ -182,6 +179,16 @@ export const DELETE = withErrorHandler(async (
     },
     { poolKey: `verify_${sessionId}`, cacheTTL: 10000 } // 10 second cache
   )
+
+  // If session already deleted, return success
+  if (ownershipCheck.alreadyDeleted) {
+    return NextResponse.json({
+      success: true,
+      data: {
+        message: 'Session was already deleted'
+      }
+    })
+  }
 
   // Execute optimized batch delete operation
   await executeOptimizedQuery(
