@@ -177,7 +177,7 @@ export const DELETE = withErrorHandler(async (
 
       return data
     },
-    { poolKey: `verify_${sessionId}`, cacheTTL: 10000 } // 10 second cache
+    { poolKey: `verify_${sessionId}`, skipCache: true } // Skip cache for delete operations
   )
 
   // If session already deleted, return success
