@@ -79,6 +79,42 @@ export default function ChatPage() {
     }
   }
 
+  // Poll for session name updates when first node is created
+  useEffect(() => {
+    if (!currentSession?.id) return
+    
+    // Only poll if session has default name and we have nodes
+    if (currentSession.name !== 'New Chat' || chatNodes.length === 0) return
+
+    const pollSessionName = async () => {
+      try {
+        const response = await fetch(`/api/sessions/${currentSession.id}`)
+        if (response.ok) {
+          const { data } = await response.json()
+          if (data.session.name !== currentSession.name) {
+            log.info('Session name updated', { oldName: currentSession.name, newName: data.session.name })
+            setCurrentSession(prev => prev ? { ...prev, name: data.session.name } : null)
+            // Trigger sidebar refresh
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('session-sync-needed'))
+            }
+          }
+        }
+      } catch (error) {
+        log.debug('Failed to poll session name', error)
+      }
+    }
+
+    // Poll every 2 seconds for up to 30 seconds
+    const interval = setInterval(pollSessionName, 2000)
+    const timeout = setTimeout(() => clearInterval(interval), 30000)
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(timeout)
+    }
+  }, [currentSession?.id, currentSession?.name, chatNodes.length])
+
   const handleSessionSelect = (sessionId: string) => {
     fetchSession(sessionId)
     // Close right sidebar when switching sessions

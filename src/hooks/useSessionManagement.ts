@@ -92,34 +92,37 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
 
   const handleDeleteSession = async (sessionId: string, onNewSession: () => void) => {
     try {
+      // Immediately remove from UI for better UX
+      setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId))
+      
+      // If the deleted session is currently selected, switch to new session
+      if (currentSessionId === sessionId) {
+        onNewSession()
+      }
+      
       const response = await fetch(`/api/sessions/${sessionId}`, {
         method: 'DELETE',
       })
 
       if (response.ok) {
-        setSessions(sessions.filter(s => s.id !== sessionId))
-        
-        if (currentSessionId === sessionId) {
-          onNewSession()
-        }
-        
-        await fetchSessionsAndDashboard()
+        // Refresh to ensure consistency with backend
+        setTimeout(() => fetchSessionsAndDashboard(), 500)
         showError('Session deleted successfully')
       } else if (response.status === 404) {
-        setSessions(sessions.filter(s => s.id !== sessionId))
-        
-        if (currentSessionId === sessionId) {
-          onNewSession()
-        }
-        
-        await fetchSessionsAndDashboard()
+        // Session was already deleted, no need to restore
         showError('Session was already removed')
       } else {
+        // Restore session on error
         const errorData = await response.json().catch(() => ({}))
+        
+        // Re-fetch sessions to restore the list
+        await fetchSessionsAndDashboard()
         showError(errorData.error || 'Failed to delete session')
       }
     } catch (error) {
       console.error('Error deleting session:', error)
+      // Re-fetch sessions to restore the list on error
+      await fetchSessionsAndDashboard()
       showError('Failed to delete session')
     }
     setSessionToDelete(null)
