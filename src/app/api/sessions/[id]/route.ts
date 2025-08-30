@@ -181,7 +181,7 @@ export const DELETE = withErrorHandler(async (
   )
 
   // If session already deleted, return success
-  if (ownershipCheck.alreadyDeleted) {
+  if ('alreadyDeleted' in ownershipCheck && ownershipCheck.alreadyDeleted) {
     return NextResponse.json({
       success: true,
       data: {
