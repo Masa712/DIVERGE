@@ -64,10 +64,11 @@ export async function POST(request: NextRequest) {
     let responseText = ''
     let tokenCount = 0
 
-    // Set appropriate timeout for reasoning models
+    // Set appropriate timeout for high-performance and reasoning models
     const timeoutMs = (() => {
       if (model === 'x-ai/grok-4') return 150000 // 2.5 minutes
       if (model.startsWith('openai/o1') || model.includes('gpt-5')) return 120000 // 2 minutes for GPT-5
+      if (model.includes('gemini-2.5-pro') || model.includes('gemini-pro-1.5')) return 120000 // 2 minutes for Gemini Pro
       return 60000 // 60 seconds for standard streaming
     })()
 

@@ -90,18 +90,20 @@ async function processAIResponseInBackground(
     const client = new OpenRouterClient()
     const aiTimer = performanceMonitor.startTimer('openrouter_api')
     
-    // Reasoning models need more time (2-4 minutes typical)
+    // High-performance and reasoning models need more time (2-4 minutes typical)
     const timeoutMs = (() => {
       if (model === 'x-ai/grok-4') return 150000 // 2.5 minutes for Grok-4
       if (model.startsWith('openai/o1') || model.includes('gpt-5')) return 120000 // 2 minutes for GPT-5 models
+      if (model.includes('gemini-2.5-pro') || model.includes('gemini-pro-1.5')) return 120000 // 2 minutes for Gemini Pro models
       return 30000 // 30 seconds for standard models
     })()
     
     // Set model-specific max_tokens for optimal output length
     const getOptimalMaxTokens = (modelId: string, userMaxTokens: number): number => {
-      // For reasoning models, allow more tokens for complete responses
+      // For reasoning and high-performance models, allow more tokens for complete responses
       if (modelId === 'x-ai/grok-4') return Math.max(userMaxTokens, 6000)
       if (modelId.includes('gpt-5') || modelId.startsWith('openai/o1')) return Math.max(userMaxTokens, 5000)
+      if (modelId.includes('gemini-2.5-pro') || modelId.includes('gemini-pro-1.5')) return Math.max(userMaxTokens, 5000)
       
       // For high-context models, use generous limits
       if (modelId.includes('claude-opus')) return Math.max(userMaxTokens, 5000)
