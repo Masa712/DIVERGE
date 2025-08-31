@@ -44,6 +44,15 @@ class QueryCache {
   clear(): void {
     this.cache.clear()
   }
+  
+  clearPattern(pattern: string): void {
+    const keys = Array.from(this.cache.keys())
+    for (const key of keys) {
+      if (key.includes(pattern)) {
+        this.cache.delete(key)
+      }
+    }
+  }
 
   size(): number {
     return this.cache.size
@@ -398,7 +407,7 @@ export async function loadOptimizedSessions(
       
       return data || []
     },
-    { poolKey: `sessions_${userId}` }
+    { poolKey: `sessions_${userId}`, cacheTTL: 10000 } // 10 second cache for quick UI updates
   )
 }
 
@@ -417,6 +426,15 @@ export function getQueryPerformanceStats() {
  */
 export function clearQueryCache(): void {
   queryCache.clear()
+}
+
+/**
+ * Clear session-related caches for a user
+ */
+export function clearSessionCache(userId: string): void {
+  queryCache.clearPattern(`sessions_${userId}`)
+  queryCache.clearPattern(`count_${userId}`)
+  console.log(`🧹 Cleared session cache for user: ${userId}`)
 }
 
 /**

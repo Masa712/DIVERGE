@@ -77,7 +77,7 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
         })
         
         // Also refetch sessions to ensure data consistency
-        setTimeout(() => fetchSessionsAndDashboard(), 100)
+        fetchSessionsAndDashboard()
         
         onNewSession()
         onSessionSelect(session.id)
@@ -105,8 +105,8 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
       })
 
       if (response.ok) {
-        // Refresh to ensure consistency with backend
-        setTimeout(() => fetchSessionsAndDashboard(), 500)
+        // Refresh immediately to ensure consistency with backend
+        fetchSessionsAndDashboard()
         showError('Session deleted successfully')
       } else if (response.status === 404) {
         // Session was already deleted, no need to restore

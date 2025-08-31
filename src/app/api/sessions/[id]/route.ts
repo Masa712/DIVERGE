@@ -7,7 +7,7 @@ import {
   ErrorCategory, 
   classifyDatabaseError 
 } from '@/lib/errors/error-handler'
-import { executeOptimizedQuery, chatNodesLoader } from '@/lib/db/query-optimizer'
+import { executeOptimizedQuery, chatNodesLoader, clearSessionCache } from '@/lib/db/query-optimizer'
 import { log } from '@/lib/utils/logger'
 
 export const GET = withErrorHandler(async (
@@ -223,6 +223,9 @@ export const DELETE = withErrorHandler(async (
     },
     { poolKey: `delete_${sessionId}`, skipCache: true } // Don't cache delete operations
   )
+  
+  // Clear session cache to force fresh data on next fetch
+  clearSessionCache(user.id)
 
   return NextResponse.json({
     success: true,
