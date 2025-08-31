@@ -80,7 +80,8 @@ export class OpenRouterClient {
 
   async createStreamingChatCompletion(
     request: OpenRouterRequest,
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string) => void,
+    timeoutMs: number = 30000
   ): Promise<void> {
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${this.apiKey}`,
@@ -98,6 +99,7 @@ export class OpenRouterClient {
       method: 'POST',
       headers,
       body: JSON.stringify({ ...request, stream: true }),
+      signal: AbortSignal.timeout(timeoutMs),
     })
 
     if (!response.ok) {
