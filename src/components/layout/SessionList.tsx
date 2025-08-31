@@ -75,11 +75,8 @@ export function SessionList({
                 <div className="text-sm font-medium text-gray-800 truncate">
                   {session.name || `Chat ${formatDate(session.createdAt)}`}
                 </div>
-                <div className="text-xs text-gray-600 mt-0.5">
-                  {session.nodeCount} messages • ${(session.totalCostUsd || 0).toFixed(4)}
-                </div>
                 <div className="text-xs text-gray-500">
-                  {formatDate(session.lastAccessedAt)}
+                  {formatDate(session.updatedAt)} • {session.nodeCount} messages
                 </div>
               </div>
               {currentSessionId === session.id && (

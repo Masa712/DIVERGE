@@ -176,6 +176,7 @@ export interface Session {
   createdAt: Date
   updatedAt: Date
   lastAccessedAt: Date
+  lastNodeCreatedAt: Date | null
 }
 
 export interface UsageLog {

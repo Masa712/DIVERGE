@@ -67,12 +67,11 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
   }
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('ja-JP', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return new Date(date).toLocaleDateString('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).replace(/-/g, ' ')
   }
 
   // If collapsed, show minimal icon-only version
@@ -413,53 +412,16 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
               </button>
             </div>
           ) : (
-            <div className="space-y-1">
-              {sessions.map((session) => (
-                <div key={session.id} className="relative group">
-                  <button
-                    onClick={() => onSessionSelect(session.id)}
-                    className={`
-                      w-full text-left px-3 py-2.5 rounded-lg mb-1
-                      transition-all duration-200
-                      transform hover:translate-x-1
-                      ${currentSessionId === session.id 
-                        ? 'bg-white/20 shadow-lg' 
-                        : 'hover:bg-white/10'
-                      }
-                    `}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-800 truncate">
-                          {session.name || `Chat ${formatDate(session.createdAt)}`}
-                        </div>
-                        <div className="text-xs text-gray-600 mt-0.5">
-                          {session.nodeCount} messages • ${(session.totalCostUsd || 0).toFixed(4)}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {formatDate(session.lastAccessedAt)}
-                        </div>
-                      </div>
-                      {currentSessionId === session.id && (
-                        <div className="w-2 h-2 rounded-full bg-blue-400" />
-                      )}
-                    </div>
-                  </button>
-                  
-                  {/* Delete button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSessionToDelete(session.id)
-                    }}
-                    className="absolute top-2 right-2 p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
-                    title="Delete session"
-                  >
-                    <Trash2 className="w-3 h-3 text-red-600" />
-                  </button>
-                </div>
-              ))}
-            </div>
+            <SessionList
+              sessions={sessions}
+              loading={loading}
+              currentSessionId={currentSessionId}
+              onSessionSelect={onSessionSelect}
+              onDeleteSession={setSessionToDelete}
+              onCreateSession={() => handleCreateSession(onNewSession, onSessionSelect)}
+              onMobileClose={() => setIsMobileOpen(false)}
+              formatDate={formatDate}
+            />
           )}
         </div>
 

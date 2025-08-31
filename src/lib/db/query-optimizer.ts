@@ -389,6 +389,7 @@ export async function loadOptimizedSessions(
       // For now, remove problematic joins and use the stored node_count field
       // The node_count field should be maintained by triggers or application logic
       
+      // Get sessions and we'll enhance with last node time separately
       const { data, error } = await supabase
         .from('sessions')
         .select(selectQuery.trim())
@@ -402,6 +403,32 @@ export async function loadOptimizedSessions(
           'Failed to load optimized sessions',
           ErrorCategory.DATABASE,
           { context: { userId, options }, cause: error }
+        )
+      }
+      
+      // Enhance sessions with last node creation time
+      if (data && data.length > 0) {
+        const sessionsWithLastNodeTime = await Promise.all(
+          data.map(async (session: any) => {
+            // Get the most recent node for this session
+            const { data: lastNode } = await supabase
+              .from('chat_nodes')
+              .select('created_at')
+              .eq('session_id', session.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single()
+            
+            return {
+              ...session,
+              last_node_created_at: lastNode?.created_at || session.created_at
+            }
+          })
+        )
+        
+        // Sort by last node creation time
+        return sessionsWithLastNodeTime.sort((a, b) => 
+          new Date(b.last_node_created_at).getTime() - new Date(a.last_node_created_at).getTime()
         )
       }
       

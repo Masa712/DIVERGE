@@ -38,7 +38,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     archived
   })
 
-    // Convert to camelCase
+    // Convert to camelCase and use last node creation time for display
     const sessions = (sessionsRaw || []).map(session => ({
       id: session.id,
       name: session.name,
@@ -51,8 +51,9 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       maxDepth: session.max_depth || 0,
       isArchived: session.is_archived || false,
       createdAt: new Date(session.created_at),
-      updatedAt: new Date(session.updated_at),
+      updatedAt: new Date(session.last_node_created_at || session.updated_at), // Use last node time for display
       lastAccessedAt: new Date(session.last_accessed_at),
+      lastNodeCreatedAt: session.last_node_created_at ? new Date(session.last_node_created_at) : null,
     }))
 
   // Get total count for pagination with optimized caching
