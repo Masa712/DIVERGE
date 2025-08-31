@@ -10,6 +10,10 @@ import { useSidebarResize } from '@/hooks/useSidebarResize'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
 import { useAuth } from '@/components/providers/auth-provider'
 
+interface UserProfile {
+  display_name?: string
+}
+
 interface Props {
   node: ChatNode | null
   allNodes: ChatNode[]
@@ -25,11 +29,31 @@ interface Props {
 export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, onModelChange, onWidthChange, onRetryNode, onDeleteNode }: Props) {
   const [comment, setComment] = useState('')
   const [isCommentLoading, setIsCommentLoading] = useState(false)
-  const { displayName } = useAuth()
+  const { user } = useAuth()
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   
   // Use custom hooks for better separation of concerns
   const { currentDisplayNode, nodeChain, currentNodeIndex, canNavigate, navigate } = useNodeChain(node, allNodes)
   const { width, isResizing, sidebarRef, handleMouseDown } = useSidebarResize({ onWidthChange })
+
+  // Fetch user profile for display name
+  useEffect(() => {
+    if (!user) return
+
+    const fetchUserProfile = async () => {
+      try {
+        const response = await fetch('/api/profile')
+        if (response.ok) {
+          const { data } = await response.json()
+          setUserProfile({ display_name: data.display_name })
+        }
+      } catch (error) {
+        console.warn('Failed to load user profile for sidebar')
+      }
+    }
+
+    fetchUserProfile()
+  }, [user])
 
   // Check if current node has children (to determine if deletion is allowed)
   const hasChildren = useCallback((nodeId: string) => {
@@ -221,7 +245,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                 <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center">
                   <User className="w-3.5 h-3.5 text-blue-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900">{displayName || 'User'}</h3>
+                <h3 className="font-semibold text-gray-900">{userProfile?.display_name || user?.email || 'User'}</h3>
                 <button
                   onClick={() => copyToClipboard(currentDisplayNode.prompt)}
                   className="p-1 hover:bg-white/10 rounded transition-colors"

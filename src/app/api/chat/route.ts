@@ -241,15 +241,44 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
   }
 
   const body = await request.json()
-  const { 
+  let { 
     messages, 
     model, 
-    temperature = 0.7, 
-    max_tokens = 4000, // Increased default for better responses
+    temperature, 
+    max_tokens,
     sessionId,
     parentNodeId,
     useEnhancedContext = true
   } = body
+
+  // Fetch user profile for defaults if not provided
+  if (temperature === undefined || max_tokens === undefined) {
+    try {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('default_temperature, default_max_tokens')
+        .eq('user_id', user.id)
+        .single()
+
+      if (profile) {
+        if (temperature === undefined) {
+          temperature = profile.default_temperature || 0.7
+        }
+        if (max_tokens === undefined) {
+          max_tokens = profile.default_max_tokens || 4000
+        }
+      } else {
+        // Fallback defaults if no profile exists
+        temperature = temperature || 0.7
+        max_tokens = max_tokens || 4000
+      }
+    } catch (error) {
+      log.warn('Failed to fetch user profile for defaults', error)
+      // Use fallback defaults
+      temperature = temperature || 0.7
+      max_tokens = max_tokens || 4000
+    }
+  }
 
   if (!messages || !model) {
     throw createAppError(

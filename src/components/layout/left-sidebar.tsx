@@ -6,16 +6,19 @@ import {
   PlusIcon,
   ChatBubbleLeftRightIcon as MessageSquare,
   ArrowRightOnRectangleIcon as LogOut,
-  ChartBarIcon as Activity,
   Bars3Icon as Menu,
-  TrashIcon as Trash2
+  TrashIcon as Trash2,
+  Cog6ToothIcon as Settings
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useSessionManagement } from '@/hooks/useSessionManagement'
 import { SessionList } from './SessionList'
-import { DashboardStats } from './DashboardStats'
 import { DeleteConfirmationModal } from './DeleteConfirmationModal'
 import { Session } from '@/types'
+
+interface UserProfile {
+  display_name?: string
+}
 
 interface Props {
   currentSessionId?: string
@@ -30,8 +33,8 @@ interface Props {
 export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect, onNewSession, isCollapsed, onToggleCollapse, onMobileOpenChange }: Props) {
   const { user, signOut } = useAuth()
   const router = useRouter()
-  const [showDashboard, setShowDashboard] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
 
   // Use session management hook
   const {
@@ -39,10 +42,28 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
     loading,
     sessionToDelete,
     setSessionToDelete,
-    dashboardData,
     handleCreateSession,
     handleDeleteSession
   } = useSessionManagement(currentSessionId, currentSession)
+
+  // Fetch user profile for display name
+  useEffect(() => {
+    if (!user) return
+
+    const fetchUserProfile = async () => {
+      try {
+        const response = await fetch('/api/profile')
+        if (response.ok) {
+          const { data } = await response.json()
+          setUserProfile({ display_name: data.display_name })
+        }
+      } catch (error) {
+        console.warn('Failed to load user profile for sidebar')
+      }
+    }
+
+    fetchUserProfile()
+  }, [user])
 
   // Notify parent of mobile open state changes
   useEffect(() => {
@@ -72,6 +93,26 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
       month: '2-digit',
       day: '2-digit'
     }).replace(/-/g, ' ')
+  }
+
+  // Helper functions for user display
+  const getDisplayName = () => {
+    return userProfile?.display_name || user?.email || 'User'
+  }
+
+  const getUserInitials = () => {
+    if (userProfile?.display_name) {
+      // Get initials from display name
+      const names = userProfile.display_name.trim().split(' ')
+      if (names.length >= 2) {
+        return (names[0][0] + names[names.length - 1][0]).toUpperCase()
+      } else {
+        return names[0][0]?.toUpperCase() || 'U'
+      }
+    } else {
+      // Fallback to email first letter
+      return user?.email?.[0]?.toUpperCase() || 'U'
+    }
   }
 
   // If collapsed, show minimal icon-only version
@@ -136,13 +177,13 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           <div className="px-6 py-4 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center">
-                <span className="text-gray-900 text-sm font-medium">
-                  {user?.email?.[0]?.toUpperCase() || 'U'}
+                <span className="text-white text-sm font-medium">
+                  {getUserInitials()}
                 </span>
               </div>
               <div className="flex-1">
                 <div className="text-sm font-medium text-gray-800">
-                  {user?.email || 'User'}
+                  {getDisplayName()}
                 </div>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -194,22 +235,23 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
               New Chat
             </button>
             
-            {/* Dashboard Button */}
+            
+            {/* Settings Button */}
             <button 
               onClick={() => {
-                setShowDashboard(!showDashboard)
+                router.push('/settings')
                 setIsMobileOpen(false)
               }}
               className="
                 w-full mb-2 px-4 py-2 rounded-lg
                 text-gray-700 text-sm
-                hover:text-blue-600
+                hover:text-purple-600
                 transition-all duration-200
                 flex items-center gap-2 group
               "
             >
-              <Activity className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
-              <span className="group-hover:text-blue-600 transition-colors duration-200">Dashboard</span>
+              <Settings className="w-4 h-4 group-hover:text-purple-600 transition-colors duration-200" />
+              <span className="group-hover:text-purple-600 transition-colors duration-200">Settings</span>
             </button>
             
             {/* Sign Out Button */}
@@ -262,14 +304,14 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           ))}
         </div>
 
-        {/* Dashboard */}
+        {/* Settings */}
         <div className="p-3 border-t border-white/10">
           <button
-            onClick={() => setShowDashboard(true)}
-            className="w-full p-2 rounded-lg text-gray-600 hover:text-blue-600 transition-all duration-200 group"
-            title="Dashboard"
+            onClick={() => router.push('/settings')}
+            className="w-full p-2 mb-2 rounded-lg text-gray-600 hover:text-purple-600 transition-all duration-200 group"
+            title="Settings"
           >
-            <Activity className="w-4 h-4 mx-auto group-hover:text-blue-600 transition-colors duration-200" />
+            <Settings className="w-4 h-4 mx-auto group-hover:text-purple-600 transition-colors duration-200" />
           </button>
         </div>
 
@@ -285,13 +327,6 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
         </div>
       </aside>
       
-      {/* Dashboard Overlay - Available in collapsed state */}
-      {showDashboard && (
-        <DashboardStats
-          dashboardData={dashboardData}
-          onClose={() => setShowDashboard(false)}
-        />
-      )}
 
       {/* Delete Confirmation Modal - Available in collapsed state */}
       <DeleteConfirmationModal
@@ -367,13 +402,13 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
         <div className="px-6 py-4 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center">
-              <span className="text-gray-900 text-sm font-medium">
-                {user?.email?.[0]?.toUpperCase() || 'U'}
+              <span className="text-white text-sm font-medium">
+                {getUserInitials()}
               </span>
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium text-gray-800">
-                {user?.email || 'User'}
+                {getDisplayName()}
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -444,19 +479,20 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
             New Chat
           </button>
           
-          {/* Dashboard Button */}
+          
+          {/* Settings Button */}
           <button 
-            onClick={() => setShowDashboard(!showDashboard)}
+            onClick={() => router.push('/settings')}
             className="
               w-full mb-2 px-4 py-2 rounded-lg
               text-gray-700 text-sm
-              hover:text-blue-600
+              hover:text-purple-600
               transition-all duration-200
               flex items-center gap-2 group
             "
           >
-            <Activity className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
-            <span className="group-hover:text-blue-600 transition-colors duration-200">Dashboard</span>
+            <Settings className="w-4 h-4 group-hover:text-purple-600 transition-colors duration-200" />
+            <span className="group-hover:text-purple-600 transition-colors duration-200">Settings</span>
           </button>
           
           {/* Sign Out Button */}
@@ -476,13 +512,6 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
         </div>
       </aside>
 
-      {/* Dashboard Overlay */}
-      {showDashboard && (
-        <DashboardStats
-          dashboardData={dashboardData}
-          onClose={() => setShowDashboard(false)}
-        />
-      )}
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal

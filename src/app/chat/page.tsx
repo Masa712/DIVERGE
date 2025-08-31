@@ -11,6 +11,12 @@ import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { LeftSidebar } from '@/components/layout/left-sidebar'
 
+interface UserProfile {
+  default_model: ModelId | null
+  default_temperature: number
+  default_max_tokens: number
+}
+
 export default function ChatPage() {
   log.debug('ChatPage component loaded')
   if (typeof window !== 'undefined') {
@@ -25,6 +31,7 @@ export default function ChatPage() {
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
   const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
   const [loadingSession, setLoadingSession] = useState(false)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
@@ -40,6 +47,34 @@ export default function ChatPage() {
       router.push('/auth')
     }
   }, [user, loading, router])
+
+  // Fetch user profile settings
+  useEffect(() => {
+    if (!user) return
+
+    const fetchUserProfile = async () => {
+      try {
+        const response = await fetch('/api/profile')
+        if (response.ok) {
+          const { data } = await response.json()
+          setUserProfile({
+            default_model: data.default_model,
+            default_temperature: data.default_temperature,
+            default_max_tokens: data.default_max_tokens
+          })
+          // Set selected model to user's default if available
+          if (data.default_model) {
+            setSelectedModel(data.default_model)
+          }
+          log.debug('User profile loaded', { defaultModel: data.default_model, temperature: data.default_temperature, maxTokens: data.default_max_tokens })
+        }
+      } catch (error) {
+        log.warn('Failed to load user profile', error)
+      }
+    }
+
+    fetchUserProfile()
+  }, [user])
 
   const fetchSession = async (sessionId: string) => {
     log.info('Fetching session', { sessionId })
@@ -180,7 +215,8 @@ export default function ChatPage() {
         body: JSON.stringify({
           messages: [{ role: 'user', content: message }],
           model: selectedModel,
-          max_tokens: 8000, // Ensure sufficient tokens for complete responses
+          temperature: userProfile?.default_temperature || 0.7,
+          max_tokens: userProfile?.default_max_tokens || 8000,
           sessionId: currentSession.id,
           parentNodeId: parentNode?.id,
           useEnhancedContext: true, // Explicitly enable enhanced context
@@ -244,7 +280,8 @@ export default function ChatPage() {
         body: JSON.stringify({
           messages: [{ role: 'user', content: originalPrompt }],
           model: failedNode.model,
-          max_tokens: 8000,
+          temperature: userProfile?.default_temperature || 0.7,
+          max_tokens: userProfile?.default_max_tokens || 8000,
           sessionId: currentSession.id,
           parentNodeId: parentNode?.id,
           useEnhancedContext: true,
