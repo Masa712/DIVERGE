@@ -91,6 +91,9 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
   }
 
   const handleDeleteSession = async (sessionId: string, onNewSession: () => void) => {
+    // Immediately close the confirmation dialog
+    setSessionToDelete(null)
+    
     try {
       // Immediately remove from UI for better UX
       setSessions(prevSessions => prevSessions.filter(s => s.id !== sessionId))
@@ -107,10 +110,9 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
       if (response.ok) {
         // Refresh immediately to ensure consistency with backend
         fetchSessionsAndDashboard()
-        showError('Session deleted successfully')
+        // Success - no notification needed
       } else if (response.status === 404) {
-        // Session was already deleted, no need to restore
-        showError('Session was already removed')
+        // Session was already deleted, no need to restore or notify
       } else {
         // Restore session on error
         const errorData = await response.json().catch(() => ({}))
@@ -130,7 +132,6 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
       await fetchSessionsAndDashboard()
       showError('Failed to delete session')
     }
-    setSessionToDelete(null)
   }
 
   // Initial load
