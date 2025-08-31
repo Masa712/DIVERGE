@@ -8,7 +8,7 @@ import {
   classifyDatabaseError,
   withRetry 
 } from '@/lib/errors/error-handler'
-import { loadOptimizedSessions, executeOptimizedQuery } from '@/lib/db/query-optimizer'
+import { loadOptimizedSessions, executeOptimizedQuery, clearSessionCache } from '@/lib/db/query-optimizer'
 import { log } from '@/lib/utils/logger'
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
@@ -197,6 +197,9 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       updatedAt: new Date(sessionRaw.updated_at),
       lastAccessedAt: new Date(sessionRaw.last_accessed_at),
     }
+  
+  // Clear session cache to ensure fresh data on next fetch
+  clearSessionCache(user.id)
 
   return NextResponse.json({
     success: true,

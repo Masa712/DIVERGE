@@ -76,8 +76,8 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
           return newSessions
         })
         
-        // Also refetch sessions to ensure data consistency
-        fetchSessionsAndDashboard()
+        // Also refetch sessions after a short delay to ensure cache is cleared
+        setTimeout(() => fetchSessionsAndDashboard(), 200)
         
         onNewSession()
         onSessionSelect(session.id)
