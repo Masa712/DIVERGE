@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
 import { useError } from '@/components/providers/error-provider'
 import { extractNodeReferences } from '@/lib/utils/node-references'
 import { ChatNode } from '@/types'
-import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { ModelSelector } from './model-selector'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
 
@@ -18,6 +18,10 @@ interface Props {
   // Model selector props
   selectedModel: ModelId
   onModelChange: (model: ModelId) => void
+  
+  // Web search props
+  enableWebSearch?: boolean
+  onWebSearchToggle?: (enabled: boolean) => void
   
   // Context info props
   currentNodeId?: string
@@ -39,6 +43,8 @@ export function GlassmorphismChatInput({
   onFocusChange,
   selectedModel,
   onModelChange,
+  enableWebSearch = true,
+  onWebSearchToggle,
   currentNodeId,
   currentNodePrompt,
   isRightSidebarOpen = false,
@@ -247,8 +253,21 @@ export function GlassmorphismChatInput({
             <PlusIcon className="w-4 h-4 text-gray-700 group-hover:text-gray-900" />
           </button>
           
-          {/* Right - Model Selector and Send */}
+          {/* Right - Web Search Toggle, Model Selector and Send */}
           <div className="flex items-center space-x-2">
+            {/* Web Search Toggle */}
+            <button
+              onClick={() => onWebSearchToggle?.(!enableWebSearch)}
+              className={`w-8 h-8 rounded-full transition-all duration-200 flex items-center justify-center ${
+                enableWebSearch 
+                  ? 'bg-blue-100 hover:bg-blue-200 text-blue-600' 
+                  : 'bg-white/10 hover:bg-white/20 text-gray-500'
+              }`}
+              title={enableWebSearch ? 'Web search enabled' : 'Web search disabled'}
+            >
+              <MagnifyingGlassIcon className="w-4 h-4" />
+            </button>
+            
             <ModelSelector
               selectedModel={selectedModel}
               onModelChange={onModelChange}

@@ -39,6 +39,7 @@ export default function ChatPage() {
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
   const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
+  const [enableWebSearch, setEnableWebSearch] = useState(true) // Web search toggle
 
   useEffect(() => {
     log.debug('Auth check', { loading, userPresent: !!user })
@@ -205,8 +206,9 @@ export default function ChatPage() {
         )
       }
 
-      log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId })
+      log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId, enableWebSearch })
       
+      // Use the regular API with web search capability
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -219,7 +221,8 @@ export default function ChatPage() {
           max_tokens: userProfile?.default_max_tokens || 8000,
           sessionId: currentSession.id,
           parentNodeId: parentNode?.id,
-          useEnhancedContext: true, // Explicitly enable enhanced context
+          useEnhancedContext: true,
+          enableWebSearch,
         }),
       })
 
@@ -506,6 +509,8 @@ export default function ChatPage() {
               availableNodes={chatNodes}
               selectedModel={selectedModel}
               onModelChange={setSelectedModel}
+              enableWebSearch={enableWebSearch}
+              onWebSearchToggle={setEnableWebSearch}
               currentNodeId={currentNodeId}
               currentNodePrompt={(() => {
                 const currentNode = chatNodes.find(n => n.id === currentNodeId)

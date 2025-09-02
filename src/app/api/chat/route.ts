@@ -17,6 +17,7 @@ import {
 import { recordError } from '@/lib/errors/error-monitoring'
 import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
 import { log } from '@/lib/utils/logger'
+import { tavilyClient } from '@/lib/tavily'
 
 // Background processing function for AI responses
 async function processAIResponseInBackground(
@@ -28,12 +29,76 @@ async function processAIResponseInBackground(
   sessionId: string,
   parentNodeId: string | undefined,
   useEnhancedContext: boolean,
-  userPrompt: string
+  userPrompt: string,
+  enableWebSearch: boolean = true
 ) {
   try {
     // Build context using enhanced context system if enabled and parentNodeId exists
     let finalMessages = messages
     let contextMetadata = null
+    let webSearchResults = null
+    
+    // Check if web search should be performed
+    log.info('Web search evaluation', { 
+      enableWebSearch, 
+      tavilyConfigured: tavilyClient.isConfigured(),
+      userPrompt: userPrompt.substring(0, 100) + '...'
+    })
+    
+    if (enableWebSearch && tavilyClient.isConfigured()) {
+      // Keywords that typically indicate need for current information (English and Japanese)
+      const searchKeywords = [
+        // English keywords
+        'latest', 'current', 'today', 'now', 'recent', 'news', 
+        'update', '2024', '2025', 'what is happening', 'real-time',
+        'price', 'weather', 'score', 'result',
+        // Japanese keywords
+        '最新', '現在', '今日', '今', '最近', 'ニュース', 'ニューズ',
+        'アップデート', '更新', '何が起きて', 'リアルタイム',
+        '価格', '値段', '天気', '天候', 'スコア', '結果', '情報'
+      ]
+      
+      const needsSearch = searchKeywords.some(keyword => 
+        userPrompt.toLowerCase().includes(keyword)
+      ) || userPrompt.includes('?')
+      
+      log.info('Web search decision', { needsSearch, hasQuestion: userPrompt.includes('?') })
+      
+      if (needsSearch) {
+        try {
+          log.info('Performing web search for query', { query: userPrompt })
+          const searchResults = await tavilyClient.search(userPrompt, {
+            maxResults: 3,
+            includeAnswer: true,
+            searchDepth: 'basic'
+          })
+          
+          if (searchResults && searchResults.results.length > 0) {
+            webSearchResults = searchResults
+            
+            // Add search context to messages
+            const searchContext = `Web search results for "${userPrompt}":
+${searchResults.answer ? `Summary: ${searchResults.answer}\n\n` : ''}
+${searchResults.results.map((r, i) => 
+  `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.content.substring(0, 200)}...\n`
+).join('\n')}
+
+Based on these search results, please provide an informed response.`
+            
+            // Insert search results before the user message
+            finalMessages = [
+              ...messages.slice(0, -1),
+              { role: 'system', content: searchContext },
+              messages[messages.length - 1]
+            ]
+            
+            log.info('Web search completed', { resultCount: searchResults.results.length })
+          }
+        } catch (searchError) {
+          log.warn('Web search failed, continuing without search results', searchError)
+        }
+      }
+    }
     
     // Enhanced context evaluation
     log.debug('Enhanced context evaluation', { useEnhancedContext, hasParent: !!parentNodeId })
@@ -55,11 +120,29 @@ async function processAIResponseInBackground(
         
         contextMetadata = enhancedContext.metadata
         
-        // Combine enhanced context with new user message
-        finalMessages = [
-          ...enhancedContext.messages,
-          { role: 'user', content: userPrompt }
-        ]
+        // Combine enhanced context with web search results and new user message
+        if (webSearchResults && webSearchResults.results.length > 0) {
+          // Include web search results in enhanced context
+          const searchContext = `Web search results for "${userPrompt}":
+${webSearchResults.answer ? `Summary: ${webSearchResults.answer}\n\n` : ''}
+${webSearchResults.results.map((r, i) => 
+  `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.content.substring(0, 200)}...\n`
+).join('\n')}
+
+Based on these search results and the conversation context, please provide an informed response.`
+
+          finalMessages = [
+            ...enhancedContext.messages,
+            { role: 'system', content: searchContext },
+            { role: 'user', content: userPrompt }
+          ]
+          log.info('Web search integrated with enhanced context', { resultCount: webSearchResults.results.length })
+        } else {
+          finalMessages = [
+            ...enhancedContext.messages,
+            { role: 'user', content: userPrompt }
+          ]
+        }
         
         log.info('Enhanced context built successfully', { 
           tokens: enhancedContext.metadata.totalTokens, 
@@ -248,7 +331,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     max_tokens,
     sessionId,
     parentNodeId,
-    useEnhancedContext = true
+    useEnhancedContext = true,
+    enableWebSearch = true
   } = body
 
   // Fetch user profile for defaults if not provided
@@ -380,7 +464,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     sessionId, 
     parentNodeId, 
     useEnhancedContext, 
-    userPrompt
+    userPrompt,
+    enableWebSearch
   ).catch(error => {
     log.error('Background AI processing failed', error)
     // Update node status to failed
