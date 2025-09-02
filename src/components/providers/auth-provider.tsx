@@ -11,6 +11,9 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  signInWithGoogle: () => Promise<void>
+  signInWithX: () => Promise<void>
+  signInWithApple: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -20,6 +23,9 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
+  signInWithGoogle: async () => {},
+  signInWithX: async () => {},
+  signInWithApple: async () => {},
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -88,8 +94,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error
   }
 
+  const signInWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (error) throw error
+  }
+
+  const signInWithX = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'twitter',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (error) throw error
+  }
+
+  const signInWithApple = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+    if (error) throw error
+  }
+
   return (
-    <AuthContext.Provider value={{ user, displayName, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      displayName, 
+      loading, 
+      signIn, 
+      signUp, 
+      signOut,
+      signInWithGoogle,
+      signInWithX,
+      signInWithApple
+    }}>
       {children}
     </AuthContext.Provider>
   )
