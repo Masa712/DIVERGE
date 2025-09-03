@@ -7,10 +7,12 @@ import {
   UserIcon,
   KeyIcon,
   CpuChipIcon,
+  ChatBubbleLeftRightIcon,
   ArrowLeftIcon,
   CheckIcon,
   ExclamationCircleIcon
 } from '@heroicons/react/24/outline'
+import { SystemPromptSettings } from '@/components/settings/system-prompt-settings'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
 
 interface UserProfile {
@@ -46,7 +48,7 @@ export default function SettingsPage() {
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   
   // Active tab
-  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'model'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'model' | 'prompt'>('profile')
 
   useEffect(() => {
     if (!user) {
@@ -214,6 +216,17 @@ export default function SettingsPage() {
           >
             <CpuChipIcon className="w-5 h-5 inline mr-2" />
             AI Model
+          </button>
+          <button
+            onClick={() => setActiveTab('prompt')}
+            className={`px-4 py-2 rounded-lg transition-all ${
+              activeTab === 'prompt'
+                ? 'bg-white/80 shadow-lg border border-white/20'
+                : 'bg-white/40 hover:bg-white/60 border border-white/10'
+            }`}
+          >
+            <ChatBubbleLeftRightIcon className="w-5 h-5 inline mr-2" />
+            AI Behavior
           </button>
         </div>
 
@@ -383,6 +396,13 @@ export default function SettingsPage() {
               >
                 {saving ? 'Saving...' : 'Save Model Settings'}
               </button>
+            </div>
+          )}
+
+          {/* System Prompt Tab */}
+          {activeTab === 'prompt' && (
+            <div>
+              <SystemPromptSettings />
             </div>
           )}
         </div>

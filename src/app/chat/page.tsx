@@ -209,7 +209,12 @@ export default function ChatPage() {
       log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId, enableWebSearch })
       
       // Use the regular API with web search capability
-      const response = await fetch('/api/chat', {
+      // Use Function Calling endpoint for all models except GPT OSS 120B
+      const apiEndpoint = selectedModel === 'openai/gpt-oss-120b' 
+                         ? '/api/chat' 
+                         : '/api/chat/with-tools'
+      
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -275,7 +280,12 @@ export default function ChatPage() {
 
       log.info('Retrying failed node', { nodeId, promptLength: originalPrompt.length })
       
-      const response = await fetch('/api/chat', {
+      // Use Function Calling endpoint for all models except GPT OSS 120B
+      const apiEndpoint = selectedModel === 'openai/gpt-oss-120b' 
+                         ? '/api/chat' 
+                         : '/api/chat/with-tools'
+      
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

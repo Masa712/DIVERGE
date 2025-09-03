@@ -1,8 +1,11 @@
 import { ModelId } from '@/types'
+import { ToolCall } from './function-calling'
 
 export interface OpenRouterMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  tool_call_id?: string  // For tool response messages
+  tool_calls?: ToolCall[] // For assistant messages with tool calls
 }
 
 export interface OpenRouterRequest {
@@ -13,6 +16,8 @@ export interface OpenRouterRequest {
   top_p?: number
   stream?: boolean
   transforms?: string[]
+  tools?: any[]  // Tool definitions for function calling
+  tool_choice?: 'auto' | 'none' | { type: 'function', function: { name: string } }
 }
 
 export interface OpenRouterResponse {
@@ -24,7 +29,8 @@ export interface OpenRouterResponse {
     index: number
     message: {
       role: string
-      content: string
+      content: string | null
+      tool_calls?: ToolCall[]  // For function calling responses
     }
     finish_reason: string
   }[]

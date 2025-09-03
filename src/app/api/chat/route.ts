@@ -38,6 +38,14 @@ async function processAIResponseInBackground(
     let contextMetadata = null
     let webSearchResults = null
     
+    // Add current date context to help AI understand the current time
+    const currentDate = new Date()
+    const dateContext = `Important: Today's date is ${currentDate.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    })}, ${currentDate.getFullYear()}. The current year is ${currentDate.getFullYear()}, not 2024.`
+    
     // Check if web search should be performed
     log.info('Web search evaluation', { 
       enableWebSearch, 
@@ -76,14 +84,16 @@ async function processAIResponseInBackground(
           if (searchResults && searchResults.results.length > 0) {
             webSearchResults = searchResults
             
-            // Add search context to messages
-            const searchContext = `Web search results for "${userPrompt}":
+            // Add search context to messages with date reminder
+            const searchContext = `${dateContext}
+
+Web search results for "${userPrompt}":
 ${searchResults.answer ? `Summary: ${searchResults.answer}\n\n` : ''}
 ${searchResults.results.map((r, i) => 
   `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.content.substring(0, 200)}...\n`
 ).join('\n')}
 
-Based on these search results, please provide an informed response.`
+Based on these search results and knowing that today is ${currentDate.getFullYear()}, please provide an informed response.`
             
             // Insert search results before the user message
             finalMessages = [

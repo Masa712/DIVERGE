@@ -4,18 +4,25 @@ import { createContext, useContext, useState, ReactNode } from 'react'
 
 interface ErrorContextType {
   error: string | null
+  success: string | null
   showError: (message: string) => void
+  showSuccess: (message: string) => void
   clearError: () => void
+  clearSuccess: () => void
 }
 
 const ErrorContext = createContext<ErrorContextType>({
   error: null,
+  success: null,
   showError: () => {},
+  showSuccess: () => {},
   clearError: () => {},
+  clearSuccess: () => {},
 })
 
 export function ErrorProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   const showError = (message: string) => {
     setError(message)
@@ -23,12 +30,22 @@ export function ErrorProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setError(null), 5000)
   }
 
+  const showSuccess = (message: string) => {
+    setSuccess(message)
+    // Auto-clear success after 5 seconds
+    setTimeout(() => setSuccess(null), 5000)
+  }
+
   const clearError = () => {
     setError(null)
   }
 
+  const clearSuccess = () => {
+    setSuccess(null)
+  }
+
   return (
-    <ErrorContext.Provider value={{ error, showError, clearError }}>
+    <ErrorContext.Provider value={{ error, success, showError, showSuccess, clearError, clearSuccess }}>
       {children}
       {error && (
         <div className="fixed bottom-4 right-4 z-50 max-w-md">
@@ -38,6 +55,27 @@ export function ErrorProvider({ children }: { children: ReactNode }) {
               <button
                 onClick={clearError}
                 className="ml-4 rounded-md p-1 hover:bg-destructive/80"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fillRule="evenodd"
+                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {success && (
+        <div className="fixed bottom-4 right-4 z-50 max-w-md">
+          <div className="rounded-lg bg-green-500 px-4 py-3 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <p className="text-sm">{success}</p>
+              <button
+                onClick={clearSuccess}
+                className="ml-4 rounded-md p-1 hover:bg-green-600"
               >
                 <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                   <path
