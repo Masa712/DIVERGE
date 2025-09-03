@@ -69,7 +69,7 @@ export const PUT = withErrorHandler(async (request: NextRequest) => {
   } = body
 
   // Validate preset if provided
-  if (system_prompt_preset && !SystemPromptPresets[system_prompt_preset]) {
+  if (system_prompt_preset && !SystemPromptPresets[system_prompt_preset as keyof typeof SystemPromptPresets]) {
     throw createAppError(
       'Invalid system prompt preset',
       ErrorCategory.VALIDATION,
