@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { OpenRouterClient } from '@/lib/openrouter/client'
+import { OpenRouterClient, supportsReasoning, getReasoningConfig } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
 import { buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
@@ -30,7 +30,8 @@ async function processAIResponseInBackground(
   parentNodeId: string | undefined,
   useEnhancedContext: boolean,
   userPrompt: string,
-  enableWebSearch: boolean = true
+  enableWebSearch: boolean = true,
+  reasoning: boolean = false
 ) {
   try {
     // Build context using enhanced context system if enabled and parentNodeId exists
@@ -207,15 +208,36 @@ Based on these search results and the conversation context, please provide an in
     
     const optimalMaxTokens = getOptimalMaxTokens(model, maxTokens)
     
+    // Build request with optional reasoning configuration
+    const requestParams: any = {
+      model: model as ModelId,
+      messages: finalMessages,
+      temperature,
+      max_tokens: optimalMaxTokens,
+      stream: false,
+    }
+
+    // Add reasoning configuration if enabled and model supports it
+    if (reasoning && supportsReasoning(model as ModelId)) {
+      requestParams.reasoning = getReasoningConfig(model as ModelId)
+    }
+
+    // Debug log for reasoning
+    if (reasoning) {
+      const reasoningConfig = supportsReasoning(model as ModelId) ? getReasoningConfig(model as ModelId) : null
+      console.log('🧠 Reasoning request debug (chat API):', {
+        model,
+        reasoning,
+        supportsReasoning: supportsReasoning(model as ModelId),
+        reasoningEnabled: reasoning && supportsReasoning(model as ModelId),
+        reasoningConfig,
+        requestHasReasoning: 'reasoning' in requestParams
+      })
+    }
+
     const response = await withTimeout(
       withRetry(async () => {
-        return await client.createChatCompletion({
-          model: model as ModelId,
-          messages: finalMessages,
-          temperature,
-          max_tokens: optimalMaxTokens,
-          stream: false,
-        })
+        return await client.createChatCompletion(requestParams)
       }, { maxAttempts: 2 }),
       timeoutMs,
       'OpenRouter API call'
@@ -342,7 +364,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     sessionId,
     parentNodeId,
     useEnhancedContext = true,
-    enableWebSearch = true
+    enableWebSearch = true,
+    reasoning = false
   } = body
 
   // Fetch user profile for defaults if not provided
@@ -372,6 +395,18 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       temperature = temperature || 0.7
       max_tokens = max_tokens || 4000
     }
+  }
+
+  // Increase max_tokens for reasoning requests to accommodate longer thought processes
+  if (reasoning && supportsReasoning(model as ModelId)) {
+    const currentMaxTokens = max_tokens || 4000
+    // Double the max_tokens for reasoning, with a minimum of 8000
+    max_tokens = Math.max(currentMaxTokens * 2, 8000)
+    log.debug('Increased max_tokens for reasoning', { 
+      originalMaxTokens: currentMaxTokens, 
+      reasoningMaxTokens: max_tokens,
+      model 
+    })
   }
 
   if (!messages || !model) {
@@ -475,7 +510,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     parentNodeId, 
     useEnhancedContext, 
     userPrompt,
-    enableWebSearch
+    enableWebSearch,
+    reasoning
   ).catch(error => {
     log.error('Background AI processing failed', error)
     // Update node status to failed

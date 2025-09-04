@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { OpenRouterClient } from '@/lib/openrouter/client'
+import { OpenRouterClient, supportsReasoning, getReasoningConfig } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
-import { ModelId } from '@/types'
+import { ModelId, AVAILABLE_MODELS } from '@/types'
 import { buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
 import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 import { isRedisAvailable } from '@/lib/redis/client'
@@ -12,7 +12,8 @@ import {
   createAppError, 
   ErrorCategory, 
   classifyDatabaseError,
-  withRetry 
+  withRetry,
+  AppError
 } from '@/lib/errors/error-handler'
 import { recordError } from '@/lib/errors/error-monitoring'
 import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
@@ -23,6 +24,17 @@ import {
   parseFunctionArguments, 
   createToolResultMessage 
 } from '@/lib/openrouter/function-calling'
+
+// Helper function to detect search keywords
+function hasSearchKeywords(prompt: string): boolean {
+  const searchKeywords = [
+    'search', 'find', 'look up', 'what is', 'who is', 'when did', 'where is',
+    'how to', 'latest', 'recent', 'current', 'news', 'today', 'yesterday',
+    'price', 'cost', 'weather', 'stock', 'cryptocurrency', 'bitcoin'
+  ]
+  const lowerPrompt = prompt.toLowerCase()
+  return searchKeywords.some(keyword => lowerPrompt.includes(keyword))
+}
 import { generateUserSystemPrompt } from '@/lib/db/system-prompt-preferences'
 
 // Process AI response with Function Calling support
@@ -31,264 +43,313 @@ async function processAIResponseWithTools(
   messages: any[],
   model: string,
   temperature: number,
-  maxTokens: number,
+  max_tokens: number,
   sessionId: string,
-  parentNodeId: string | undefined,
+  parentNodeId: string | null,
   useEnhancedContext: boolean,
   userPrompt: string,
-  enableWebSearch: boolean = true,
-  userId?: string
+  enableWebSearch: boolean,
+  userId: string,
+  reasoning: boolean = false
 ) {
+  const stopTimer = performanceMonitor.startTimer('chat_ai_response_with_tools')
+  
   try {
-    // Build context using enhanced context system if enabled and parentNodeId exists
-    let finalMessages = messages
-    let contextMetadata = null
-    
-    // Generate personalized system prompt for the user
-    const systemPromptContent = userId 
-      ? await generateUserSystemPrompt(userId)
-      : `Today's date is ${new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        })}, ${new Date().getFullYear()}. The current year is ${new Date().getFullYear()}, not 2024.`
-    
-    const systemPrompt = {
-      role: 'system' as const,
-      content: systemPromptContent
-    }
-    
-    // Inject system prompt at the beginning of messages
-    finalMessages = [systemPrompt, ...messages]
-    
-    // Enhanced context evaluation
-    log.debug('Enhanced context evaluation', { useEnhancedContext, hasParent: !!parentNodeId })
-    
-    if (useEnhancedContext && parentNodeId) {
-      try {
-        log.debug('Building enhanced context', { parentNodeId })
-        
-        // Extract node references from user prompt
-        const referencedNodes = extractNodeReferences(userPrompt)
-        
-        // Build enhanced context with intelligent strategy selection
-        const enhancedContext = await buildContextWithStrategy(parentNodeId, userPrompt, {
-          includeSiblings: false,
-          maxTokens: 3000,
-          includeReferences: referencedNodes,
-          model: model
-        })
-        
-        contextMetadata = enhancedContext.metadata
-        
-        // Use enhanced context messages plus new user message with system prompt
-        finalMessages = [
-          systemPrompt,  // Always include personalized system prompt
-          ...enhancedContext.messages,
-          { role: 'user', content: userPrompt }
-        ]
-        
-        log.info('Enhanced context built successfully', { 
-          tokens: enhancedContext.metadata.totalTokens, 
-          siblings: enhancedContext.metadata.siblingCount, 
-          references: referencedNodes.length 
-        })
-        
-      } catch (contextError) {
-        recordError(createAppError(
-          'Enhanced context building failed',
-          ErrorCategory.INTERNAL,
-          {
-            userMessage: 'Using simplified context for this message.',
-            context: { parentNodeId, useEnhancedContext },
-            cause: contextError as Error,
-            severity: 'medium' as any
-          }
-        ))
-        log.warn('Enhanced context failed, falling back to simple messages', contextError)
-      }
-    } else {
-      log.debug('Enhanced context skipped', { useEnhancedContext, parentNodeId })
+    // Parse and validate model
+    if (!AVAILABLE_MODELS.find(m => m.id === model)) {
+      throw createAppError(
+        'Invalid model selection',
+        ErrorCategory.VALIDATION,
+        { 
+          userMessage: 'Please select a valid model.', 
+          context: { model } 
+        }
+      )
     }
 
-    // Initialize OpenRouter client
-    const client = new OpenRouterClient()
-    const aiTimer = performanceMonitor.startTimer('openrouter_api_with_tools')
-    
-    // Determine if we should include tools based on web search setting and model support
-    // All models support Function Calling except GPT OSS 120B
-    const shouldUseTools = enableWebSearch && tavilyClient.isConfigured() && 
-      model !== 'openai/gpt-oss-120b'
+    // Check if we should use enhanced context and have parentNodeId
+    let enhancedContext = null
+    if (useEnhancedContext && parentNodeId) {
+      log.debug('Enhanced context evaluation', { useEnhancedContext, hasParent: !!parentNodeId })
+      
+      try {
+        // Build enhanced context using the parent node
+        const contextResult = await withRetry(async () => {
+          return await buildContextWithStrategy(parentNodeId, userPrompt, {
+            maxTokens: 2000,
+            model: model,
+            includeSiblings: false
+          })
+        }, { maxAttempts: 2 })
+        
+        // Convert context messages to a single enhanced prompt
+        enhancedContext = contextResult.messages
+          .map(msg => `${msg.role}: ${msg.content}`)
+          .join('\n\n') + `\n\nUser: ${userPrompt}`
+          
+        log.debug('Enhanced context built', { contextLength: enhancedContext?.length || 0 })
+      } catch (contextError) {
+        log.warn('Failed to build enhanced context', contextError)
+        recordError(createAppError(
+          'Enhanced context generation failed',
+          ErrorCategory.EXTERNAL_API,
+          { cause: contextError as Error }
+        ))
+      }
+    } else {
+      log.debug('Enhanced context skipped', { useEnhancedContext })
+    }
+
+    // Check if we should use function calling
+    const shouldUseTools = enableWebSearch && hasSearchKeywords(userPrompt)
     
     log.info('Function calling evaluation', { 
       shouldUseTools, 
       model, 
       enableWebSearch,
-      tavilyConfigured: tavilyClient.isConfigured() 
+      tavilyConfigured: !!process.env.TAVILY_API_KEY
     })
-    
-    // Prepare request with or without tools
-    const requestBody: any = {
-      model: model as ModelId,
-      messages: finalMessages,
-      temperature,
-      max_tokens: maxTokens,
-      stream: false
-    }
+
+    // Use tools if detected or fallback to normal chat
+    let openRouterClient: OpenRouterClient
     
     if (shouldUseTools) {
-      requestBody.tools = [webSearchTool]
-      requestBody.tool_choice = 'auto'  // Let the model decide when to use tools
-    }
-    
-    // Model-specific timeout settings
-    const timeoutMs = (() => {
-      if (model === 'x-ai/grok-4') return 150000
-      if (model.startsWith('openai/o1') || model.includes('gpt-5')) return 120000
-      if (model.includes('gemini-2.5-pro') || model.includes('gemini-pro-1.5')) return 120000
-      return 30000
-    })()
-    
-    // First API call - may include tool calls
-    const response = await withTimeout(
-      withRetry(async () => {
-        return await client.createChatCompletion(requestBody)
-      }, { maxAttempts: 2 }),
-      timeoutMs,
-      'OpenRouter API call with tools'
-    )
-    
-    // Check if the model wants to use tools
-    const message = response.choices[0]?.message
-    
-    if (message?.tool_calls && message.tool_calls.length > 0) {
-      log.info('Model requested tool calls', { count: message.tool_calls.length })
-      
-      // Process tool calls
-      const toolMessages = []
-      
-      for (const toolCall of message.tool_calls) {
-        if (toolCall.function.name === 'web_search') {
-          try {
-            const args = parseFunctionArguments(toolCall.function.arguments)
-            log.info('Executing web search', { query: args.query, type: args.search_type })
-            
-            const searchResults = await tavilyClient.search(args.query, {
-              maxResults: 5,  // More results for function calling
-              includeAnswer: true,
-              searchDepth: args.search_type === 'news' ? 'advanced' : 'basic'
-            })
-            
-            // Format search results for the model
-            const formattedResults = {
-              query: args.query,
-              answer: searchResults.answer,
-              results: searchResults.results.map(r => ({
-                title: r.title,
-                url: r.url,
-                content: r.content.substring(0, 300)
-              }))
+      // Initialize Tavily for web search
+      if (!process.env.TAVILY_API_KEY) {
+        throw createAppError(
+          'Tavily API key not configured',
+          ErrorCategory.EXTERNAL_API
+        )
+      }
+
+      openRouterClient = new OpenRouterClient()
+
+      // Build the request body for function calling
+      const requestBody: any = {
+        model,
+        messages: enhancedContext ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }] : messages,
+        temperature,
+        max_tokens,
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'tavily_search_results_json',
+              description: 'A search engine optimized for comprehensive, accurate, and trusted results. Useful for when you need to answer questions about current events. Input should be a search query.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: {
+                    type: 'string',
+                    description: 'The search query to execute'
+                  }
+                },
+                required: ['query']
+              }
             }
+          }
+        ],
+        tool_choice: 'auto'
+      }
+
+      // Add reasoning configuration if enabled and model supports it
+      if (reasoning && supportsReasoning(model as ModelId)) {
+        requestBody.reasoning = getReasoningConfig(model as ModelId)
+      }
+      
+      // Debug log for reasoning
+      if (reasoning) {
+        const reasoningConfig = supportsReasoning(model as ModelId) ? getReasoningConfig(model as ModelId) : null
+        console.log('🧠 Reasoning request debug (with-tools API):', {
+          model,
+          reasoning,
+          shouldUseTools,
+          supportsReasoning: supportsReasoning(model as ModelId),
+          reasoningEnabled: reasoning && supportsReasoning(model as ModelId),
+          reasoningConfig,
+          requestHasReasoning: 'reasoning' in requestBody
+        })
+      }
+
+      try {
+        const response = await openRouterClient.createChatCompletion(requestBody)
+        
+        // Handle function calls
+        if (response.choices?.[0]?.message?.tool_calls) {
+          const toolCalls = response.choices[0].message.tool_calls
+          const toolResults = []
+
+          for (const toolCall of toolCalls) {
+            if (toolCall.function.name === 'tavily_search_results_json') {
+              try {
+                const searchQuery = JSON.parse(toolCall.function.arguments).query
+                log.info('Executing web search', { query: searchQuery })
+                
+                const searchResults = await tavilyClient.search(searchQuery, { maxResults: 5 })
+                toolResults.push({
+                  tool_call_id: toolCall.id,
+                  role: 'tool',
+                  content: JSON.stringify(searchResults)
+                })
+                
+                log.debug('Web search completed', { resultsCount: searchResults?.results?.length || 0 })
+              } catch (searchError) {
+                log.error('Web search failed', searchError)
+                toolResults.push({
+                  tool_call_id: toolCall.id,
+                  role: 'tool',
+                  content: JSON.stringify({ error: 'Search failed', message: 'Unable to perform web search' })
+                })
+              }
+            }
+          }
+
+          if (toolResults.length > 0) {
+            // Make a second call with the tool results
+            const followUpMessages = [
+              ...messages,
+              response.choices[0].message,
+              ...toolResults
+            ]
+
+            const followUpBody: any = {
+              model,
+              messages: followUpMessages,
+              temperature,
+              max_tokens
+            }
+
+            // Add reasoning to follow-up request as well if enabled
+            if (reasoning && supportsReasoning(model as ModelId)) {
+              followUpBody.reasoning = getReasoningConfig(model as ModelId)
+            }
+
+            const finalResponse = await openRouterClient.createChatCompletion(followUpBody)
             
-            toolMessages.push(createToolResultMessage(toolCall.id, formattedResults))
-            log.info('Web search completed', { resultCount: searchResults.results.length })
-            
-          } catch (searchError) {
-            log.error('Tool execution failed', searchError)
-            toolMessages.push(createToolResultMessage(
-              toolCall.id,
-              `Search failed: ${searchError instanceof Error ? searchError.message : 'Unknown error'}`
-            ))
+            const finalContent = finalResponse.choices?.[0]?.message?.content || ''
+            const usage = finalResponse.usage || { prompt_tokens: 0, completion_tokens: 0 }
+
+            // Update the chat node with final response
+            await updateChatNodeResponse(
+              chatNode.id,
+              finalContent,
+              usage,
+              model,
+              'completed'
+            )
+
+            log.info('Function calling completed successfully', { 
+              nodeId: chatNode.id,
+              toolCallsCount: toolCalls.length,
+              finalResponseLength: finalContent.length
+            })
+            return
           }
         }
+
+        // No function calls, treat as regular response
+        const content = response.choices?.[0]?.message?.content || ''
+        const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0 }
+
+        await updateChatNodeResponse(
+          chatNode.id,
+          content,
+          usage,
+          model,
+          'completed'
+        )
+
+        log.info('Direct response completed', { 
+          nodeId: chatNode.id,
+          responseLength: content.length 
+        })
+
+      } catch (error) {
+        log.error('Function calling request failed', error)
+        throw error
       }
-      
-      // Continue conversation with tool results
-      const continuationMessages = [
-        ...finalMessages,
-        {
-          ...message,
-          role: 'assistant' as const
-        },
-        ...toolMessages
-      ]
-      
-      log.info('Sending tool results back to model')
-      
-      // Second API call with tool results
-      const finalResponse = await withTimeout(
-        withRetry(async () => {
-          return await client.createChatCompletion({
-            model: model as ModelId,
-            messages: continuationMessages,
-            temperature,
-            max_tokens: maxTokens,
-            stream: false
-          })
-        }, { maxAttempts: 2 }),
-        timeoutMs,
-        'OpenRouter final response with tool results'
-      )
-      
-      aiTimer()
-      
-      const responseContent = finalResponse.choices[0]?.message?.content || ''
-      const usage = finalResponse.usage
-      
-      // Update chat node with response
-      await withRetry(async () => {
-        await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
-      }, { maxAttempts: 3 })
-      
-      // Handle AI title generation for first node
-      if (!parentNodeId && chatNode.depth === 0) {
-        await generateAITitle(sessionId, userPrompt, responseContent)
-      }
-      
-      // Clear caches
-      await clearCaches(sessionId, chatNode, responseContent)
-      
+
     } else {
-      // No tool calls - regular response
-      aiTimer()
+      // Fallback to normal chat without tools
+      log.info('Using normal chat API (no tools)')
       
-      const responseContent = message?.content || ''
-      const usage = response.usage
-      
-      // Update chat node with response
-      await withRetry(async () => {
-        await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
-      }, { maxAttempts: 3 })
-      
-      // Handle AI title generation for first node
-      if (!parentNodeId && chatNode.depth === 0) {
-        await generateAITitle(sessionId, userPrompt, responseContent)
+      openRouterClient = new OpenRouterClient()
+
+      const requestBody: any = {
+        model,
+        messages: enhancedContext ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }] : messages,
+        temperature,
+        max_tokens
+      }
+
+      // Add reasoning configuration if enabled and model supports it
+      if (reasoning && supportsReasoning(model as ModelId)) {
+        requestBody.reasoning = getReasoningConfig(model as ModelId)
       }
       
-      // Clear caches
-      await clearCaches(sessionId, chatNode, responseContent)
+      // Debug log for reasoning
+      if (reasoning) {
+        const reasoningConfig = supportsReasoning(model as ModelId) ? getReasoningConfig(model as ModelId) : null
+        console.log('🧠 Reasoning request debug (with-tools API fallback):', {
+          model,
+          reasoning,
+          shouldUseTools,
+          supportsReasoning: supportsReasoning(model as ModelId),
+          reasoningEnabled: reasoning && supportsReasoning(model as ModelId),
+          reasoningConfig,
+          requestHasReasoning: 'reasoning' in requestBody
+        })
+      }
+
+      const response = await openRouterClient.createChatCompletion(requestBody)
+      
+      const content = response.choices?.[0]?.message?.content || ''
+      const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0 }
+
+      await updateChatNodeResponse(
+        chatNode.id,
+        content,
+        usage,
+        model,
+        'completed'
+      )
+
+      log.info('Normal chat completed', { 
+        nodeId: chatNode.id,
+        responseLength: content.length 
+      })
     }
-    
+
   } catch (error) {
-    log.error('Background AI processing with tools failed', error)
-    await updateChatNodeResponse(
-      chatNode.id, 
-      '', 
-      undefined, 
-      model, 
-      'failed', 
-      error instanceof Error ? error.message : 'Unknown error'
-    ).catch(err => log.error('Failed to update node status to failed', err))
+    log.error('AI response processing failed', error)
     
-    recordError(createAppError(
-      'Background AI processing with tools failed',
+    const appError = createAppError(
+      'AI request processing failed',
       ErrorCategory.EXTERNAL_API,
       {
-        context: { chatNodeId: chatNode.id, sessionId },
-        cause: error as Error,
-        severity: 'high' as any
+        userMessage: 'Unable to generate AI response. Please try again.',
+        context: { model, nodeId: chatNode.id },
+        cause: error as Error
       }
-    ))
+    )
+    
+    recordError(appError)
+    
+    // Update node with error status
+    await updateChatNodeResponse(
+      chatNode.id,
+      '',
+      undefined,
+      model,
+      'failed',
+      appError.message
+    ).catch(err => {
+      log.error('Failed to update node error status', err)
+    })
+    
+    throw appError
+  } finally {
+    stopTimer()
   }
 }
 
@@ -381,7 +442,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       sessionId,
       parentNodeId,
       useEnhancedContext = true,
-      enableWebSearch = true
+      enableWebSearch = true,
+      reasoning = false
     } = body
 
     // Fetch user profile for defaults if not provided
@@ -409,6 +471,18 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         temperature = temperature || 0.7
         max_tokens = max_tokens || 4000
       }
+    }
+
+    // Increase max_tokens for reasoning requests to accommodate longer thought processes
+    if (reasoning && supportsReasoning(model as ModelId)) {
+      const currentMaxTokens = max_tokens || 4000
+      // Double the max_tokens for reasoning, with a minimum of 8000
+      max_tokens = Math.max(currentMaxTokens * 2, 8000)
+      log.debug('Increased max_tokens for reasoning', { 
+        originalMaxTokens: currentMaxTokens, 
+        reasoningMaxTokens: max_tokens,
+        model 
+      })
     }
 
     if (!messages || !model) {
@@ -512,7 +586,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       useEnhancedContext, 
       userPrompt,
       enableWebSearch,
-      user.id  // Pass user ID for personalized system prompt
+      user.id,  // Pass user ID for personalized system prompt
+      reasoning // Pass reasoning parameter
     ).catch(error => {
       log.error('Background AI processing with tools failed', error)
       updateChatNodeResponse(chatNode.id, '', undefined, model, 'failed', error.message)

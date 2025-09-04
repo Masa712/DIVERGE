@@ -31,6 +31,7 @@ export default function ChatSessionPage({ params }: Props) {
   const [insertTextFunction, setInsertTextFunction] = useState<((text: string) => void) | null>(null)
   const [isInputFocused, setIsInputFocused] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
+  const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
 
   useEffect(() => {
     if (!loading && !user) {
@@ -126,6 +127,7 @@ export default function ChatSessionPage({ params }: Props) {
           sessionId: session.id,
           parentNodeId: parentNode?.id,
           useEnhancedContext: true, // Explicitly enable enhanced context
+          reasoning: enableReasoning,
         }),
       })
 
@@ -188,6 +190,7 @@ export default function ChatSessionPage({ params }: Props) {
           sessionId: session.id,
           parentNodeId: parentNode?.id,
           useEnhancedContext: true,
+          reasoning: enableReasoning,
         }),
       })
 
@@ -396,6 +399,8 @@ export default function ChatSessionPage({ params }: Props) {
         onFocusChange={setIsInputFocused}
         selectedModel={selectedModel}
         onModelChange={setSelectedModel}
+        enableReasoning={enableReasoning}
+        onReasoningToggle={setEnableReasoning}
         currentNodeId={currentNodeId}
         currentNodePrompt={(() => {
           const currentNode = chatNodes.find(n => n.id === currentNodeId)

@@ -18,6 +18,12 @@ export interface OpenRouterRequest {
   transforms?: string[]
   tools?: any[]  // Tool definitions for function calling
   tool_choice?: 'auto' | 'none' | { type: 'function', function: { name: string } }
+  reasoning?: {
+    effort?: 'low' | 'medium' | 'high'
+    max_tokens?: number
+    exclude?: boolean
+    enabled?: boolean
+  }
 }
 
 export interface OpenRouterResponse {
@@ -38,6 +44,69 @@ export interface OpenRouterResponse {
     prompt_tokens: number
     completion_tokens: number
     total_tokens: number
+  }
+}
+
+// Models that do NOT support reasoning parameter
+const NON_REASONING_MODELS = [
+  'openai/gpt-4o',
+  'openai/gpt-oss-120b'
+]
+
+// Check if a model supports reasoning parameter
+export function supportsReasoning(model: ModelId): boolean {
+  // Check if model starts with any of the non-reasoning model prefixes
+  return !NON_REASONING_MODELS.some(nonReasoningModel => model.startsWith(nonReasoningModel))
+}
+
+// Get reasoning configuration based on model provider and effort level
+export function getReasoningConfig(model: ModelId, effort: 'low' | 'medium' | 'high' = 'high') {
+  // OpenAI models (o1, o3, GPT-5 series) - use effort-based approach
+  if (model.startsWith('openai/o1') || model.startsWith('openai/o3') || model.includes('gpt-5')) {
+    return {
+      effort: effort,
+      exclude: false  // Include reasoning in response for better transparency
+    }
+  }
+  
+  // Grok models - use effort-based approach
+  if (model.startsWith('x-ai/grok')) {
+    return {
+      effort: effort,
+      exclude: false
+    }
+  }
+  
+  // Anthropic models (Claude) - use max_tokens approach
+  if (model.startsWith('anthropic/claude')) {
+    const tokenMap = {
+      'low': 2000,
+      'medium': 4000,
+      'high': 8000
+    }
+    return {
+      max_tokens: tokenMap[effort],
+      exclude: false
+    }
+  }
+  
+  // Google Gemini models - use max_tokens approach
+  if (model.includes('gemini')) {
+    const tokenMap = {
+      'low': 1500,
+      'medium': 3000,
+      'high': 6000
+    }
+    return {
+      max_tokens: tokenMap[effort],
+      exclude: false
+    }
+  }
+  
+  // Default fallback - use effort-based
+  return {
+    effort: effort,
+    exclude: false
   }
 }
 

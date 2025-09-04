@@ -4,9 +4,10 @@ import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
 import { useError } from '@/components/providers/error-provider'
 import { extractNodeReferences } from '@/lib/utils/node-references'
 import { ChatNode } from '@/types'
-import { PaperAirplaneIcon, PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, PlusIcon, MagnifyingGlassIcon, BoltIcon } from '@heroicons/react/24/outline'
 import { ModelSelector } from './model-selector'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
+import { supportsReasoning } from '@/lib/openrouter/client'
 
 interface Props {
   onSendMessage: (message: string) => Promise<void>
@@ -22,6 +23,10 @@ interface Props {
   // Web search props
   enableWebSearch?: boolean
   onWebSearchToggle?: (enabled: boolean) => void
+  
+  // Reasoning props
+  enableReasoning?: boolean
+  onReasoningToggle?: (enabled: boolean) => void
   
   // Context info props
   currentNodeId?: string
@@ -45,6 +50,8 @@ export function GlassmorphismChatInput({
   onModelChange,
   enableWebSearch = true,
   onWebSearchToggle,
+  enableReasoning = false,
+  onReasoningToggle,
   currentNodeId,
   currentNodePrompt,
   isRightSidebarOpen = false,
@@ -266,6 +273,26 @@ export function GlassmorphismChatInput({
               title={enableWebSearch ? 'Web search enabled' : 'Web search disabled'}
             >
               <MagnifyingGlassIcon className="w-4 h-4" />
+            </button>
+
+            {/* Reasoning Toggle */}
+            <button
+              onClick={() => onReasoningToggle?.(!enableReasoning)}
+              disabled={!supportsReasoning(selectedModel)}
+              className={`w-8 h-8 rounded-full transition-all duration-200 flex items-center justify-center ${
+                supportsReasoning(selectedModel)
+                  ? (enableReasoning 
+                      ? 'bg-purple-100 hover:bg-purple-200 text-purple-600' 
+                      : 'bg-white/10 hover:bg-white/20 text-gray-500')
+                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+              }`}
+              title={
+                !supportsReasoning(selectedModel) 
+                  ? 'Reasoning not supported by this model'
+                  : (enableReasoning ? 'Deep reasoning enabled' : 'Deep reasoning disabled')
+              }
+            >
+              <BoltIcon className="w-4 h-4" />
             </button>
             
             <ModelSelector

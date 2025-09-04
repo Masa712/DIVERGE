@@ -40,6 +40,7 @@ export default function ChatPage() {
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
   const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
   const [enableWebSearch, setEnableWebSearch] = useState(true) // Web search toggle
+  const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
 
   useEffect(() => {
     log.debug('Auth check', { loading, userPresent: !!user })
@@ -228,6 +229,7 @@ export default function ChatPage() {
           parentNodeId: parentNode?.id,
           useEnhancedContext: true,
           enableWebSearch,
+          reasoning: enableReasoning,
         }),
       })
 
@@ -521,6 +523,8 @@ export default function ChatPage() {
               onModelChange={setSelectedModel}
               enableWebSearch={enableWebSearch}
               onWebSearchToggle={setEnableWebSearch}
+              enableReasoning={enableReasoning}
+              onReasoningToggle={setEnableReasoning}
               currentNodeId={currentNodeId}
               currentNodePrompt={(() => {
                 const currentNode = chatNodes.find(n => n.id === currentNodeId)
