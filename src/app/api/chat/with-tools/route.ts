@@ -576,21 +576,23 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     }
 
     // Create a new chat node
+    const nodeData = {
+      sessionId,
+      parentId: parentNodeId,
+      model: model as ModelId,
+      prompt: userPrompt,
+      temperature,
+      maxTokens: max_tokens,
+      depth,
+      metadata: {
+        reasoning: reasoning && supportsReasoning(model as ModelId),
+        functionCalling: enableWebSearch,
+        enableWebSearch: enableWebSearch
+      }
+    }
+    
     const chatNodeRaw = await withRetry(async () => {
-      return await createChatNode({
-        sessionId,
-        parentId: parentNodeId,
-        model: model as ModelId,
-        prompt: userPrompt,
-        temperature,
-        maxTokens: max_tokens,
-        depth,
-        metadata: {
-          reasoning: reasoning && supportsReasoning(model as ModelId),
-          functionCalling: enableWebSearch,
-          enableWebSearch: enableWebSearch
-        } as Record<string, any>
-      })
+      return await createChatNode(nodeData)
     }, { maxAttempts: 3 }).catch(error => {
       throw createAppError(
         'Failed to create chat node in database',
