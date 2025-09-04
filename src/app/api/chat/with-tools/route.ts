@@ -589,7 +589,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
           reasoning: reasoning && supportsReasoning(model as ModelId),
           functionCalling: enableWebSearch,
           enableWebSearch: enableWebSearch
-        }
+        } as Record<string, any>
       })
     }, { maxAttempts: 3 }).catch(error => {
       throw createAppError(
