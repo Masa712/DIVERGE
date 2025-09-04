@@ -25,16 +25,6 @@ import {
   createToolResultMessage 
 } from '@/lib/openrouter/function-calling'
 
-// Helper function to detect search keywords
-function hasSearchKeywords(prompt: string): boolean {
-  const searchKeywords = [
-    'search', 'find', 'look up', 'what is', 'who is', 'when did', 'where is',
-    'how to', 'latest', 'recent', 'current', 'news', 'today', 'yesterday',
-    'price', 'cost', 'weather', 'stock', 'cryptocurrency', 'bitcoin'
-  ]
-  const lowerPrompt = prompt.toLowerCase()
-  return searchKeywords.some(keyword => lowerPrompt.includes(keyword))
-}
 import { generateUserSystemPrompt } from '@/lib/db/system-prompt-preferences'
 
 // Process AI response with Function Calling support
@@ -101,7 +91,8 @@ async function processAIResponseWithTools(
     }
 
     // Check if we should use function calling
-    const shouldUseTools = enableWebSearch && hasSearchKeywords(userPrompt)
+    // Use tools when web search is explicitly enabled by user (not dependent on keywords)
+    const shouldUseTools = enableWebSearch
     
     log.info('Function calling evaluation', { 
       shouldUseTools, 
@@ -112,6 +103,7 @@ async function processAIResponseWithTools(
 
     // Use tools if detected or fallback to normal chat
     let openRouterClient: OpenRouterClient
+    let finalContent = ''
     
     if (shouldUseTools) {
       // Initialize Tavily for web search
@@ -226,7 +218,7 @@ async function processAIResponseWithTools(
 
             const finalResponse = await openRouterClient.createChatCompletion(followUpBody)
             
-            const finalContent = finalResponse.choices?.[0]?.message?.content || ''
+            finalContent = finalResponse.choices?.[0]?.message?.content || ''
             const usage = finalResponse.usage || { prompt_tokens: 0, completion_tokens: 0 }
 
             // Update the chat node with final response
@@ -243,26 +235,25 @@ async function processAIResponseWithTools(
               toolCallsCount: toolCalls.length,
               finalResponseLength: finalContent.length
             })
-            return
           }
+        } else {
+          // No function calls, treat as regular response
+          finalContent = response.choices?.[0]?.message?.content || ''
+          const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0 }
+
+          await updateChatNodeResponse(
+            chatNode.id,
+            finalContent,
+            usage,
+            model,
+            'completed'
+          )
+
+          log.info('Direct response completed', { 
+            nodeId: chatNode.id,
+            responseLength: finalContent.length 
+          })
         }
-
-        // No function calls, treat as regular response
-        const content = response.choices?.[0]?.message?.content || ''
-        const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0 }
-
-        await updateChatNodeResponse(
-          chatNode.id,
-          content,
-          usage,
-          model,
-          'completed'
-        )
-
-        log.info('Direct response completed', { 
-          nodeId: chatNode.id,
-          responseLength: content.length 
-        })
 
       } catch (error) {
         log.error('Function calling request failed', error)
@@ -303,12 +294,12 @@ async function processAIResponseWithTools(
 
       const response = await openRouterClient.createChatCompletion(requestBody)
       
-      const content = response.choices?.[0]?.message?.content || ''
+      finalContent = response.choices?.[0]?.message?.content || ''
       const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0 }
 
       await updateChatNodeResponse(
         chatNode.id,
-        content,
+        finalContent,
         usage,
         model,
         'completed'
@@ -316,8 +307,75 @@ async function processAIResponseWithTools(
 
       log.info('Normal chat completed', { 
         nodeId: chatNode.id,
-        responseLength: content.length 
+        responseLength: finalContent.length 
       })
+    }
+
+    // Generate AI title for the session if it's the first node (depth = 0 and no parentNodeId)
+    log.info('Title generation check', { 
+      parentNodeId, 
+      depth: chatNode.depth, 
+      shouldGenerateTitle: !parentNodeId && chatNode.depth === 0 
+    })
+    
+    if (!parentNodeId && chatNode.depth === 0) {
+      try {
+        log.info('Generating AI title for session', { sessionId, userPrompt: userPrompt.substring(0, 50) })
+        
+        // Generate title based on user's message and AI's response
+        const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/sessions/generate-title`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userMessage: userPrompt,
+            assistantResponse: finalContent.substring(0, 500) // Send first 500 chars of response
+          })
+        })
+
+        if (titleResponse.ok) {
+          const { title } = await titleResponse.json()
+          log.info('AI title generated', { title })
+          
+          // Update session name with AI-generated title
+          const supabase = createClient()
+          const { data: updatedSession, error: updateError } = await supabase
+            .from('sessions')
+            .update({ 
+              name: title,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', sessionId)
+            .select('id, name')
+            .single()
+          
+          if (updateError) {
+            log.error('Failed to update session name in database', updateError)
+          } else {
+            log.info('Successfully updated session title', { title, verified: updatedSession?.name })
+            
+            // Force clear all related caches
+            try {
+              const { clearQueryCache } = await import('@/lib/db/query-optimizer')
+              clearQueryCache()
+              log.debug('Cleared query cache to force fresh data')
+            } catch (error) {
+              log.warn('Failed to clear query cache', error)
+            }
+          }
+        } else {
+          log.error('Title generation API failed', { 
+            status: titleResponse.status, 
+            statusText: titleResponse.statusText 
+          })
+          const errorText = await titleResponse.text().catch(() => 'Unknown error')
+          log.error('Title generation error details', { errorText })
+        }
+      } catch (error) {
+        log.error('Failed to generate AI title - exception', error)
+        // Don't throw - this is a non-critical feature
+      }
     }
 
   } catch (error) {
@@ -527,6 +585,11 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
         temperature,
         maxTokens: max_tokens,
         depth,
+        metadata: {
+          reasoning: reasoning && supportsReasoning(model as ModelId),
+          functionCalling: enableWebSearch,
+          enableWebSearch: enableWebSearch
+        }
       })
     }, { maxAttempts: 3 }).catch(error => {
       throw createAppError(

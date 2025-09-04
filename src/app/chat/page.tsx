@@ -425,6 +425,12 @@ export default function ChatPage() {
           if (session && session.name !== currentSession?.name) {
             setCurrentSession(session)
             log.info('Session title updated', { sessionName: session.name })
+            
+            // Immediately trigger session list refresh when title changes
+            if (typeof window !== 'undefined') {
+              log.debug('Triggering session list refresh after title update')
+              window.dispatchEvent(new CustomEvent('session-sync-needed'))
+            }
           }
           
           if (updatedNode && updatedNode.status !== 'streaming') {
@@ -437,15 +443,23 @@ export default function ChatPage() {
                 return prev // Don't update if node was deleted
               }
               
-              // Update only the specific node that was polled
+              // Update only the specific node that was polled, preserving local metadata
               return prev.map(node => 
-                node.id === nodeId ? updatedNode : node
+                node.id === nodeId 
+                  ? {
+                      ...updatedNode,
+                      metadata: {
+                        ...node.metadata,  // Preserve existing metadata
+                        ...updatedNode.metadata  // Merge with any server updates
+                      }
+                    }
+                  : node
               )
             })
             log.info('Node polling completed', { nodeId, status: updatedNode.status })
             
-            // Trigger session list refresh when node completes
-            if (typeof window !== 'undefined') {
+            // Trigger session list refresh when node completes (if we haven't already due to title change)
+            if (typeof window !== 'undefined' && session?.name === currentSession?.name) {
               log.debug('Triggering session list refresh after node completion')
               window.dispatchEvent(new CustomEvent('session-sync-needed'))
             }
