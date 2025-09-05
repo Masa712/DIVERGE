@@ -26,8 +26,13 @@
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-hook-form": "^7.0.0",
+    "react-markdown": "^10.1.0",
     "reactflow": "^11.11.4",
     "redlock": "^5.0.0-beta.2",
+    "rehype-highlight": "^7.0.2",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "uuid": "^9.0.0",
     "zod": "^3.0.0",
     "zustand": "^4.0.0"

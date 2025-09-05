@@ -9,6 +9,7 @@ import { useComments } from '@/hooks/useComments'
 import { useNodeChain } from '@/hooks/useNodeChain'
 import { useSidebarResize } from '@/hooks/useSidebarResize'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
+import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer'
 import { useAuth } from '@/components/providers/auth-provider'
 
 interface UserProfile {
@@ -374,9 +375,10 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                       </button>
                     </div>
                   ) : currentDisplayNode.response ? (
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                      {currentDisplayNode.response}
-                    </p>
+                    <MarkdownRenderer 
+                      content={currentDisplayNode.response} 
+                      className="text-sm leading-relaxed"
+                    />
                   ) : (
                     <div className="py-4 text-center text-gray-400 text-sm italic">
                       Waiting for response...
@@ -455,9 +457,10 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                           </button>
                         )}
                       </div>
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">
-                        {comment.content}
-                      </p>
+                      <MarkdownRenderer 
+                        content={comment.content} 
+                        className="text-sm"
+                      />
                       {comment.is_edited && (
                         <div className="flex items-center gap-1 mt-1">
                           <Edit2 className="w-3 h-3 text-gray-400" />

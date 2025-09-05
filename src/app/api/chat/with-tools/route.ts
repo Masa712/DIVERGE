@@ -322,55 +322,68 @@ async function processAIResponseWithTools(
       try {
         log.info('Generating AI title for session', { sessionId, userPrompt: userPrompt.substring(0, 50) })
         
-        // Generate title based on user's message and AI's response
-        const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/sessions/generate-title`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userMessage: userPrompt,
-            assistantResponse: finalContent.substring(0, 500) // Send first 500 chars of response
-          })
+        // Generate title directly using OpenRouter client instead of HTTP fetch
+        const titleClient = new OpenRouterClient()
+        const systemPrompt = `You are a helpful assistant that generates concise, descriptive titles for chat conversations.
+Based on the user's first message and optionally the assistant's response, generate a short title (3-7 words) that captures the essence of the conversation.
+The title should be:
+- Clear and descriptive
+- In the same language as the user's message
+- Without quotes or special characters
+- Focused on the main topic or question
+
+Examples:
+User: "How do I implement authentication in Next.js?"
+Title: Next.js Authentication Implementation
+
+User: "ホテル経営について教えてください"
+Title: ホテル経営について
+
+User: "Can you help me debug this Python error?"
+Title: Python Error Debugging Help`
+
+        const titlePrompt = finalContent 
+          ? `User's first message: "${userPrompt}"\n\nAssistant's response summary: "${finalContent.substring(0, 500)}..."\n\nGenerate a concise title for this conversation.`
+          : `User's first message: "${userPrompt}"\n\nGenerate a concise title for this conversation.`
+
+        const titleResponse = await titleClient.createChatCompletion({
+          model: 'openai/gpt-4o-2024-11-20',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: titlePrompt }
+          ],
+          max_tokens: 50,
+          temperature: 0.7,
         })
 
-        if (titleResponse.ok) {
-          const { title } = await titleResponse.json()
-          log.info('AI title generated', { title })
-          
-          // Update session name with AI-generated title
-          const supabase = createClient()
-          const { data: updatedSession, error: updateError } = await supabase
-            .from('sessions')
-            .update({ 
-              name: title,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', sessionId)
-            .select('id, name')
-            .single()
-          
-          if (updateError) {
-            log.error('Failed to update session name in database', updateError)
-          } else {
-            log.info('Successfully updated session title', { title, verified: updatedSession?.name })
-            
-            // Force clear all related caches
-            try {
-              const { clearQueryCache } = await import('@/lib/db/query-optimizer')
-              clearQueryCache()
-              log.debug('Cleared query cache to force fresh data')
-            } catch (error) {
-              log.warn('Failed to clear query cache', error)
-            }
-          }
-        } else {
-          log.error('Title generation API failed', { 
-            status: titleResponse.status, 
-            statusText: titleResponse.statusText 
+        const title = titleResponse.choices[0]?.message?.content?.trim() || 'New Chat'
+        log.info('AI title generated', { title })
+        
+        // Update session name with AI-generated title
+        const supabase = createClient()
+        const { data: updatedSession, error: updateError } = await supabase
+          .from('sessions')
+          .update({ 
+            name: title,
+            updated_at: new Date().toISOString()
           })
-          const errorText = await titleResponse.text().catch(() => 'Unknown error')
-          log.error('Title generation error details', { errorText })
+          .eq('id', sessionId)
+          .select('id, name')
+          .single()
+        
+        if (updateError) {
+          log.error('Failed to update session name in database', updateError)
+        } else {
+          log.info('Successfully updated session title', { title, verified: updatedSession?.name })
+          
+          // Force clear all related caches
+          try {
+            const { clearQueryCache } = await import('@/lib/db/query-optimizer')
+            clearQueryCache()
+            log.debug('Cleared query cache to force fresh data')
+          } catch (error) {
+            log.warn('Failed to clear query cache', error)
+          }
         }
       } catch (error) {
         log.error('Failed to generate AI title - exception', error)
