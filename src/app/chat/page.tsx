@@ -10,6 +10,7 @@ import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { LeftSidebar } from '@/components/layout/left-sidebar'
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 
 interface UserProfile {
   default_model: ModelId | null
@@ -490,7 +491,8 @@ export default function ChatPage() {
   if (loading || !user) {
     log.debug('ChatPage showing loading state')
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="relative flex min-h-screen items-center justify-center">
+        <AnimatedBackground opacity={0.3} />
         <div className="text-lg">Loading...</div>
       </div>
     )
@@ -499,7 +501,8 @@ export default function ChatPage() {
   log.debug('ChatPage rendering main content', { currentSessionId: currentSession?.id })
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="relative flex h-screen">
+      <AnimatedBackground opacity={0.15} />
       {/* Left Sidebar */}
       <LeftSidebar
         currentSessionId={currentSession?.id}

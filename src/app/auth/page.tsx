@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 
 // Social login icons (using inline SVGs for simplicity)
 const GoogleIcon = () => (
@@ -89,8 +90,9 @@ function AuthPageContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="w-full max-w-md space-y-8 glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-8">
+    <div className="relative flex min-h-screen items-center justify-center">
+      <AnimatedBackground />
+      <div className="w-full max-w-md space-y-8 glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-8 backdrop-blur-md bg-white/30">
         <div className="text-center">
           <h2 className="text-4xl font-bold text-gray-900">Diverge</h2>
           <p className="mt-2 text-sm text-gray-600">
@@ -137,7 +139,7 @@ function AuthPageContent() {
             <div className="w-full border-t border-gray-300"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-gradient-to-br from-blue-50/50 via-white/50 to-purple-50/50 text-gray-500">
+            <span className="px-4 bg-white/60 backdrop-blur-sm rounded-md text-gray-500">
               Or continue with email
             </span>
           </div>
@@ -218,7 +220,8 @@ function AuthPageContent() {
 export default function AuthPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="relative flex min-h-screen items-center justify-center">
+        <AnimatedBackground />
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     }>

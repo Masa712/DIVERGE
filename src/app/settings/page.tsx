@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { SystemPromptSettings } from '@/components/settings/system-prompt-settings'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 
 interface UserProfile {
   display_name: string
@@ -145,14 +146,16 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="relative min-h-screen flex items-center justify-center">
+        <AnimatedBackground opacity={0.3} />
         <div className="text-gray-600">Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen p-8 bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="relative min-h-screen p-8">
+      <AnimatedBackground opacity={0.2} />
       {/* Back Button */}
       <button
         onClick={() => router.push('/chat')}
