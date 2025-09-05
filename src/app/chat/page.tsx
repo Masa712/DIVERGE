@@ -492,7 +492,7 @@ export default function ChatPage() {
     log.debug('ChatPage showing loading state')
     return (
       <div className="relative flex min-h-screen items-center justify-center">
-        <AnimatedBackground opacity={0.3} />
+        <AnimatedBackground opacity={0.4} />
         <div className="text-lg">Loading...</div>
       </div>
     )
@@ -502,7 +502,7 @@ export default function ChatPage() {
 
   return (
     <div className="relative flex h-screen">
-      <AnimatedBackground opacity={0.15} />
+      <AnimatedBackground opacity={0.4} />
       {/* Left Sidebar */}
       <LeftSidebar
         currentSessionId={currentSession?.id}
