@@ -10,6 +10,7 @@ import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-inp
 import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 
 interface Props {
   params: { id: string }
@@ -380,7 +381,8 @@ export default function ChatSessionPage({ params }: Props) {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="relative flex h-screen">
+      <AnimatedBackground opacity={0.4} />
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 overflow-hidden">
