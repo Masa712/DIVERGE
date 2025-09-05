@@ -1,12 +1,14 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import { Copy, Check } from 'lucide-react'
+import 'highlight.js/styles/github-dark.css'
+import 'katex/dist/katex.min.css'
 
 interface MarkdownRendererProps {
   content: string
@@ -15,14 +17,6 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   const [copiedCode, setCopiedCode] = React.useState<string | null>(null)
-
-  // Load highlight.js styles
-  useEffect(() => {
-    // Import highlight.js theme
-    import('highlight.js/styles/github-dark.css')
-    // Import KaTeX styles for math rendering
-    import('katex/dist/katex.min.css')
-  }, [])
 
   const copyToClipboard = async (text: string, codeId: string) => {
     try {
@@ -46,7 +40,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
             const codeContent = React.isValidElement(codeElement) 
               ? (codeElement.props.children as string) 
               : ''
-            const codeId = `code-${Math.random().toString(36).substr(2, 9)}`
+            const codeId = `code-${Math.random().toString(36).substring(2, 11)}`
             
             return (
               <div className="relative group">
@@ -68,8 +62,9 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
             )
           },
           // Custom inline code styling
-          code: ({ node, inline, className, children, ...props }) => {
-            if (inline) {
+          code: ({ node, className, children, ...props }: any) => {
+            const isInline = !className?.includes('language-')
+            if (isInline) {
               return (
                 <code
                   className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-sm font-mono"
