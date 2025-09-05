@@ -53,6 +53,7 @@ export async function createChatNode(nodeData: {
   temperature: number
   maxTokens: number
   depth: number
+  metadata?: Record<string, any>
 }): Promise<any> {
   try {
     return await withPooledConnection(async (supabase) => {
@@ -67,6 +68,7 @@ export async function createChatNode(nodeData: {
           temperature: nodeData.temperature,
           max_tokens: nodeData.maxTokens,
           depth: nodeData.depth,
+          metadata: nodeData.metadata || {},
         })
         .select()
         .single()
@@ -129,12 +131,20 @@ export async function updateChatNodeResponse(
 ): Promise<void> {
   try {
     return await withPooledConnection(async (supabase) => {
+      // First, get the existing node data to preserve metadata
+      const { data: existingNode } = await supabase
+        .from('chat_nodes')
+        .select('metadata')
+        .eq('id', nodeId)
+        .single()
+
       const updateData: any = {
         response,
         status,
         prompt_tokens: usage?.prompt_tokens || 0,
         response_tokens: usage?.completion_tokens || 0,
         cost_usd: calculateCost(model, usage),
+        metadata: existingNode?.metadata || {}, // Preserve existing metadata
       }
       
       if (errorMessage) {

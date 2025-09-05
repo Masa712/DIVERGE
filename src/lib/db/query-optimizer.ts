@@ -319,6 +319,7 @@ export const chatNodesLoader = new BatchQueryLoader<string, any[]>(
           cost_usd,
           temperature,
           max_tokens,
+          metadata,
           created_at,
           updated_at
         `)

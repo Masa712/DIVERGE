@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw } from 'lucide-react'
+import { MagnifyingGlassIcon, BoltIcon } from '@heroicons/react/24/outline'
 import { ChatNode } from '@/types'
 import { log } from '@/lib/utils/logger'
 import { useComments } from '@/hooks/useComments'
@@ -270,53 +271,75 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                   <h3 className="font-semibold text-gray-900">AI Response</h3>
                   
                   {/* Model Tag with Click to Change */}
-                  <button
-                    onClick={() => {
-                      // For now, just show the model. Later we can add model selection dropdown
-                      log.debug('Model change clicked', { model: currentDisplayNode.model })
-                    }}
-                    className="px-2 py-1 text-xs font-medium bg-green-100/70 text-green-800 rounded-full hover:bg-green-200/70 transition-colors"
-                    title="Click to change model (coming soon)"
-                  >
-                    {(() => {
-                      const model = currentDisplayNode.model
-                      
-                      // Extract model name after provider prefix (e.g., openai/, anthropic/)
-                      let modelName: string = model
-                      if (model.includes('/')) {
-                        const parts = model.split('/')
-                        modelName = parts[1] || model
-                      }
-                      
-                      // Handle OpenAI models
-                      if (modelName.startsWith('gpt-4o-')) {
-                        return 'gpt-4o'
-                      }
-                      if (modelName.startsWith('gpt-4-')) {
-                        return 'gpt-4'
-                      }
-                      if (modelName.startsWith('gpt-3.5-')) {
-                        return 'gpt-3.5'
-                      }
-                      
-                      // Handle Claude models
-                      if (modelName.startsWith('claude-3-opus')) {
-                        return 'claude-3-opus'
-                      }
-                      if (modelName.startsWith('claude-3-sonnet')) {
-                        return 'claude-3-sonnet'
-                      }
-                      if (modelName.startsWith('claude-3-haiku')) {
-                        return 'claude-3-haiku'
-                      }
-                      if (modelName.startsWith('claude-2')) {
-                        return 'claude-2'
-                      }
-                      
-                      // Return the extracted model name or original
-                      return modelName
-                    })()}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        // For now, just show the model. Later we can add model selection dropdown
+                        log.debug('Model change clicked', { model: currentDisplayNode.model })
+                      }}
+                      className="px-2 py-1 text-xs font-medium bg-green-100/70 text-green-800 rounded-full hover:bg-green-200/70 transition-colors"
+                      title="Click to change model (coming soon)"
+                    >
+                      {(() => {
+                        const model = currentDisplayNode.model
+                        
+                        // Extract model name after provider prefix (e.g., openai/, anthropic/)
+                        let modelName: string = model
+                        if (model.includes('/')) {
+                          const parts = model.split('/')
+                          modelName = parts[1] || model
+                        }
+                        
+                        // Handle OpenAI models
+                        if (modelName.startsWith('gpt-4o-')) {
+                          return 'gpt-4o'
+                        }
+                        if (modelName.startsWith('gpt-4-')) {
+                          return 'gpt-4'
+                        }
+                        if (modelName.startsWith('gpt-3.5-')) {
+                          return 'gpt-3.5'
+                        }
+                        
+                        // Handle Claude models
+                        if (modelName.startsWith('claude-3-opus')) {
+                          return 'claude-3-opus'
+                        }
+                        if (modelName.startsWith('claude-3-sonnet')) {
+                          return 'claude-3-sonnet'
+                        }
+                        if (modelName.startsWith('claude-3-haiku')) {
+                          return 'claude-3-haiku'
+                        }
+                        if (modelName.startsWith('claude-2')) {
+                          return 'claude-2'
+                        }
+                        
+                        // Return the extracted model name or original
+                        return modelName
+                      })()}
+                    </button>
+                    
+                    {/* Function Calling Icon */}
+                    {currentDisplayNode.metadata?.functionCalling && (
+                      <div 
+                        className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"
+                        title="Function Calling enabled"
+                      >
+                        <MagnifyingGlassIcon className="w-3 h-3" />
+                      </div>
+                    )}
+                    
+                    {/* Reasoning Icon */}
+                    {currentDisplayNode.metadata?.reasoning && (
+                      <div 
+                        className="w-5 h-5 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center"
+                        title="Deep reasoning enabled"
+                      >
+                        <BoltIcon className="w-3 h-3" />
+                      </div>
+                    )}
+                  </div>
                   
                   <button
                     onClick={() => copyToClipboard(currentDisplayNode.response!)}

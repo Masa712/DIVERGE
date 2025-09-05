@@ -107,6 +107,7 @@ export const GET = withErrorHandler(async (
     costUsd: node.cost_usd || 0,
     temperature: node.temperature,
     maxTokens: node.max_tokens,
+    metadata: node.metadata || {},  // Include metadata for reasoning/function calling icons
     createdAt: new Date(node.created_at),
     updatedAt: new Date(node.updated_at),
   }))

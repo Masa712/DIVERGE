@@ -254,8 +254,16 @@ Based on these search results and the conversation context, please provide an in
     }, { maxAttempts: 3 })
     
     // Generate AI title for the session if it's the first node (depth = 0 and no parentNodeId)
+    log.info('Title generation check', { 
+      parentNodeId, 
+      depth: chatNode.depth, 
+      shouldGenerateTitle: !parentNodeId && chatNode.depth === 0 
+    })
+    
     if (!parentNodeId && chatNode.depth === 0) {
       try {
+        log.info('Generating AI title for session', { sessionId, userPrompt: userPrompt.substring(0, 50) })
+        
         // Generate title based on user's message and AI's response
         const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/sessions/generate-title`, {
           method: 'POST',
@@ -270,6 +278,7 @@ Based on these search results and the conversation context, please provide an in
 
         if (titleResponse.ok) {
           const { title } = await titleResponse.json()
+          log.info('AI title generated', { title })
           
           // Update session name with AI-generated title
           const supabase = createClient()
@@ -284,9 +293,9 @@ Based on these search results and the conversation context, please provide an in
             .single()
           
           if (updateError) {
-            log.error('Failed to update session name', updateError)
+            log.error('Failed to update session name in database', updateError)
           } else {
-            log.info('Updated session title', { title, verified: updatedSession?.name })
+            log.info('Successfully updated session title', { title, verified: updatedSession?.name })
             
             // Force clear all related caches
             try {
@@ -297,9 +306,16 @@ Based on these search results and the conversation context, please provide an in
               log.warn('Failed to clear query cache', error)
             }
           }
+        } else {
+          log.error('Title generation API failed', { 
+            status: titleResponse.status, 
+            statusText: titleResponse.statusText 
+          })
+          const errorText = await titleResponse.text().catch(() => 'Unknown error')
+          log.error('Title generation error details', { errorText })
         }
       } catch (error) {
-        log.error('Failed to generate AI title', error)
+        log.error('Failed to generate AI title - exception', error)
         // Don't throw - this is a non-critical feature
       }
     }
@@ -452,6 +468,11 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       temperature,
       maxTokens: max_tokens,
       depth,
+      metadata: {
+        reasoning: reasoning && supportsReasoning(model as ModelId),
+        functionCalling: false,  // Normal chat API doesn't use function calling
+        enableWebSearch: false
+      }
     })
   }, { maxAttempts: 3 }).catch(error => {
     throw createAppError(

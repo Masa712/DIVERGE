@@ -312,9 +312,17 @@ export default function ChatSessionPage({ params }: Props) {
                 return prev // Don't update if node was deleted
               }
               
-              // Update only the specific node that was polled
+              // Update only the specific node that was polled, preserving local metadata
               return prev.map(node => 
-                node.id === nodeId ? updatedNode : node
+                node.id === nodeId 
+                  ? {
+                      ...updatedNode,
+                      metadata: {
+                        ...node.metadata,  // Preserve existing metadata
+                        ...updatedNode.metadata  // Merge with any server updates
+                      }
+                    }
+                  : node
               )
             })
             log.info('Node polling completed', { nodeId, status: updatedNode.status })
