@@ -9,7 +9,8 @@ interface AnimatedBackgroundProps {
 
 export function AnimatedBackground({ className = '', opacity = 1 }: AnimatedBackgroundProps) {
   // Generate unique IDs to avoid conflicts when multiple instances exist
-  const uniqueId = React.useMemo(() => Math.random().toString(36).substring(2, 9), [])
+  // Use useState to ensure same ID on server and client (hydration fix)
+  const [uniqueId] = React.useState(() => Math.random().toString(36).substring(2, 9))
   
   return (
     <div className={`fixed inset-0 -z-10 ${className}`} style={{ opacity }}>

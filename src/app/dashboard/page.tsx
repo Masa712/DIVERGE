@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 
 export default function DashboardPage() {
   const { user, loading, signOut } = useAuth()
@@ -27,7 +28,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative min-h-screen">
+      <AnimatedBackground opacity={0.3} />
       <header className="border-b">
         <div className="container mx-auto flex items-center justify-between px-4 py-4">
           <h1 className="text-2xl font-bold">Diverge Dashboard</h1>
