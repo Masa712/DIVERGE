@@ -15,4 +15,4 @@ COMMENT ON COLUMN user_profiles.system_prompt_language IS 'Language preference: 
 COMMENT ON COLUMN user_profiles.system_prompt_format IS 'Output format: markdown, plain, structured';
 COMMENT ON COLUMN user_profiles.system_prompt_specializations IS 'Array of specialization areas';
 COMMENT ON COLUMN user_profiles.custom_instructions IS 'User-defined custom instructions for AI';
-COMMENT ON COLUMN user_profiles.system_prompt_enabled IS 'Whether to use custom system prompt settings';
+COMMENT ON COLUMN user_profiles.system_prompt_enabled IS 'Whether to use custom system prompt settings';a
