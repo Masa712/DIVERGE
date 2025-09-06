@@ -1,0 +1,63 @@
+/* Mobile React Flow Performance Optimizations */
+
+/* Disable expensive visual effects on mobile */
+@media (max-width: 768px) {
+  /* Simplify React Flow rendering */
+  .react-flow__renderer {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    will-change: transform;
+  }
+
+  /* Optimize node transitions */
+  .react-flow__node {
+    will-change: transform;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+
+  /* Disable animation on low-end devices */
+  .react-flow__node-message {
+    transform: none !important;
+  }
+  
+  /* Optimize edge rendering */
+  .react-flow__edge path {
+    will-change: d;
+  }
+
+  /* Reduce shadow complexity */
+  .react-flow__node-message > div {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  /* Disable smooth scrolling on mobile */
+  * {
+    scroll-behavior: auto !important;
+  }
+
+  /* Optimize handle rendering */
+  .react-flow__handle {
+    opacity: 0.8;
+    transform: scale(0.8);
+  }
+}
+
+/* Touch-specific optimizations */
+@media (pointer: coarse) {
+  .react-flow__pane {
+    touch-action: pan-x pan-y;
+  }
+  
+  /* Increase touch targets */
+  .react-flow__node {
+    min-height: 44px;
+  }
+  
+  /* Disable hover effects on touch devices */
+  .react-flow__node:hover {
+    transform: none;
+    box-shadow: inherit;
+  }
+}

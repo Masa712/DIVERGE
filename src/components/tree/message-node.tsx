@@ -37,9 +37,9 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
 
   return (
     <div
-      className={`rounded-lg border-2 p-3 shadow-sm transition-all hover:shadow-md hover:scale-[1.02] ${
+      className={`rounded-lg border-2 p-3 shadow-sm transition-transform will-change-transform ${
         isCurrentNode ? 'border-blue-500 bg-blue-50' : getStatusColor()
-      } ${onNodeClick ? 'cursor-pointer' : ''}`}
+      } ${onNodeClick ? 'cursor-pointer hover:shadow-md hover:scale-[1.02]' : ''}`}
       style={{ minWidth: '250px', maxWidth: '350px' }}
       onClick={() => onNodeClick?.(node.id)}
       title="Click to view full details"

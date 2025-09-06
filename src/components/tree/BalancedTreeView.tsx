@@ -13,6 +13,7 @@ import ReactFlow, {
   ReactFlowProvider,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import './mobile-optimizations.css'
 import { ChatNode } from '@/types'
 import { MessageNode } from './message-node'
 import { CompactTreeLayout, TreeNode } from './CompactTreeLayout'
@@ -330,6 +331,26 @@ function CompactTreeViewInner({
     maxZoom: 1.5,
   }), [])
 
+  // Optimize for mobile devices
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  
+  // Mobile-specific performance settings
+  const mobileOptimizations = useMemo(() => {
+    if (!isMobile) return {}
+    return {
+      elevateNodesOnSelect: false,
+      nodesDraggable: false, // Disable dragging on mobile
+      nodesConnectable: false,
+      elementsSelectable: true,
+      panOnDrag: [1], // Only allow panning with single finger
+      selectNodesOnDrag: false,
+      zoomOnPinch: true,
+      panOnScroll: false,
+      zoomOnScroll: false,
+      zoomOnDoubleClick: false,
+    }
+  }, [isMobile])
+
   return (
     <div className="w-full h-full relative">
       <ReactFlow
@@ -343,10 +364,11 @@ function CompactTreeViewInner({
         fitViewOptions={fitViewOptions}
         attributionPosition="bottom-left"
         className="bg-transparent"
-        minZoom={0.1}
-        maxZoom={2}
-        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        minZoom={isMobile ? 0.5 : 0.1}
+        maxZoom={isMobile ? 1.5 : 2}
+        defaultViewport={{ x: 0, y: 0, zoom: isMobile ? 0.65 : 0.8 }}
         onPaneClick={onBackgroundClick}
+        {...mobileOptimizations}
       >
       </ReactFlow>
     </div>

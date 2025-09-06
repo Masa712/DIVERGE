@@ -255,13 +255,12 @@ export function GlassmorphismChatInput({
         
         {/* Bottom Controls - Outside Input */}
         <div className="flex items-center justify-between mt-1">
-          {/* Left - Plus Button */}
-          <button className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 transition-all duration-200 flex items-center justify-center group">
-            <PlusIcon className="w-4 h-4 text-gray-700 group-hover:text-gray-900" />
-          </button>
-          
-          {/* Right - Web Search Toggle, Model Selector and Send */}
+          {/* Left - Plus Button and Function Controls */}
           <div className="flex items-center space-x-2">
+            <button className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 transition-all duration-200 flex items-center justify-center group">
+              <PlusIcon className="w-4 h-4 text-gray-700 group-hover:text-gray-900" />
+            </button>
+
             {/* Web Search Toggle */}
             <button
               onClick={() => onWebSearchToggle?.(!enableWebSearch)}
@@ -294,7 +293,10 @@ export function GlassmorphismChatInput({
             >
               <BoltIcon className="w-4 h-4" />
             </button>
-            
+          </div>
+          
+          {/* Right - Model Selector and Send */}
+          <div className="flex items-center space-x-2">            
             <ModelSelector
               selectedModel={selectedModel}
               onModelChange={onModelChange}
