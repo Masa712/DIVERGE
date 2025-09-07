@@ -80,7 +80,7 @@ export function SessionList({
                 </div>
               </div>
               {currentSessionId === session.id && (
-                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <div className="w-2 h-2 rounded-full bg-blue-400 group-hover:opacity-0 transition-opacity" />
               )}
             </div>
           </button>
@@ -90,7 +90,7 @@ export function SessionList({
               e.stopPropagation()
               onDeleteSession(session.id)
             }}
-            className="absolute top-2 right-2 p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
+            className="absolute top-1/2 right-2 -translate-y-1/2 p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
             title="Delete session"
           >
             <Trash2 className="w-3 h-3 text-red-600" />

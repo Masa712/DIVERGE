@@ -57,6 +57,7 @@ function CompactTreeViewInner({
   const { fitView, setCenter, getZoom } = useReactFlow()
   const prevNodeCountRef = useRef(0)
   const prevSessionIdRef = useRef<string | null>(null)
+  const isReactFlowInitialized = useRef(false)
 
   // Initialize layout engine
   const layoutEngine = useMemo(() => {
@@ -75,9 +76,9 @@ function CompactTreeViewInner({
     if (isMobile || isTablet) {
       // Mobile/Tablet: Fixed settings for consistent centering
       return {
-        xOffset: 150,     // Consistent with current working values
-        yOffset: 150,     // Consistent with current working values
-        zoom: 0.65,       // Standard zoom for mobile/tablet
+        xOffset: 180,     // Consistent with current working values
+        yOffset: 300,     // Consistent with current working values
+        zoom: 0.8,       // Standard zoom for mobile/tablet
         minZoom: 0.65,    // Minimum zoom level
         duration: 800,    // Animation duration
         device: 'mobile'  // Device type identifier
@@ -221,15 +222,23 @@ function CompactTreeViewInner({
       const currentSessionId = chatNodes[0]?.sessionId || null
       const isSessionChanged = currentSessionId && currentSessionId !== prevSessionIdRef.current
       
-      // Check if this is a new session or if a new node was added
-      if (isSessionChanged) {
-        // New session opened - center on the first/root node
-        log.info('New session opened', { sessionId: currentSessionId })
+      // Also check if this is the first render with nodes (initial load)
+      const isInitialLoad = prevSessionIdRef.current === null && currentSessionId !== null
+      
+      // Check if this is a new session or initial load
+      if (isSessionChanged || isInitialLoad) {
+        // New session opened or initial load - center on the first/root node
+        log.info(isInitialLoad ? 'Initial session load' : 'Session changed', { 
+          sessionId: currentSessionId,
+          isInitialLoad 
+        })
         const rootNode = chatNodes.find(n => n.parentId === null) || chatNodes[0]
         
         if (rootNode && positions.has(rootNode.id)) {
           const position = positions.get(rootNode.id)!
-          setTimeout(() => {
+          
+          // Function to perform centering
+          const performCentering = () => {
             // Get centering settings from centralized function
             const settings = calculateCenteringSettings()
             
@@ -238,7 +247,7 @@ function CompactTreeViewInner({
               position.y + settings.yOffset,
               { 
                 zoom: settings.zoom,
-                duration: settings.duration
+                duration: isInitialLoad ? 0 : settings.duration // No animation on initial load
               }
             )
             
@@ -247,9 +256,25 @@ function CompactTreeViewInner({
               nodeId: rootNode.id,
               device: settings.device,
               offset: { x: settings.xOffset, y: settings.yOffset },
-              zoom: settings.zoom
+              zoom: settings.zoom,
+              isInitialLoad
             })
-          }, 100)
+          }
+          
+          if (isInitialLoad) {
+            // For initial load, wait for React Flow to be initialized
+            const checkAndCenter = () => {
+              if (isReactFlowInitialized.current) {
+                performCentering()
+              } else {
+                setTimeout(checkAndCenter, 100)
+              }
+            }
+            setTimeout(checkAndCenter, 100)
+          } else {
+            // For session changes, center immediately
+            setTimeout(performCentering, 100)
+          }
         }
         
         // Update session ID reference
@@ -351,6 +376,39 @@ function CompactTreeViewInner({
     }
   }, [isMobile])
 
+  // Handle React Flow initialization
+  const handleInit = useCallback(() => {
+    isReactFlowInitialized.current = true
+    log.debug('React Flow initialized')
+    
+    // If we have nodes on initialization, center on the root node
+    // This handles the initial load case (root -> session)
+    if (chatNodes && chatNodes.length > 0 && positionsRef.current.size > 0) {
+      const rootNode = chatNodes.find(n => n.parentId === null) || chatNodes[0]
+      const position = positionsRef.current.get(rootNode.id)
+      
+      if (position) {
+        const settings = calculateCenteringSettings()
+        
+        // Use the exact same setCenter logic as session -> session
+        setCenter(
+          position.x + settings.xOffset,
+          position.y + settings.yOffset,
+          { 
+            zoom: settings.zoom,
+            duration: 0  // No animation on initial load
+          }
+        )
+        
+        log.debug('Initial centering on React Flow init', {
+          nodeId: rootNode.id,
+          position,
+          settings
+        })
+      }
+    }
+  }, [chatNodes, calculateCenteringSettings, setCenter])
+
   return (
     <div className="w-full h-full relative">
       <ReactFlow
@@ -360,14 +418,20 @@ function CompactTreeViewInner({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         connectionLineType={ConnectionLineType.SmoothStep}
-        fitView
+        fitView={false}
         fitViewOptions={fitViewOptions}
         attributionPosition="bottom-left"
         className="bg-transparent"
         minZoom={isMobile ? 0.5 : 0.1}
         maxZoom={isMobile ? 1.5 : 2}
-        defaultViewport={{ x: 0, y: 0, zoom: isMobile ? 0.65 : 0.8 }}
+        // Set a reasonable default to avoid the jump from top-left
+        defaultViewport={{ 
+          x: 900,  // Approximate center position
+          y: 250,  // Approximate center position
+          zoom: 0.8 
+        }}
         onPaneClick={onBackgroundClick}
+        onInit={handleInit}
         {...mobileOptimizations}
       >
       </ReactFlow>

@@ -11,6 +11,7 @@ import { useSidebarResize } from '@/hooks/useSidebarResize'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer'
 import { useAuth } from '@/components/providers/auth-provider'
+import { NodeDeleteConfirmationModal } from './NodeDeleteConfirmationModal'
 
 interface UserProfile {
   display_name?: string
@@ -33,6 +34,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   const [isCommentLoading, setIsCommentLoading] = useState(false)
   const { user } = useAuth()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [nodeToDelete, setNodeToDelete] = useState<string | null>(null)
   
   // Use custom hooks for better separation of concerns
   const { currentDisplayNode, nodeChain, currentNodeIndex, canNavigate, navigate } = useNodeChain(node, allNodes)
@@ -540,11 +542,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                 {canDeleteCurrentNode && (
                   <div className="pt-4 border-t border-white/20">
                     <button
-                      onClick={() => {
-                        if (window.confirm('Are you sure you want to delete this node? This action cannot be undone.')) {
-                          onDeleteNode?.(currentDisplayNode.id)
-                        }
-                      }}
+                      onClick={() => setNodeToDelete(currentDisplayNode.id)}
                       className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors"
                       title="Delete this node (only available if no child nodes exist)"
                     >
@@ -559,6 +557,16 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
         </div>
 
       </div>
+
+      {/* Node Delete Confirmation Modal */}
+      <NodeDeleteConfirmationModal
+        nodeId={nodeToDelete}
+        onConfirm={(nodeId) => {
+          onDeleteNode?.(nodeId)
+          setNodeToDelete(null)
+        }}
+        onCancel={() => setNodeToDelete(null)}
+      />
     </div>
   )
 }

@@ -181,9 +181,6 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
         }`}>
           {node.status}
         </span>
-        {node.costUsd > 0 && (
-          <span className="text-gray-500">${node.costUsd.toFixed(4)}</span>
-        )}
       </div>
 
 
