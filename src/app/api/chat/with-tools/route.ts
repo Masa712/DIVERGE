@@ -63,12 +63,16 @@ async function processAIResponseWithTools(
       log.debug('Enhanced context evaluation', { useEnhancedContext, hasParent: !!parentNodeId })
       
       try {
+        // Extract node references from user prompt
+        const referencedNodes = extractNodeReferences(userPrompt)
+        
         // Build enhanced context using the parent node
         const contextResult = await withRetry(async () => {
           return await buildContextWithStrategy(parentNodeId, userPrompt, {
-            maxTokens: 2000,
+            maxTokens: 8000,  // Further increased to accommodate multiple references
             model: model,
-            includeSiblings: false
+            includeSiblings: false,
+            includeReferences: referencedNodes  // Add node references
           })
         }, { maxAttempts: 2 })
         
@@ -77,7 +81,10 @@ async function processAIResponseWithTools(
           .map(msg => `${msg.role}: ${msg.content}`)
           .join('\n\n') + `\n\nUser: ${userPrompt}`
           
-        log.debug('Enhanced context built', { contextLength: enhancedContext?.length || 0 })
+        log.debug('Enhanced context built', { 
+          contextLength: enhancedContext?.length || 0,
+          referencedNodes: referencedNodes.length 
+        })
       } catch (contextError) {
         log.warn('Failed to build enhanced context', contextError)
         recordError(createAppError(

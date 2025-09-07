@@ -104,10 +104,16 @@ export async function buildFlexibleEnhancedContext(
   // 5. Build messages from selected nodes
   buildMessagesFromSelection(selectionResult.selectedNodes, messages, strategy, model)
   
+  // Update estimated tokens after building messages from selected nodes
+  estimatedTokens = selectionResult.totalTokens
+  
   // 6. Handle explicit references with remaining token budget
   if (includeReferences.length > 0) {
     const remainingTokens = maxTokens - estimatedTokens
+    console.log(`📌 Processing ${includeReferences.length} node references with ${remainingTokens} remaining tokens`)
     await addReferencedContent(sessionId, includeReferences, messages, remainingTokens, model, includedNodes)
+    // Update estimated tokens after adding references
+    estimatedTokens = countMessageTokens(messages, model)
   }
   
   // 7. Add user prompt
@@ -350,10 +356,17 @@ async function addReferencedContent(
   model: string,
   includedNodes: string[]
 ): Promise<void> {
+  console.log(`🔍 Resolving ${references.length} node references for session ${sessionId}`)
   const resolvedRefs = await resolveNodeReferences(sessionId, references)
   
+  let addedCount = 0
   for (const { refId, node: refNode } of resolvedRefs) {
-    if (!refNode || remainingTokens <= 0) break
+    if (!refNode || remainingTokens <= 0) {
+      if (!refNode) {
+        console.log(`⚠️ Could not resolve reference: ${refId}`)
+      }
+      break
+    }
     
     const refContent = `REFERENCE [${refId}]: "${refNode.prompt}" → "${refNode.response || 'No response'}"`
     const refTokens = countTokens(refContent, model)
@@ -362,8 +375,14 @@ async function addReferencedContent(
       messages.push({ role: 'system', content: refContent })
       remainingTokens -= refTokens
       includedNodes.push(refNode.id)
+      addedCount++
+      console.log(`✅ Added reference ${refId} (${refTokens} tokens)`)
+    } else {
+      console.log(`⏭️ Skipping reference ${refId} - insufficient tokens (needs ${refTokens}, has ${remainingTokens})`)
     }
   }
+  
+  console.log(`📌 Added ${addedCount}/${references.length} references to context`)
 }
 
 /**

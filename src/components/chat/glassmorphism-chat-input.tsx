@@ -62,6 +62,7 @@ export function GlassmorphismChatInput({
 }: Props) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [isComposing, setIsComposing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { showError } = useError()
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024)
@@ -95,7 +96,8 @@ export function GlassmorphismChatInput({
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Don't submit if composing (IME conversion in progress)
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
       e.preventDefault()
       handleSubmit()
     }
@@ -233,6 +235,8 @@ export function GlassmorphismChatInput({
             adjustTextareaHeight()
           }}
           onKeyDown={handleKeyDown}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
           onFocus={(e) => {
             e.currentTarget.dataset.wasFocused = 'true'
             onFocusChange?.(true)
