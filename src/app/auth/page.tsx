@@ -117,15 +117,12 @@ function AuthPageContent() {
         </div>
 
         {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-white/60 backdrop-blur-sm rounded-md text-gray-500">
-              Or continue with email
-            </span>
-          </div>
+        <div className="relative flex items-center">
+          <div className="flex-grow border-t border-gray-300"></div>
+          <span className="px-4 text-sm text-gray-500">
+            Or continue with email
+          </span>
+          <div className="flex-grow border-t border-gray-300"></div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
