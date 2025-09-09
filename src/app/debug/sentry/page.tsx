@@ -12,11 +12,24 @@ export default function SentryTestPage() {
 
   const testClientError = () => {
     try {
+      // Check if Sentry is initialized
+      const sentryHub = (window as any).__SENTRY__
+      if (sentryHub) {
+        addResult('✅ Sentry is initialized on client')
+        console.log('Sentry hub:', sentryHub)
+      } else {
+        addResult('⚠️ Sentry may not be initialized')
+      }
+      
       throw new Error('Test client-side error from Sentry debug page')
     } catch (error) {
       reportError(error as Error, {
         feature: 'sentry-test',
-        additionalData: { testType: 'client-error' }
+        additionalData: { 
+          testType: 'client-error',
+          timestamp: new Date().toISOString(),
+          dsn: process.env.NEXT_PUBLIC_SENTRY_DSN ? 'configured' : 'missing'
+        }
       })
       addResult('Client error sent to Sentry')
     }
