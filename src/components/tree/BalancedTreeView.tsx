@@ -68,7 +68,9 @@ function CompactTreeViewInner({
   const positionsRef = useRef<Map<string, { x: number, y: number }>>(new Map())
 
   // Calculate centering settings based on device type and layout state
-  const calculateCenteringSettings = useCallback(() => {
+  // Note: Using a function instead of useCallback to avoid unnecessary re-renders
+  // This function is called on-demand rather than being recreated on dependency changes
+  const calculateCenteringSettings = (overrideRightSidebarWidth?: number) => {
     const screenWidth = window.innerWidth
     const isMobile = screenWidth < 768 // md breakpoint
     const isTablet = screenWidth >= 768 && screenWidth < 1024 // lg breakpoint
@@ -86,7 +88,8 @@ function CompactTreeViewInner({
     } else {
       // Desktop: Dynamic calculation based on sidebar states
       const leftSidebarWidth = isLeftSidebarCollapsed ? 94 : 410
-      const rightSidebarWidth_actual = isRightSidebarOpen ? (rightSidebarWidth + 30) : 0
+      const actualRightSidebarWidth = overrideRightSidebarWidth !== undefined ? overrideRightSidebarWidth : rightSidebarWidth
+      const rightSidebarWidth_actual = isRightSidebarOpen ? (actualRightSidebarWidth + 30) : 0
       
       // Calculate the center of the available content area
       const availableWidth = screenWidth - leftSidebarWidth - rightSidebarWidth_actual
@@ -115,7 +118,7 @@ function CompactTreeViewInner({
         }
       }
     }
-  }, [isLeftSidebarCollapsed, isRightSidebarOpen, rightSidebarWidth])
+  }
 
   // Convert ChatNodes to TreeNodes
   const convertToTreeNodes = useCallback((chatNodes: ChatNode[]): TreeNode[] => {
@@ -326,7 +329,7 @@ function CompactTreeViewInner({
       setNodes([])
       setEdges([])
     }
-  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, handleNodeClick, setCenter, getZoom, calculateCenteringSettings])
+  }, [chatNodes, currentNodeId, layoutEngine, convertToTreeNodes, handleNodeClick, setCenter, getZoom, isLeftSidebarCollapsed, isRightSidebarOpen])
 
   // Check if a node is in the current path
   const isCurrentPath = useCallback((nodeId: string, currentNodeId: string | undefined, nodes: ChatNode[]): boolean => {
@@ -347,7 +350,69 @@ function CompactTreeViewInner({
     return currentPath.has(nodeId)
   }, [])
 
-
+  // Handle sidebar width changes without re-rendering nodes
+  // This effect only adjusts the view position when right sidebar width changes
+  useEffect(() => {
+    // Skip if we don't have positions or nodes
+    if (!positionsRef.current || positionsRef.current.size === 0) return
+    
+    // Skip initial render and only respond to actual width changes
+    if (rightSidebarWidth === 400) return // Default width, skip
+    
+    // If we have a current node, re-center on it with new width
+    if (currentNodeId && positionsRef.current.has(currentNodeId)) {
+      const position = positionsRef.current.get(currentNodeId)!
+      const currentZoom = getZoom()
+      
+      // ===== 右サイドバー専用の調整設定 =====
+      // ここで独立した微調整が可能です
+      const screenWidth = window.innerWidth
+      const isMobile = screenWidth < 768
+      
+      if (isMobile) {
+        // モバイルでは調整不要
+        return
+      }
+      
+      // デスクトップ用の専用計算
+      const leftSidebarWidth = isLeftSidebarCollapsed ? 94 : 410
+      const rightSidebarWidth_actual = isRightSidebarOpen ? (rightSidebarWidth + 30) : 0
+      
+      // 利用可能な表示領域
+      const availableWidth = screenWidth - leftSidebarWidth - rightSidebarWidth_actual
+      const contentAreaCenterX = leftSidebarWidth + (availableWidth / 2)
+      const screenCenterX = screenWidth / 2
+      const pixelOffsetNeeded = contentAreaCenterX - screenCenterX
+      
+      // ===== カスタム調整パラメータ =====
+      // これらの値を変更して微調整できます
+      const customXAdjustment = 95  // X軸の追加調整値（正の値で右へ、負の値で左へ）
+      const customYAdjustment = 0  // Y軸の追加調整値（正の値で下へ、負の値で上へ）
+      const customDuration = 200   // アニメーション時間（ミリ秒）
+      const maintainZoom = true    // ズームレベルを維持するか
+      
+      // 最終的なオフセット計算
+      const xOffset = 140 + (-pixelOffsetNeeded) + customXAdjustment
+      const yOffset = 250 + customYAdjustment
+      
+      // Smoothly adjust view position without re-rendering nodes
+      setCenter(
+        position.x + xOffset,
+        position.y + yOffset,
+        { 
+          zoom: maintainZoom ? currentZoom : 0.8, // ズーム制御
+          duration: customDuration
+        }
+      )
+      
+      log.debug('Adjusted view for sidebar width change (custom)', {
+        rightSidebarWidth,
+        nodeId: currentNodeId,
+        offset: { x: xOffset, y: yOffset },
+        customAdjustments: { x: customXAdjustment, y: customYAdjustment }
+      })
+    }
+  }, [rightSidebarWidth, currentNodeId, getZoom, setCenter, isLeftSidebarCollapsed, isRightSidebarOpen]) // Only react to sidebar width changes
 
   const fitViewOptions = useMemo(() => ({
     padding: 0.2,
