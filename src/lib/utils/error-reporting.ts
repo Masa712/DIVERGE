@@ -104,42 +104,46 @@ export function withSentryPerformance<T>(
   fn: () => Promise<T>,
   context?: ErrorContext
 ): Promise<T> {
-  const transaction = Sentry.startTransaction({
-    name: operation,
-    op: 'api'
-  })
-
-  // Add context to transaction
-  if (context?.feature) {
-    transaction.setTag('feature', context.feature)
-  }
-  if (context?.model) {
-    transaction.setTag('model', context.model)
-  }
-
-  return fn()
-    .then((result) => {
-      transaction.setStatus('ok')
-      return result
-    })
-    .catch((error) => {
-      transaction.setStatus('internal_error')
-      reportError(error, { ...context, feature: operation })
-      throw error
-    })
-    .finally(() => {
-      transaction.finish()
-    })
+  // Use the new Sentry v8 API with startSpan
+  return Sentry.startSpan(
+    {
+      name: operation,
+      op: 'api',
+      attributes: {
+        feature: context?.feature || '',
+        model: context?.model || ''
+      }
+    },
+    async () => {
+      try {
+        const result = await fn()
+        Sentry.setTag('status', 'success')
+        return result
+      } catch (error) {
+        Sentry.setTag('status', 'error')
+        reportError(error as Error, { ...context, feature: operation })
+        throw error
+      }
+    }
+  )
 }
 
 /**
  * Capture user feedback for errors
  */
 export function captureUserFeedback(eventId: string, name: string, email: string, comments: string) {
-  Sentry.captureUserFeedback({
-    event_id: eventId,
-    name,
-    email,
-    comments
+  // User feedback is now handled through the User Feedback Widget
+  // or can be sent as a custom event
+  Sentry.captureMessage('User Feedback', {
+    tags: {
+      type: 'user_feedback',
+      event_id: eventId
+    },
+    extra: {
+      name,
+      email,
+      comments,
+      event_id: eventId
+    }
   })
 }
