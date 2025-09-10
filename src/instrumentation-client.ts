@@ -19,11 +19,12 @@ Sentry.init({
 
   // You can remove this option if you're not planning to use the Sentry Session Replay feature:
   integrations: [
-    new Sentry.replayIntegration({
-      // Additional Replay configuration goes in here, for example:
-      maskAllText: true,
-      blockAllMedia: true,
-    }),
+    // Temporarily disable replay integration to avoid errors
+    // new Sentry.replayIntegration({
+    //   // Additional Replay configuration goes in here, for example:
+    //   maskAllText: true,
+    //   blockAllMedia: true,
+    // }),
   ],
 
   // Performance monitoring

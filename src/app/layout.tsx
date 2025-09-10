@@ -2,6 +2,9 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { ErrorProvider } from '@/components/providers/error-provider'
+import { PostHogProvider } from '@/lib/posthog/client'
+import { PageViewTracker } from '@/lib/posthog/pageview-tracker'
+import { Suspense } from 'react'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -21,7 +24,12 @@ export default function RootLayout({
       <body className={inter.className}>
         <ErrorProvider>
           <AuthProvider>
-            {children}
+            <PostHogProvider>
+              <Suspense fallback={null}>
+                <PageViewTracker />
+              </Suspense>
+              {children}
+            </PostHogProvider>
           </AuthProvider>
         </ErrorProvider>
       </body>

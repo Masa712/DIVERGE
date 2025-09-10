@@ -10,6 +10,17 @@ const nextConfig = {
       config.externals = [...(config.externals || []), 'tiktoken']
     }
     
+    // Prevent posthog-node from being bundled on the client side
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+      }
+    }
+    
     return config
   },
 }
