@@ -18,7 +18,6 @@ export async function GET() {
     debug: {
       nodeVersion: process.version,
       nextVersion: require('next/package.json').version,
-      posthogVersion: require('posthog-node/package.json').version,
     }
   }
 
