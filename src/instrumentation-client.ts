@@ -9,8 +9,17 @@ Sentry.init({
   // Adjust this value based on environment
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
-  // Enable debug only in development
-  debug: process.env.NODE_ENV === 'development',
+  // Disable debug to keep console clean
+  debug: false,
+
+  // Block events in development
+  beforeSend(event, hint) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Sentry client event blocked in development:', event.event_id)
+      return null // Don't send to Sentry in development
+    }
+    return event // Send to Sentry in production only
+  },
 
   replaysOnErrorSampleRate: 1.0,
 

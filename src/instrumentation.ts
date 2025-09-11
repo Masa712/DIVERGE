@@ -9,16 +9,17 @@ export async function register() {
       // Adjust this value based on environment
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
       
-      // Enable debug only in development
-      debug: process.env.NODE_ENV === 'development',
+      // Disable debug in development to reduce console noise
+      debug: false,
       
       // Performance monitoring
       beforeSend(event, hint) {
-        // Filter out development errors
+        // Block all events in development to keep logs clean
         if (process.env.NODE_ENV === 'development') {
-          console.log('Sentry server event (dev):', event)
+          console.log('Sentry event blocked in development:', event.event_id)
+          return null // Don't send to Sentry in development
         }
-        return event
+        return event // Send to Sentry in production only
       },
       
       // Environment configuration
@@ -45,7 +46,7 @@ export async function register() {
     init({
       dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-      debug: process.env.NODE_ENV === 'development',
+      debug: false,
       environment: process.env.NODE_ENV || 'development',
       
       initialScope: {
