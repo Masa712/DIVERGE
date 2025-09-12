@@ -150,7 +150,7 @@ webpack: (config, { isServer }) => {
 NEXT_PUBLIC_SENTRY_DSN=https://dc73f8c1e7fd8bdb4da53b92fdf91b87@o4509988325621760.ingest.us.sentry.io/4509988333289472
 SENTRY_ORG=visionary-addiction
 SENTRY_PROJECT=diverge-nextjs
-SENTRY_AUTH_TOKEN=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
+SENTRY_AUTH_TOKEN=your_sentry_auth_token
 
 # PostHog
 NEXT_PUBLIC_POSTHOG_KEY=phc_zeDapnrZoFaX3PdqbEcLh7f6HB5JbK5x3iC5Gq1wVsF
