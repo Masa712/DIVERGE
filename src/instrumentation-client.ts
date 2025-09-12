@@ -36,15 +36,6 @@ Sentry.init({
     // }),
   ],
 
-  // Performance monitoring
-  beforeSend(event, hint) {
-    // Filter out development errors
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Sentry event (dev):', event)
-    }
-    return event
-  },
-
   // Environment configuration
   environment: process.env.NODE_ENV || 'development',
 
