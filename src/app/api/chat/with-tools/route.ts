@@ -60,7 +60,12 @@ async function processAIResponseWithTools(
     // Check if we should use enhanced context and have parentNodeId
     let enhancedContext = null
     if (useEnhancedContext && parentNodeId) {
-      log.debug('Enhanced context evaluation', { useEnhancedContext, hasParent: !!parentNodeId })
+      log.debug('Enhanced context evaluation', { 
+        useEnhancedContext, 
+        hasParent: !!parentNodeId, 
+        parentNodeId,
+        userPromptPreview: userPrompt.substring(0, 100) 
+      })
       
       try {
         // Extract node references from user prompt
@@ -81,12 +86,14 @@ async function processAIResponseWithTools(
           .map(msg => `${msg.role}: ${msg.content}`)
           .join('\n\n') + `\n\nUser: ${userPrompt}`
           
-        log.debug('Enhanced context built', { 
+        log.debug('Enhanced context built successfully', { 
           contextLength: enhancedContext?.length || 0,
-          referencedNodes: referencedNodes.length 
+          referencedNodes: referencedNodes.length,
+          contextMessagesCount: contextResult.messages.length,
+          contextPreview: enhancedContext.substring(0, 200) + '...'
         })
       } catch (contextError) {
-        log.warn('Failed to build enhanced context', contextError)
+        log.error('Failed to build enhanced context', contextError)
         recordError(createAppError(
           'Enhanced context generation failed',
           ErrorCategory.EXTERNAL_API,
@@ -94,18 +101,25 @@ async function processAIResponseWithTools(
         ))
       }
     } else {
-      log.debug('Enhanced context skipped', { useEnhancedContext })
+      log.debug('Enhanced context skipped', { 
+        useEnhancedContext, 
+        hasParentNodeId: !!parentNodeId,
+        parentNodeId 
+      })
     }
 
     // Check if we should use function calling
     // Use tools when web search is explicitly enabled by user (not dependent on keywords)
     const shouldUseTools = enableWebSearch
     
-    log.info('Function calling evaluation', { 
+    log.debug('Function calling evaluation', { 
       shouldUseTools, 
       model, 
       enableWebSearch,
-      tavilyConfigured: !!process.env.TAVILY_API_KEY
+      tavilyConfigured: !!process.env.TAVILY_API_KEY,
+      hasEnhancedContext: !!enhancedContext,
+      parentNodeId,
+      userPromptPreview: userPrompt.substring(0, 100)
     })
 
     // Use tools if detected or fallback to normal chat
@@ -124,9 +138,21 @@ async function processAIResponseWithTools(
       openRouterClient = new OpenRouterClient()
 
       // Build the request body for function calling
+      const currentDate = new Date().toISOString().split('T')[0]
+      const messagesWithDateContext = enhancedContext 
+        ? [
+            { role: 'system', content: `Current date: ${currentDate}. Use this as reference for time-related queries.` },
+            ...messages.slice(0, -1), 
+            { role: 'user', content: enhancedContext }
+          ]
+        : [
+            { role: 'system', content: `Current date: ${currentDate}. Use this as reference for time-related queries.` },
+            ...messages
+          ]
+      
       const requestBody: any = {
         model,
-        messages: enhancedContext ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }] : messages,
+        messages: messagesWithDateContext,
         temperature,
         max_tokens,
         tools: [
@@ -134,13 +160,13 @@ async function processAIResponseWithTools(
             type: 'function',
             function: {
               name: 'tavily_search_results_json',
-              description: 'A search engine optimized for comprehensive, accurate, and trusted results. Useful for when you need to answer questions about current events. Input should be a search query.',
+              description: `A search engine optimized for comprehensive, accurate, and trusted results. Useful for when you need to answer questions about current events. IMPORTANT: Current date is ${new Date().toISOString().split('T')[0]}. When generating search queries, use this current date as reference for recent time periods (last week, recently, etc.) rather than outdated dates from training data.`,
               parameters: {
                 type: 'object',
                 properties: {
                   query: {
                     type: 'string',
-                    description: 'The search query to execute'
+                    description: `The search query to execute. When the user asks about recent events (last week, recently, etc.), calculate the correct dates based on current date: ${new Date().toISOString().split('T')[0]}. Do not use outdated dates from training data.`
                   }
                 },
                 required: ['query']
@@ -182,16 +208,38 @@ async function processAIResponseWithTools(
             if (toolCall.function.name === 'tavily_search_results_json') {
               try {
                 const searchQuery = JSON.parse(toolCall.function.arguments).query
-                log.info('Executing web search', { query: searchQuery })
+                log.debug('Executing web search', { 
+                  query: searchQuery,
+                  parentNodeId,
+                  hasEnhancedContext: !!enhancedContext,
+                  enhancedContextLength: enhancedContext?.length || 0
+                })
                 
                 const searchResults = await tavilyClient.search(searchQuery, { maxResults: 5 })
+                
+                // Add current date context to help the model understand timing
+                const currentDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+                const enhancedSearchResults = {
+                  ...searchResults,
+                  search_metadata: {
+                    query: searchQuery,
+                    search_date: currentDate,
+                    note: `These search results are from ${currentDate}. Please use this date as reference for "current" or "recent" events.`
+                  }
+                }
+                
                 toolResults.push({
                   tool_call_id: toolCall.id,
                   role: 'tool',
-                  content: JSON.stringify(searchResults)
+                  content: JSON.stringify(enhancedSearchResults)
                 })
                 
-                log.debug('Web search completed', { resultsCount: searchResults?.results?.length || 0 })
+                log.debug('Web search completed successfully', { 
+                  resultsCount: searchResults?.results?.length || 0,
+                  searchDate: currentDate,
+                  toolCallId: toolCall.id,
+                  enhancedSearchResultsLength: JSON.stringify(enhancedSearchResults).length
+                })
               } catch (searchError) {
                 log.error('Web search failed', searchError)
                 toolResults.push({
@@ -205,11 +253,36 @@ async function processAIResponseWithTools(
 
           if (toolResults.length > 0) {
             // Make a second call with the tool results
+            // Use enhanced context messages if available, same as initial request
+            const baseMessages = enhancedContext ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }] : messages
+            
+            log.debug('Preparing follow-up call with search results', {
+              hasEnhancedContext: !!enhancedContext,
+              enhancedContextLength: enhancedContext?.length || 0,
+              baseMessagesCount: baseMessages.length,
+              toolResultsCount: toolResults.length,
+              parentNodeId
+            })
+            
+            // Add system message with current date context to help with temporal awareness
+            const currentDate = new Date().toISOString().split('T')[0]
+            const systemMessage = {
+              role: 'system',
+              content: `Current date: ${currentDate}. When referencing search results, use this date as the baseline for "today", "recent", "current", or "latest" information. Avoid referencing outdated time periods from your training data when discussing current events.`
+            }
+            
             const followUpMessages = [
-              ...messages,
+              systemMessage,
+              ...baseMessages,
               response.choices[0].message,
               ...toolResults
             ]
+            
+            log.debug('Follow-up messages prepared', {
+              totalMessagesCount: followUpMessages.length,
+              systemMessageAdded: true,
+              finalMessagePreview: followUpMessages[followUpMessages.length - 1].content?.substring(0, 200) || 'No content'
+            })
 
             const followUpBody: any = {
               model,

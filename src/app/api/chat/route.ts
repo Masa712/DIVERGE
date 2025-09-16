@@ -55,28 +55,12 @@ async function processAIResponseInBackground(
     })
     
     if (enableWebSearch && tavilyClient.isConfigured()) {
-      // Keywords that typically indicate need for current information (English and Japanese)
-      const searchKeywords = [
-        // English keywords
-        'latest', 'current', 'today', 'now', 'recent', 'news', 
-        'update', '2024', '2025', 'what is happening', 'real-time',
-        'price', 'weather', 'score', 'result',
-        // Japanese keywords
-        '最新', '現在', '今日', '今', '最近', 'ニュース', 'ニューズ',
-        'アップデート', '更新', '何が起きて', 'リアルタイム',
-        '価格', '値段', '天気', '天候', 'スコア', '結果', '情報'
-      ]
+      // When web search is enabled, always perform search for all queries
+      log.info('Web search enabled, performing search for query', { query: userPrompt.substring(0, 100) + '...' })
       
-      const needsSearch = searchKeywords.some(keyword => 
-        userPrompt.toLowerCase().includes(keyword)
-      ) || userPrompt.includes('?')
-      
-      log.info('Web search decision', { needsSearch, hasQuestion: userPrompt.includes('?') })
-      
-      if (needsSearch) {
-        try {
-          log.info('Performing web search for query', { query: userPrompt })
-          const searchResults = await tavilyClient.search(userPrompt, {
+      try {
+        log.info('Performing web search for query', { query: userPrompt })
+        const searchResults = await tavilyClient.search(userPrompt, {
             maxResults: 3,
             includeAnswer: true,
             searchDepth: 'basic'
