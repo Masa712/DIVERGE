@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -16,7 +16,7 @@ import 'reactflow/dist/style.css'
 import './mobile-optimizations.css'
 import { ChatNode } from '@/types'
 import { MessageNode } from './message-node'
-import { CompactTreeLayout, TreeNode } from './CompactTreeLayout'
+import { CompactTreeLayout, TreeNode, NodePosition } from './CompactTreeLayout'
 import { log } from '@/lib/utils/logger'
 
 interface Props {
@@ -41,6 +41,33 @@ const COMPACT_LAYOUT_CONFIG = {
   minSubtreeSpacing: 150,
 }
 
+// 統一されたサイドバー定数（実際のCSS値と一致）
+const SIDEBAR_CONSTANTS = {
+  LEFT_SIDEBAR_EXPANDED: 350,   // lg:w-[350px] - 展開時の実際の幅
+  LEFT_SIDEBAR_COLLAPSED: 64,   // w-16 - 折りたたみ時の実際の幅（16 * 4px = 64px）
+  LEFT_SIDEBAR_MARGIN: 30,      // left-[30px] - 左マージン
+  RIGHT_SIDEBAR_MARGIN: 30,     // right-[30px] - 右マージン
+  BASE_X_OFFSET: 0,            // ベースX軸オフセット
+  BASE_Y_OFFSET: 0,            // ベースY軸オフセット
+  CUSTOM_X_ADJUSTMENT: 0,      // カスタムX軸調整値
+  ANIMATION_DURATION: 800,     // アニメーション時間
+  MOBILE_BREAKPOINT: 768,      // モバイル判定のブレークポイント
+  TABLET_BREAKPOINT: 1024,     // タブレット判定のブレークポイント
+} as const
+
+// センタリング用定数
+const CENTERING_CONSTANTS = {
+  NODE_WIDTH: 280,             // ノードの幅（COMPACT_LAYOUT_CONFIG.nodeWidth）
+  NODE_HEIGHT: 100,            // ノードの概算高さ
+  X_ADJUSTMENT: -25,           // X軸の微調整値（負の値で左に移動）
+  Y_ADJUSTMENT: -150,          // Y軸の微調整値（負の値で上に移動、正の値で下に移動）
+  // モバイル/タブレット用の微調整値
+  MOBILE_X_ADJUSTMENT: -20,      // モバイル用X軸の微調整値（負の値で左、正の値で右）
+  MOBILE_Y_ADJUSTMENT: -180,    // モバイル用Y軸の微調整値（負の値で上、正の値で下）
+  TABLET_X_ADJUSTMENT: -20,      // タブレット用X軸の微調整値（負の値で左、正の値で右）
+  TABLET_Y_ADJUSTMENT: -180,    // タブレット用Y軸の微調整値（負の値で上、正の値で下）
+} as const
+
 // Inner component that uses ReactFlow hooks
 function CompactTreeViewInner({ 
   nodes: chatNodes, 
@@ -50,75 +77,110 @@ function CompactTreeViewInner({
   onBackgroundClick,
   isLeftSidebarCollapsed = false,
   isRightSidebarOpen = false,
-  rightSidebarWidth = 400
+  rightSidebarWidth = SIDEBAR_CONSTANTS.RIGHT_SIDEBAR_DEFAULT_WIDTH
 }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const { fitView, setCenter, getZoom } = useReactFlow()
-  const prevNodeCountRef = useRef(0)
+  const { fitView, setCenter, getZoom, setViewport, getNodes } = useReactFlow()
+  const layoutEngine = useRef(new CompactTreeLayout(COMPACT_LAYOUT_CONFIG))
+  const positionsRef = useRef<Map<string, NodePosition>>(new Map())
   const prevSessionIdRef = useRef<string | null>(null)
+  const prevNodeCountRef = useRef<number>(0)
   const isReactFlowInitialized = useRef(false)
 
-  // Initialize layout engine
-  const layoutEngine = useMemo(() => {
-    return new CompactTreeLayout(COMPACT_LAYOUT_CONFIG)
-  }, [])
-  
-  // Store positions for centering when clicking nodes
-  const positionsRef = useRef<Map<string, { x: number, y: number }>>(new Map())
-
-  // Calculate centering settings based on device type and layout state
-  // Note: Using a function instead of useCallback to avoid unnecessary re-renders
-  // This function is called on-demand rather than being recreated on dependency changes
-  const calculateCenteringSettings = (overrideRightSidebarWidth?: number) => {
-    const screenWidth = window.innerWidth
-    const isMobile = screenWidth < 768 // md breakpoint
-    const isTablet = screenWidth >= 768 && screenWidth < 1024 // lg breakpoint
-
-    if (isMobile || isTablet) {
-      // Mobile/Tablet: Fixed settings for consistent centering
-      return {
-        xOffset: 180,     // Consistent with current working values
-        yOffset: 300,     // Consistent with current working values
-        zoom: 0.8,       // Standard zoom for mobile/tablet
-        minZoom: 0.65,    // Minimum zoom level
-        duration: 800,    // Animation duration
-        device: 'mobile'  // Device type identifier
-      }
-    } else {
-      // Desktop: Dynamic calculation based on sidebar states
-      const leftSidebarWidth = isLeftSidebarCollapsed ? 94 : 410
-      const actualRightSidebarWidth = overrideRightSidebarWidth !== undefined ? overrideRightSidebarWidth : rightSidebarWidth
-      const rightSidebarWidth_actual = isRightSidebarOpen ? (actualRightSidebarWidth + 30) : 0
-      
-      // Calculate the center of the available content area
-      const availableWidth = screenWidth - leftSidebarWidth - rightSidebarWidth_actual
-      const contentAreaCenterX = leftSidebarWidth + (availableWidth / 2)
-      const screenCenterX = screenWidth / 2
-      const pixelOffsetNeeded = contentAreaCenterX - screenCenterX
-      const reactFlowOffsetX = pixelOffsetNeeded * -1
-      
-      return {
-        xOffset: 140 + reactFlowOffsetX,  // Dynamic offset for desktop
-        yOffset: 250,                     // Desktop Y offset
-        zoom: 0.8,                        // Desktop zoom
-        minZoom: 0.8,                     // Desktop minimum zoom
-        duration: 800,                    // Animation duration
-        device: 'desktop',                // Device type identifier
-        // Debug info for desktop
-        debugInfo: {
-          screenWidth,
-          leftSidebarWidth,
-          rightSidebarWidth_actual,
-          availableWidth,
-          contentAreaCenterX,
-          screenCenterX,
-          pixelOffsetNeeded,
-          reactFlowOffsetX
-        }
-      }
+  // Helper function to get actual node position (from positions map or React Flow nodes)
+  const getActualNodePosition = useCallback((nodeId: string) => {
+    // First try to get from positions map
+    const mapPosition = positionsRef.current.get(nodeId)
+    if (mapPosition) {
+      return { x: mapPosition.x, y: mapPosition.y }
     }
-  }
+    
+    // Fallback to React Flow nodes
+    const node = getNodes().find(n => n.id === nodeId)
+    if (node) {
+      return node.position
+    }
+    
+    return { x: 0, y: 0 }
+  }, [getNodes])
+
+  // Unified centering calculation function
+  const calculateCenteringViewport = useCallback((params: {
+    nodePosition: { x: number, y: number }
+    contentCenterX: number
+    contentCenterY: number
+    zoom: number
+    isMobile?: boolean
+    isTablet?: boolean
+  }) => {
+    const { nodePosition, contentCenterX, contentCenterY, zoom, isMobile = false, isTablet = false } = params
+    
+     // モバイル・タブレット用の固定オフセット
+     if (isMobile || isTablet) {
+       // デバイスに応じた微調整値を使用
+       const xAdjustment = isMobile 
+         ? CENTERING_CONSTANTS.MOBILE_X_ADJUSTMENT 
+         : CENTERING_CONSTANTS.TABLET_X_ADJUSTMENT
+       const yAdjustment = isMobile 
+         ? CENTERING_CONSTANTS.MOBILE_Y_ADJUSTMENT 
+         : CENTERING_CONSTANTS.TABLET_Y_ADJUSTMENT
+       
+       // モバイル用の適切なセンタリング計算
+       // デスクトップと同じノード幅・高さを使用（レイアウトエンジンの計算と一致させる）
+       const nodeWidth = CENTERING_CONSTANTS.NODE_WIDTH
+       const nodeHeight = CENTERING_CONSTANTS.NODE_HEIGHT
+       
+       const newX = contentCenterX - (nodePosition.x + nodeWidth / 2) * zoom + xAdjustment
+       const newY = contentCenterY - (nodePosition.y + nodeHeight / 2) * zoom + yAdjustment
+      
+      console.log('📱 Mobile/Tablet Centering:', {
+        device: isMobile ? 'mobile' : 'tablet',
+        nodePosition,
+        contentCenterX,
+        contentCenterY,
+        zoom,
+        adjustments: { x: xAdjustment, y: yAdjustment },
+        calculation: {
+          nodeWidth,
+          nodeHeight,
+          nodeCenterX: nodePosition.x + nodeWidth / 2,
+          nodeCenterY: nodePosition.y + nodeHeight / 2,
+          baseX: contentCenterX - (nodePosition.x + nodeWidth / 2) * zoom,
+          baseY: contentCenterY - (nodePosition.y + nodeHeight / 2) * zoom
+        },
+        calculatedViewport: { x: newX, y: newY }
+      })
+      
+      return { x: newX, y: newY }
+    }
+    
+    // デスクトップ用の計算
+    const newX = contentCenterX - (nodePosition.x + CENTERING_CONSTANTS.NODE_WIDTH / 2) * zoom + CENTERING_CONSTANTS.X_ADJUSTMENT
+    const newY = contentCenterY - (nodePosition.y + CENTERING_CONSTANTS.NODE_HEIGHT / 2) * zoom + CENTERING_CONSTANTS.Y_ADJUSTMENT
+    
+    // デバッグログを追加
+    console.log('🎯 Desktop Centering Function Called:', {
+      nodePosition,
+      contentCenterX,
+      contentCenterY,
+      zoom,
+      X_ADJUSTMENT: CENTERING_CONSTANTS.X_ADJUSTMENT,
+      Y_ADJUSTMENT: CENTERING_CONSTANTS.Y_ADJUSTMENT,
+      calculatedViewport: { x: newX, y: newY },
+      calculation: {
+        baseX: contentCenterX - (nodePosition.x + CENTERING_CONSTANTS.NODE_WIDTH / 2) * zoom,
+        baseY: contentCenterY - (nodePosition.y + CENTERING_CONSTANTS.NODE_HEIGHT / 2) * zoom,
+        xAdjustmentApplied: CENTERING_CONSTANTS.X_ADJUSTMENT,
+        yAdjustmentApplied: CENTERING_CONSTANTS.Y_ADJUSTMENT,
+        finalX: newX,
+        finalY: newY
+      }
+    })
+    
+    return { x: newX, y: newY }
+  }, [])
+
 
   // Convert ChatNodes to TreeNodes
   const convertToTreeNodes = useCallback((chatNodes: ChatNode[]): TreeNode[] => {
@@ -130,12 +192,86 @@ function CompactTreeViewInner({
     }))
   }, [])
   
-  // Node click handler (without centering)
+  // Node click handler (with centering on mobile/tablet)
   const handleNodeClick = useCallback((nodeId: string) => {
-    // Call original handler only - no centering on click
+    // Call original handler
     onNodeClick?.(nodeId)
     log.debug('Node clicked', { nodeId })
-  }, [onNodeClick])
+    
+    // Center on clicked node for mobile/tablet devices
+    const screenWidth = window.innerWidth
+    const isMobile = screenWidth < SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT
+    const isTablet = screenWidth >= SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT && screenWidth < SIDEBAR_CONSTANTS.TABLET_BREAKPOINT
+    
+    // Debug device detection
+    console.log('🔍 Node Click Device Detection:', {
+      screenWidth,
+      isMobile,
+      isTablet,
+      mobileBreakpoint: SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT,
+      tabletBreakpoint: SIDEBAR_CONSTANTS.TABLET_BREAKPOINT,
+      willCenter: isMobile || isTablet
+    })
+    
+    if (isMobile || isTablet) {
+       // Get node position
+       const position = getActualNodePosition(nodeId)
+       if (position) {
+         const currentZoom = getZoom()
+         // モバイル・タブレット用のズーム設定（固定値を使用して一貫性を保つ）
+         const zoom = isMobile ? 0.6 : 0.8  // タブレットも固定値0.8を使用
+        
+        // Calculate content center for mobile/tablet
+        const screenHeight = window.innerHeight
+        const contentCenterX = screenWidth / 2
+        const contentCenterY = screenHeight / 2
+        
+        // Use unified centering function
+        const viewport = calculateCenteringViewport({
+          nodePosition: position,
+          contentCenterX,
+          contentCenterY,
+          zoom,
+          isMobile,
+          isTablet
+        })
+        
+        // タブレットの調整値を確認
+        console.log('🎯 Tablet Tap Centering Debug:', {
+          device: isTablet ? 'tablet' : 'mobile',
+          adjustments: {
+            x: isTablet ? CENTERING_CONSTANTS.TABLET_X_ADJUSTMENT : CENTERING_CONSTANTS.MOBILE_X_ADJUSTMENT,
+            y: isTablet ? CENTERING_CONSTANTS.TABLET_Y_ADJUSTMENT : CENTERING_CONSTANTS.MOBILE_Y_ADJUSTMENT
+          },
+          calculatedViewport: viewport,
+          nodePosition: position,
+          contentCenter: { x: contentCenterX, y: contentCenterY }
+        })
+        
+        // Apply centering with smooth animation
+        setViewport({
+          x: viewport.x,
+          y: viewport.y,
+          zoom: zoom
+        }, { duration: SIDEBAR_CONSTANTS.ANIMATION_DURATION })
+        
+        log.debug('Centered on clicked node', {
+          nodeId,
+          device: isMobile ? 'mobile' : 'tablet',
+          zoom: zoom,
+          currentZoom,
+          viewportCalculation: {
+            screenWidth,
+            screenHeight,
+            contentCenterX,
+            contentCenterY,
+            nodePosition: position,
+            calculatedViewport: { x: viewport.x, y: viewport.y }
+          }
+        })
+      }
+    }
+  }, [onNodeClick, getActualNodePosition, getZoom, calculateCenteringViewport, setViewport])
 
   // Convert chat nodes to React Flow nodes and edges with balanced layout
   useEffect(() => {
@@ -152,7 +288,7 @@ function CompactTreeViewInner({
       const treeNodes = convertToTreeNodes(chatNodes)
       
       // Calculate positions using compact layout
-      const positions = layoutEngine.calculateLayout(treeNodes)
+      const positions = layoutEngine.current.calculateLayout(treeNodes)
       
       // Store positions for later use
       positionsRef.current = positions
@@ -170,7 +306,7 @@ function CompactTreeViewInner({
         if (!chatNode) return
 
         const isCurrentNode = nodeId === currentNodeId
-        const subtreeWidth = layoutEngine.getSubtreeWidth(nodeId)
+        const subtreeWidth = layoutEngine.current.getSubtreeWidth(nodeId)
 
         reactFlowNodes.push({
           id: nodeId,
@@ -237,30 +373,76 @@ function CompactTreeViewInner({
         })
         const rootNode = chatNodes.find(n => n.parentId === null) || chatNodes[0]
         
-        if (rootNode && positions.has(rootNode.id)) {
-          const position = positions.get(rootNode.id)!
+        if (rootNode && (positions.has(rootNode.id) || getNodes().find(n => n.id === rootNode.id))) {
+          const position = getActualNodePosition(rootNode.id)
           
           // Function to perform centering
           const performCentering = () => {
-            // Get centering settings from centralized function
-            const settings = calculateCenteringSettings()
+            // ズーム設定
+            const zoom = 0.8
             
-            setCenter(
-              position.x + settings.xOffset,
-              position.y + settings.yOffset,
-              { 
-                zoom: settings.zoom,
-                duration: isInitialLoad ? 0 : settings.duration // No animation on initial load
-              }
-            )
+            // コンテンツエリアの中心に配置するための座標計算
+            const screenWidth = window.innerWidth
+            const screenHeight = window.innerHeight
+            
+            // デバイス判定
+            const isMobile = screenWidth < SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT
+            const isTablet = screenWidth >= SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT && screenWidth < SIDEBAR_CONSTANTS.TABLET_BREAKPOINT
+            
+            // モバイル・タブレットでは異なる中心計算
+            let contentCenterX: number
+            let contentCenterY: number
+            
+            if (isMobile || isTablet) {
+              // モバイル・タブレット: 画面全体の中心を使用
+              contentCenterX = screenWidth / 2
+              contentCenterY = screenHeight / 2
+            } else {
+              // デスクトップ: サイドバーを考慮した中心
+              const leftWidth = isLeftSidebarCollapsed 
+                ? SIDEBAR_CONSTANTS.LEFT_SIDEBAR_COLLAPSED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+                : SIDEBAR_CONSTANTS.LEFT_SIDEBAR_EXPANDED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+              
+              const rightWidth = isRightSidebarOpen 
+                ? rightSidebarWidth + SIDEBAR_CONSTANTS.RIGHT_SIDEBAR_MARGIN
+                : 0
+              
+              const availableWidth = screenWidth - leftWidth - rightWidth
+              contentCenterX = leftWidth + (availableWidth / 2)
+              contentCenterY = screenHeight / 2
+            }
+            
+            // 統一されたセンタリング関数を使用
+            const viewport = calculateCenteringViewport({
+              nodePosition: position,
+              contentCenterX,
+              contentCenterY,
+              zoom,
+              isMobile,
+              isTablet
+            })
+            
+            // ビューポートを設定
+            setViewport({
+              x: viewport.x,
+              y: viewport.y,
+              zoom: zoom
+            }, { duration: isInitialLoad ? 0 : SIDEBAR_CONSTANTS.ANIMATION_DURATION })
             
             // Log centering action
-            log.debug('Centered root node', {
+            log.debug('Centered root node (direct viewport)', {
               nodeId: rootNode.id,
-              device: settings.device,
-              offset: { x: settings.xOffset, y: settings.yOffset },
-              zoom: settings.zoom,
-              isInitialLoad
+              zoom: zoom,
+              isInitialLoad,
+              device: isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
+              viewportCalculation: {
+                screenWidth,
+                screenHeight,
+                contentCenterX,
+                contentCenterY,
+                nodePosition: position,
+                calculatedViewport: { x: viewport.x, y: viewport.y }
+              }
             })
           }
           
@@ -289,33 +471,74 @@ function CompactTreeViewInner({
                             (currentNodeId ? chatNodes.find(n => n.id === currentNodeId) : null) ||
                             chatNodes[chatNodes.length - 1]
         
-        if (nodeToCenter && positions.has(nodeToCenter.id)) {
-          const position = positions.get(nodeToCenter.id)!
+        if (nodeToCenter && (positions.has(nodeToCenter.id) || getNodes().find(n => n.id === nodeToCenter.id))) {
+          const position = getActualNodePosition(nodeToCenter.id)
           setTimeout(() => {
             const currentZoom = getZoom()
             
-            // Get centering settings from centralized function
-            const settings = calculateCenteringSettings()
+            // 現在のズームを維持するか0.8を使用
+            const zoom = currentZoom > 0.8 ? currentZoom : 0.8
             
-            // Use current zoom if it's higher than minimum, otherwise use settings zoom
-            const finalZoom = currentZoom > settings.minZoom ? currentZoom : settings.zoom
+            // コンテンツエリア中心へのセンタリング
+            const screenWidth = window.innerWidth
+            const screenHeight = window.innerHeight
             
-            setCenter(
-              position.x + settings.xOffset,
-              position.y + settings.yOffset,
-              { 
-                zoom: finalZoom,
-                duration: settings.duration
-              }
-            )
+            // デバイス判定
+            const isMobile = screenWidth < SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT
+            const isTablet = screenWidth >= SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT && screenWidth < SIDEBAR_CONSTANTS.TABLET_BREAKPOINT
             
-            // Logging based on device type
-            // Log centering on new node
-            log.debug('Centered on new node', {
+            // モバイル・タブレットでは異なる中心計算
+            let contentCenterX: number
+            let contentCenterY: number
+            
+            if (isMobile || isTablet) {
+              // モバイル・タブレット: 画面全体の中心を使用
+              contentCenterX = screenWidth / 2
+              contentCenterY = screenHeight / 2
+            } else {
+              // デスクトップ: サイドバーを考慮した中心
+              const leftWidth = isLeftSidebarCollapsed 
+                ? SIDEBAR_CONSTANTS.LEFT_SIDEBAR_COLLAPSED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+                : SIDEBAR_CONSTANTS.LEFT_SIDEBAR_EXPANDED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+              
+              const rightWidth = isRightSidebarOpen 
+                ? rightSidebarWidth + SIDEBAR_CONSTANTS.RIGHT_SIDEBAR_MARGIN
+                : 0
+              
+              const availableWidth = screenWidth - leftWidth - rightWidth
+              contentCenterX = leftWidth + (availableWidth / 2)
+              contentCenterY = screenHeight / 2
+            }
+            
+            // 統一されたセンタリング関数を使用
+            const viewport = calculateCenteringViewport({
+              nodePosition: position,
+              contentCenterX,
+              contentCenterY,
+              zoom,
+              isMobile,
+              isTablet
+            })
+            
+            setViewport({
+              x: viewport.x,
+              y: viewport.y,
+              zoom: zoom
+            }, { duration: SIDEBAR_CONSTANTS.ANIMATION_DURATION })
+            
+            log.debug('Centered on new node (direct viewport)', {
               nodeId: nodeToCenter.id,
-              device: settings.device,
-              offset: { x: settings.xOffset, y: settings.yOffset },
-              zoom: finalZoom
+              zoom: zoom,
+              currentZoom,
+              device: isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
+              viewportCalculation: {
+                screenWidth,
+                screenHeight,
+                contentCenterX,
+                contentCenterY,
+                nodePosition: position,
+                calculatedViewport: { x: viewport.x, y: viewport.y }
+              }
             })
           }, 100)
         }
@@ -356,63 +579,81 @@ function CompactTreeViewInner({
     // Skip if we don't have positions or nodes
     if (!positionsRef.current || positionsRef.current.size === 0) return
     
-    // Skip initial render and only respond to actual width changes
-    if (rightSidebarWidth === 400) return // Default width, skip
-    
     // If we have a current node, re-center on it with new width
-    if (currentNodeId && positionsRef.current.has(currentNodeId)) {
-      const position = positionsRef.current.get(currentNodeId)!
+    if (currentNodeId && (positionsRef.current.has(currentNodeId) || getNodes().find(n => n.id === currentNodeId))) {
+      const position = getActualNodePosition(currentNodeId)
       const currentZoom = getZoom()
       
-      // ===== 右サイドバー専用の調整設定 =====
-      // ここで独立した微調整が可能です
+      // デバイス判定
       const screenWidth = window.innerWidth
-      const isMobile = screenWidth < 768
+      const screenHeight = window.innerHeight
+      const isMobile = screenWidth < SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT
+      const isTablet = screenWidth >= SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT && screenWidth < SIDEBAR_CONSTANTS.TABLET_BREAKPOINT
       
+      // モバイルでは調整不要
       if (isMobile) {
-        // モバイルでは調整不要
         return
       }
       
-      // デスクトップ用の専用計算
-      const leftSidebarWidth = isLeftSidebarCollapsed ? 94 : 410
-      const rightSidebarWidth_actual = isRightSidebarOpen ? (rightSidebarWidth + 30) : 0
+      // 現在のズームを維持（タブレットは固定値）
+      const zoom = isTablet ? 0.8 : (currentZoom > 0.8 ? currentZoom : 0.8)
       
-      // 利用可能な表示領域
-      const availableWidth = screenWidth - leftSidebarWidth - rightSidebarWidth_actual
-      const contentAreaCenterX = leftSidebarWidth + (availableWidth / 2)
-      const screenCenterX = screenWidth / 2
-      const pixelOffsetNeeded = contentAreaCenterX - screenCenterX
+      // コンテンツエリア中心の計算
+      let contentCenterX: number
+      let contentCenterY: number
       
-      // ===== カスタム調整パラメータ =====
-      // これらの値を変更して微調整できます
-      const customXAdjustment = 95  // X軸の追加調整値（正の値で右へ、負の値で左へ）
-      const customYAdjustment = 0  // Y軸の追加調整値（正の値で下へ、負の値で上へ）
-      const customDuration = 200   // アニメーション時間（ミリ秒）
-      const maintainZoom = true    // ズームレベルを維持するか
+      if (isTablet) {
+        // タブレット: 画面全体の中心を使用（サイドバーの影響を受けない）
+        contentCenterX = screenWidth / 2
+        contentCenterY = screenHeight / 2
+      } else {
+        // デスクトップ: サイドバーを考慮した中心
+        const leftWidth = isLeftSidebarCollapsed 
+          ? SIDEBAR_CONSTANTS.LEFT_SIDEBAR_COLLAPSED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+          : SIDEBAR_CONSTANTS.LEFT_SIDEBAR_EXPANDED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+        
+        const rightWidth = isRightSidebarOpen 
+          ? rightSidebarWidth + SIDEBAR_CONSTANTS.RIGHT_SIDEBAR_MARGIN
+          : 0
+        
+        const availableWidth = screenWidth - leftWidth - rightWidth
+        contentCenterX = leftWidth + (availableWidth / 2)
+        contentCenterY = screenHeight / 2
+      }
       
-      // 最終的なオフセット計算
-      const xOffset = 140 + (-pixelOffsetNeeded) + customXAdjustment
-      const yOffset = 250 + customYAdjustment
+      // 統一されたセンタリング関数を使用
+      const viewport = calculateCenteringViewport({
+        nodePosition: position,
+        contentCenterX,
+        contentCenterY,
+        zoom,
+        isMobile,
+        isTablet
+      })
       
-      // Smoothly adjust view position without re-rendering nodes
-      setCenter(
-        position.x + xOffset,
-        position.y + yOffset,
-        { 
-          zoom: maintainZoom ? currentZoom : 0.8, // ズーム制御
-          duration: customDuration
-        }
-      )
+      setViewport({
+        x: viewport.x,
+        y: viewport.y,
+        zoom: zoom
+      }, { duration: SIDEBAR_CONSTANTS.ANIMATION_DURATION })
       
-      log.debug('Adjusted view for sidebar width change (custom)', {
+      log.debug('Adjusted view for sidebar width change (direct viewport)', {
+        device: isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
         rightSidebarWidth,
         nodeId: currentNodeId,
-        offset: { x: xOffset, y: yOffset },
-        customAdjustments: { x: customXAdjustment, y: customYAdjustment }
+        zoom: zoom,
+        currentZoom,
+        viewportCalculation: {
+          screenWidth,
+          screenHeight,
+          contentCenterX,
+          contentCenterY,
+          nodePosition: position,
+          calculatedViewport: { x: viewport.x, y: viewport.y }
+        }
       })
     }
-  }, [rightSidebarWidth, currentNodeId, getZoom, setCenter, isLeftSidebarCollapsed, isRightSidebarOpen]) // Only react to sidebar width changes
+  }, [rightSidebarWidth, currentNodeId, getZoom, setViewport, isLeftSidebarCollapsed, isRightSidebarOpen, getActualNodePosition, calculateCenteringViewport]) // Only react to sidebar width changes
 
   const fitViewOptions = useMemo(() => ({
     padding: 0.2,
@@ -421,25 +662,33 @@ function CompactTreeViewInner({
     maxZoom: 1.5,
   }), [])
 
-  // Optimize for mobile devices
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  // Optimize for mobile and tablet devices
+  const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1024
+  const isMobile = screenWidth < SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT
+  const isTablet = screenWidth >= SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT && screenWidth < SIDEBAR_CONSTANTS.TABLET_BREAKPOINT
   
-  // Mobile-specific performance settings
-  const mobileOptimizations = useMemo(() => {
-    if (!isMobile) return {}
+  // ブラウザのレスポンシブモードでも動作するように修正
+  // 画面幅ベースで判定し、実際のタッチデバイスかどうかは問わない
+  const shouldUseTouchOptimizations = isMobile || isTablet
+  
+  // Touch device specific performance settings (mobile + tablet)
+  const touchOptimizations = useMemo(() => {
+    // ブラウザのレスポンシブモードでも動作するように画面幅ベースで判定
+    if (!shouldUseTouchOptimizations) return {}
+    
     return {
       elevateNodesOnSelect: false,
-      nodesDraggable: false, // Disable dragging on mobile
+      nodesDraggable: false,  // ドラッグを無効化（パンとの衝突を防ぐ）
       nodesConnectable: false,
       elementsSelectable: true,
-      panOnDrag: [1], // Only allow panning with single finger
+      panOnDrag: true, // シンプルにtrueに設定（全てのドラッグでパン）
       selectNodesOnDrag: false,
       zoomOnPinch: true,
-      panOnScroll: false,
+      panOnScroll: true, // モバイルではスクロールでパンを許可
       zoomOnScroll: false,
       zoomOnDoubleClick: false,
     }
-  }, [isMobile])
+  }, [shouldUseTouchOptimizations])
 
   // Handle React Flow initialization
   const handleInit = useCallback(() => {
@@ -448,31 +697,77 @@ function CompactTreeViewInner({
     
     // If we have nodes on initialization, center on the root node
     // This handles the initial load case (root -> session)
-    if (chatNodes && chatNodes.length > 0 && positionsRef.current.size > 0) {
+    if (chatNodes && chatNodes.length > 0 && (positionsRef.current.size > 0 || getNodes().length > 0)) {
       const rootNode = chatNodes.find(n => n.parentId === null) || chatNodes[0]
-      const position = positionsRef.current.get(rootNode.id)
+      const position = getActualNodePosition(rootNode.id)
       
       if (position) {
-        const settings = calculateCenteringSettings()
+        // 初期ズーム設定
+        const zoom = 0.8
         
-        // Use the exact same setCenter logic as session -> session
-        setCenter(
-          position.x + settings.xOffset,
-          position.y + settings.yOffset,
-          { 
-            zoom: settings.zoom,
-            duration: 0  // No animation on initial load
-          }
-        )
+        // コンテンツエリア中心への初期センタリング
+        const screenWidth = window.innerWidth
+        const screenHeight = window.innerHeight
         
-        log.debug('Initial centering on React Flow init', {
+        // デバイス判定
+        const isMobile = screenWidth < SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT
+        const isTablet = screenWidth >= SIDEBAR_CONSTANTS.MOBILE_BREAKPOINT && screenWidth < SIDEBAR_CONSTANTS.TABLET_BREAKPOINT
+        
+        // モバイル・タブレットでは異なる中心計算
+        let contentCenterX: number
+        let contentCenterY: number
+        
+        if (isMobile || isTablet) {
+          // モバイル・タブレット: 画面全体の中心を使用
+          contentCenterX = screenWidth / 2
+          contentCenterY = screenHeight / 2
+        } else {
+          // デスクトップ: サイドバーを考慮した中心
+          const leftWidth = isLeftSidebarCollapsed 
+            ? SIDEBAR_CONSTANTS.LEFT_SIDEBAR_COLLAPSED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+            : SIDEBAR_CONSTANTS.LEFT_SIDEBAR_EXPANDED + SIDEBAR_CONSTANTS.LEFT_SIDEBAR_MARGIN
+          
+          const rightWidth = isRightSidebarOpen 
+            ? rightSidebarWidth + SIDEBAR_CONSTANTS.RIGHT_SIDEBAR_MARGIN
+            : 0
+          
+          const availableWidth = screenWidth - leftWidth - rightWidth
+          contentCenterX = leftWidth + (availableWidth / 2)
+          contentCenterY = screenHeight / 2
+        }
+        
+        // 統一されたセンタリング関数を使用
+        const viewport = calculateCenteringViewport({
+          nodePosition: position,
+          contentCenterX,
+          contentCenterY,
+          zoom,
+          isMobile,
+          isTablet
+        })
+        
+        setViewport({
+          x: viewport.x,
+          y: viewport.y,
+          zoom: zoom
+        }, { duration: 0 })
+        
+        log.debug('Initial centering on React Flow init (direct viewport)', {
           nodeId: rootNode.id,
-          position,
-          settings
+          zoom: zoom,
+          device: isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
+          viewportCalculation: {
+            screenWidth,
+            screenHeight,
+            contentCenterX,
+            contentCenterY,
+            nodePosition: position,
+            calculatedViewport: { x: viewport.x, y: viewport.y }
+          }
         })
       }
     }
-  }, [chatNodes, calculateCenteringSettings, setCenter])
+  }, [chatNodes, setViewport, isLeftSidebarCollapsed, isRightSidebarOpen, rightSidebarWidth, getActualNodePosition, calculateCenteringViewport])
 
   return (
     <div className="w-full h-full relative">
@@ -487,8 +782,8 @@ function CompactTreeViewInner({
         fitViewOptions={fitViewOptions}
         attributionPosition="bottom-left"
         className="bg-transparent"
-        minZoom={isMobile ? 0.5 : 0.1}
-        maxZoom={isMobile ? 1.5 : 2}
+        minZoom={shouldUseTouchOptimizations ? 0.5 : 0.1}
+        maxZoom={shouldUseTouchOptimizations ? 1.5 : 2}
         // Set a reasonable default to avoid the jump from top-left
         defaultViewport={{ 
           x: 900,  // Approximate center position
@@ -497,7 +792,7 @@ function CompactTreeViewInner({
         }}
         onPaneClick={onBackgroundClick}
         onInit={handleInit}
-        {...mobileOptimizations}
+        {...touchOptimizations}
       >
       </ReactFlow>
     </div>

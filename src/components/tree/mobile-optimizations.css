@@ -17,9 +17,10 @@
     transform: translateZ(0);
   }
 
-  /* Disable animation on low-end devices */
+  /* Disable animation on low-end devices (but allow viewport transforms) */
   .react-flow__node-message {
-    transform: none !important;
+    /* transform: none !important; */ /* コメントアウト - setViewportを阻害する可能性があるため */
+    animation: none !important; /* 代わりにアニメーションのみを無効化 */
   }
   
   /* Optimize edge rendering */
@@ -35,6 +36,40 @@
   /* Disable smooth scrolling on mobile */
   * {
     scroll-behavior: auto !important;
+  }
+
+  /* Optimize handle rendering */
+  .react-flow__handle {
+    opacity: 0.8;
+    transform: scale(0.8);
+  }
+}
+
+/* Tablet-specific optimizations (768px to 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Ensure React Flow transform works correctly on tablets */
+  .react-flow__renderer {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    will-change: transform;
+  }
+
+  /* Optimize node transitions for tablets */
+  .react-flow__node {
+    will-change: transform;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+
+  /* Allow viewport transforms on tablets */
+  .react-flow__node-message {
+    animation: none !important;
+  }
+  
+  /* Optimize edge rendering */
+  .react-flow__edge path {
+    will-change: d;
   }
 
   /* Optimize handle rendering */
