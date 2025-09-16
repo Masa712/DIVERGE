@@ -47,6 +47,7 @@ const SIDEBAR_CONSTANTS = {
   LEFT_SIDEBAR_COLLAPSED: 64,   // w-16 - 折りたたみ時の実際の幅（16 * 4px = 64px）
   LEFT_SIDEBAR_MARGIN: 30,      // left-[30px] - 左マージン
   RIGHT_SIDEBAR_MARGIN: 30,     // right-[30px] - 右マージン
+  RIGHT_SIDEBAR_DEFAULT_WIDTH: 400, // 右サイドバーのデフォルト幅
   BASE_X_OFFSET: 0,            // ベースX軸オフセット
   BASE_Y_OFFSET: 0,            // ベースY軸オフセット
   CUSTOM_X_ADJUSTMENT: 0,      // カスタムX軸調整値
