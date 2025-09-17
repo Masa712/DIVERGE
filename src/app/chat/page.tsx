@@ -181,12 +181,32 @@ export default function ChatPage() {
     if (clickedNode) {
       setSelectedNodeForDetail(clickedNode)
       setIsSidebarOpen(true)
+      
+      // Set the model to the one used by the clicked node
+      // This ensures replies use the same model as the parent node
+      if (clickedNode.model) {
+        setSelectedModel(clickedNode.model)
+        log.debug('Set model to parent node model', { nodeId, model: clickedNode.model })
+      }
     }
   }
 
   const handleCloseSidebar = () => {
     setIsSidebarOpen(false)
     setSelectedNodeForDetail(null)
+  }
+  
+  const handleBackgroundClick = () => {
+    // When clicking on background, clear the current node selection
+    setCurrentNodeId(undefined)
+    
+    // Reset to user's default model when no node is selected
+    if (userProfile?.default_model) {
+      setSelectedModel(userProfile.default_model)
+      log.debug('Reset to default model', { model: userProfile.default_model })
+    }
+    
+    handleCloseSidebar()
   }
 
   const handleSendMessage = async (message: string) => {
@@ -524,7 +544,7 @@ export default function ChatPage() {
                   nodes={chatNodes}
                   currentNodeId={currentNodeId}
                   onNodeClick={handleNodeClick}
-                  onBackgroundClick={handleCloseSidebar}
+                  onBackgroundClick={handleBackgroundClick}
                   isLeftSidebarCollapsed={isLeftSidebarCollapsed}
                   isRightSidebarOpen={isSidebarOpen}
                   rightSidebarWidth={rightSidebarWidth}

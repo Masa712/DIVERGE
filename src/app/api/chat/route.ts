@@ -61,16 +61,16 @@ async function processAIResponseInBackground(
       try {
         log.info('Performing web search for query', { query: userPrompt })
         const searchResults = await tavilyClient.search(userPrompt, {
-            maxResults: 3,
-            includeAnswer: true,
-            searchDepth: 'basic'
-          })
+          maxResults: 3,
+          includeAnswer: true,
+          searchDepth: 'basic'
+        })
+        
+        if (searchResults && searchResults.results.length > 0) {
+          webSearchResults = searchResults
           
-          if (searchResults && searchResults.results.length > 0) {
-            webSearchResults = searchResults
-            
-            // Add search context to messages with date reminder
-            const searchContext = `${dateContext}
+          // Add search context to messages with date reminder
+          const searchContext = `${dateContext}
 
 Web search results for "${userPrompt}":
 ${searchResults.answer ? `Summary: ${searchResults.answer}\n\n` : ''}
@@ -79,19 +79,18 @@ ${searchResults.results.map((r, i) =>
 ).join('\n')}
 
 Based on these search results and knowing that today is ${currentDate.getFullYear()}, please provide an informed response.`
-            
-            // Insert search results before the user message
-            finalMessages = [
-              ...messages.slice(0, -1),
-              { role: 'system', content: searchContext },
-              messages[messages.length - 1]
-            ]
-            
-            log.info('Web search completed', { resultCount: searchResults.results.length })
-          }
-        } catch (searchError) {
-          log.warn('Web search failed, continuing without search results', searchError)
+          
+          // Insert search results before the user message
+          finalMessages = [
+            ...messages.slice(0, -1),
+            { role: 'system', content: searchContext },
+            messages[messages.length - 1]
+          ]
+          
+          log.info('Web search completed', { resultCount: searchResults.results.length })
         }
+      } catch (searchError) {
+        log.warn('Web search failed, continuing without search results', searchError)
       }
     }
     

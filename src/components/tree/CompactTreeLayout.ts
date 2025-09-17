@@ -23,6 +23,7 @@ export interface TreeNode {
   parentId: string | null
   depth: number
   children: TreeNode[]
+  createdAt: Date
 }
 
 export class CompactTreeLayout {
@@ -64,9 +65,19 @@ export class CompactTreeLayout {
       }
     })
 
-    // Sort children by creation order (assuming ID contains timestamp info)
+    // Sort children by creation time (earliest to latest, left to right)
     const sortChildren = (node: TreeNode) => {
-      node.children.sort((a, b) => a.id.localeCompare(b.id))
+      try {
+        node.children.sort((a, b) => {
+          // Handle both Date objects and string dates
+          const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime()
+          const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime()
+          return aTime - bTime
+        })
+      } catch (error) {
+        // Fallback to ID sorting if createdAt fails
+        node.children.sort((a, b) => a.id.localeCompare(b.id))
+      }
       node.children.forEach(sortChildren)
     }
     rootNodes.forEach(sortChildren)

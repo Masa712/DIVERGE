@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
-import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
+import { Session, ChatNode, ModelId, AVAILABLE_MODELS, UserProfile } from '@/types'
 
 import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-input'
 import { log } from '@/lib/utils/logger'
@@ -33,6 +33,7 @@ export default function ChatSessionPage({ params }: Props) {
   const [isInputFocused, setIsInputFocused] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
   const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -43,8 +44,28 @@ export default function ChatSessionPage({ params }: Props) {
   useEffect(() => {
     if (user && params.id) {
       fetchSession()
+      fetchUserProfile()
     }
   }, [user, params.id])
+  
+  const fetchUserProfile = async () => {
+    if (!user) return
+    
+    try {
+      const response = await fetch('/api/user/profile')
+      if (response.ok) {
+        const { data } = await response.json()
+        setUserProfile(data)
+        // Set selected model to user's default if available
+        if (data.default_model) {
+          setSelectedModel(data.default_model)
+        }
+        log.debug('User profile loaded', { defaultModel: data.default_model })
+      }
+    } catch (error) {
+      log.error('Failed to fetch user profile', error)
+    }
+  }
 
   const fetchSession = async () => {
     try {
@@ -79,12 +100,32 @@ export default function ChatSessionPage({ params }: Props) {
     if (clickedNode) {
       setSelectedNodeForDetail(clickedNode)
       setIsSidebarOpen(true)
+      
+      // Set the model to the one used by the clicked node
+      // This ensures replies use the same model as the parent node
+      if (clickedNode.model) {
+        setSelectedModel(clickedNode.model)
+        log.debug('Set model to parent node model', { nodeId, model: clickedNode.model })
+      }
     }
   }
 
   const handleCloseSidebar = () => {
     setIsSidebarOpen(false)
     setSelectedNodeForDetail(null)
+  }
+  
+  const handleBackgroundClick = () => {
+    // When clicking on background, clear the current node selection
+    setCurrentNodeId(undefined)
+    
+    // Reset to user's default model when no node is selected
+    if (userProfile?.default_model) {
+      setSelectedModel(userProfile.default_model)
+      log.debug('Reset to default model', { model: userProfile.default_model })
+    }
+    
+    handleCloseSidebar()
   }
 
   const handleNodeIdClick = (nodeReference: string) => {
@@ -392,7 +433,7 @@ export default function ChatSessionPage({ params }: Props) {
               currentNodeId={currentNodeId}
               onNodeClick={handleNodeClick}
               onNodeIdClick={handleNodeIdClick}
-              onBackgroundClick={handleCloseSidebar}
+              onBackgroundClick={handleBackgroundClick}
               isLeftSidebarCollapsed={true}
               isRightSidebarOpen={isSidebarOpen}
               rightSidebarWidth={rightSidebarWidth}

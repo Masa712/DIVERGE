@@ -185,12 +185,26 @@ function CompactTreeViewInner({
 
   // Convert ChatNodes to TreeNodes
   const convertToTreeNodes = useCallback((chatNodes: ChatNode[]): TreeNode[] => {
-    return chatNodes.map(node => ({
-      id: node.id,
-      parentId: node.parentId,
-      depth: node.depth,
-      children: [], // Will be populated by layout engine
-    }))
+    return chatNodes.map(node => {
+      try {
+        return {
+          id: node.id,
+          parentId: node.parentId,
+          depth: node.depth,
+          children: [], // Will be populated by layout engine
+          createdAt: node.createdAt instanceof Date ? node.createdAt : new Date(node.createdAt),
+        }
+      } catch (error) {
+        // Fallback: use current date if createdAt is invalid
+        return {
+          id: node.id,
+          parentId: node.parentId,
+          depth: node.depth,
+          children: [],
+          createdAt: new Date(),
+        }
+      }
+    })
   }, [])
   
   // Node click handler (with centering on mobile/tablet)
