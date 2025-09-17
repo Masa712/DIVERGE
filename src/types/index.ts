@@ -238,3 +238,17 @@ export interface GenerateResponse {
   contextUsed: string[]
   cacheHit: boolean
 }
+
+export interface UserProfile {
+  id?: string
+  user_id?: string
+  display_name?: string
+  avatar_url?: string
+  bio?: string
+  default_model?: ModelId
+  default_temperature?: number
+  default_max_tokens?: number
+  preferences?: Record<string, any>
+  created_at?: Date
+  updated_at?: Date
+}
