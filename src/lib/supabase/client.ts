@@ -10,8 +10,6 @@ export const createClient = () => {
     throw new Error('Missing Supabase environment variables')
   }
 
-  return createBrowserClient(
-    supabaseUrl,
-    supabaseAnonKey
-  )
+  // Use default cookie handling - Supabase SSR handles this properly
+  return createBrowserClient(supabaseUrl, supabaseAnonKey)
 }

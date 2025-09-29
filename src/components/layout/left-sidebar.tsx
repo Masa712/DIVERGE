@@ -8,7 +8,9 @@ import {
   ArrowRightOnRectangleIcon as LogOut,
   Bars3Icon as Menu,
   TrashIcon as Trash2,
-  Cog6ToothIcon as Settings
+  Cog6ToothIcon as Settings,
+  CreditCardIcon as CreditCard,
+  StarIcon as Star
 } from '@heroicons/react/24/outline'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useSessionManagement } from '@/hooks/useSessionManagement'
@@ -236,6 +238,42 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
             </button>
             
             
+            {/* Pricing Button */}
+            <button 
+              onClick={() => {
+                router.push('/pricing')
+                setIsMobileOpen(false)
+              }}
+              className="
+                w-full mb-2 px-4 py-2 rounded-lg
+                text-gray-700 text-sm
+                hover:text-blue-600
+                transition-all duration-200
+                flex items-center gap-2 group
+              "
+            >
+              <Star className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
+              <span className="group-hover:text-blue-600 transition-colors duration-200">Pricing</span>
+            </button>
+
+            {/* Billing Button */}
+            <button 
+              onClick={() => {
+                router.push('/dashboard/billing')
+                setIsMobileOpen(false)
+              }}
+              className="
+                w-full mb-2 px-4 py-2 rounded-lg
+                text-gray-700 text-sm
+                hover:text-green-600
+                transition-all duration-200
+                flex items-center gap-2 group
+              "
+            >
+              <CreditCard className="w-4 h-4 group-hover:text-green-600 transition-colors duration-200" />
+              <span className="group-hover:text-green-600 transition-colors duration-200">Billing</span>
+            </button>
+
             {/* Settings Button */}
             <button 
               onClick={() => {
@@ -304,8 +342,22 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           ))}
         </div>
 
-        {/* Settings */}
+        {/* Navigation Icons */}
         <div className="p-3 border-t border-white/10">
+          <button
+            onClick={() => router.push('/pricing')}
+            className="w-full p-2 mb-2 rounded-lg text-gray-600 hover:text-blue-600 transition-all duration-200 group"
+            title="Pricing"
+          >
+            <Star className="w-4 h-4 mx-auto group-hover:text-blue-600 transition-colors duration-200" />
+          </button>
+          <button
+            onClick={() => router.push('/dashboard/billing')}
+            className="w-full p-2 mb-2 rounded-lg text-gray-600 hover:text-green-600 transition-all duration-200 group"
+            title="Billing"
+          >
+            <CreditCard className="w-4 h-4 mx-auto group-hover:text-green-600 transition-colors duration-200" />
+          </button>
           <button
             onClick={() => router.push('/settings')}
             className="w-full p-2 mb-2 rounded-lg text-gray-600 hover:text-purple-600 transition-all duration-200 group"
@@ -480,6 +532,36 @@ export function LeftSidebar({ currentSessionId, currentSession, onSessionSelect,
           </button>
           
           
+          {/* Pricing Button */}
+          <button 
+            onClick={() => router.push('/pricing')}
+            className="
+              w-full mb-2 px-4 py-2 rounded-lg
+              text-gray-700 text-sm
+              hover:text-blue-600
+              transition-all duration-200
+              flex items-center gap-2 group
+            "
+          >
+            <Star className="w-4 h-4 group-hover:text-blue-600 transition-colors duration-200" />
+            <span className="group-hover:text-blue-600 transition-colors duration-200">Pricing</span>
+          </button>
+
+          {/* Billing Button */}
+          <button 
+            onClick={() => router.push('/dashboard/billing')}
+            className="
+              w-full mb-2 px-4 py-2 rounded-lg
+              text-gray-700 text-sm
+              hover:text-green-600
+              transition-all duration-200
+              flex items-center gap-2 group
+            "
+          >
+            <CreditCard className="w-4 h-4 group-hover:text-green-600 transition-colors duration-200" />
+            <span className="group-hover:text-green-600 transition-colors duration-200">Billing</span>
+          </button>
+
           {/* Settings Button */}
           <button 
             onClick={() => router.push('/settings')}

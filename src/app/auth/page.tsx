@@ -53,7 +53,13 @@ function AuthPageContent() {
         setError('Check your email for confirmation link')
       } else {
         await signIn(email, password)
-        router.push('/chat')
+        // Check for redirect parameter from URL
+        const redirect = searchParams.get('redirect')
+        if (redirect) {
+          router.push(redirect)
+        } else {
+          router.push('/chat')
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -67,12 +73,15 @@ function AuthPageContent() {
     setLoading(true)
 
     try {
+      // Get redirect path from URL parameter
+      const redirect = searchParams.get('redirect')
+
       switch (provider) {
         case 'google':
-          await signInWithGoogle()
+          await signInWithGoogle(redirect || undefined)
           break
         case 'x':
-          await signInWithX()
+          await signInWithX(redirect || undefined)
           break
       }
     } catch (err) {

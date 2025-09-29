@@ -18,6 +18,7 @@ import { recordError } from '@/lib/errors/error-monitoring'
 import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
 import { log } from '@/lib/utils/logger'
 import { tavilyClient } from '@/lib/tavily'
+import { checkUserQuota, trackTokenUsage, canUseAdvancedModels, estimateTokens } from '@/lib/billing/usage-tracker'
 
 // Background processing function for AI responses
 async function processAIResponseInBackground(
@@ -31,7 +32,8 @@ async function processAIResponseInBackground(
   useEnhancedContext: boolean,
   userPrompt: string,
   enableWebSearch: boolean = true,
-  reasoning: boolean = false
+  reasoning: boolean = false,
+  userId: string
 ) {
   try {
     // Build context using enhanced context system if enabled and parentNodeId exists
@@ -235,6 +237,20 @@ Based on these search results and the conversation context, please provide an in
     await withRetry(async () => {
       await updateChatNodeResponse(chatNode.id, responseContent, usage, model)
     }, { maxAttempts: 3 })
+
+    // Track token usage for billing
+    if (usage) {
+      const totalTokens = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0)
+      await trackTokenUsage({
+        userId,
+        tokensUsed: totalTokens,
+        modelId: model,
+        sessionId,
+        nodeId: chatNode.id
+      }).catch(error => {
+        log.warn('Failed to track token usage', error)
+      })
+    }
     
     // Generate AI title for the session if it's the first node (depth = 0 and no parentNodeId)
     log.info('Title generation check', { 
@@ -366,6 +382,40 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     enableWebSearch = true,
     reasoning = false
   } = body
+
+  // Check if user can access advanced models
+  const hasAdvancedAccess = await canUseAdvancedModels(user.id)
+  const advancedModels = ['openai/gpt-5', 'anthropic/claude-opus-4.1', 'anthropic/claude-opus-4', 'x-ai/grok-4']
+  
+  if (advancedModels.includes(model) && !hasAdvancedAccess) {
+    return NextResponse.json(
+      { error: 'Advanced models require a Pro or Enterprise subscription. Please upgrade your plan.' },
+      { status: 403 }
+    )
+  }
+
+  // Estimate token usage for quota check  
+  const estimatedTokens = estimateTokens(messages[messages.length - 1]?.content || '') + (max_tokens || 4000)
+  
+  // Check user quota before processing
+  const quotaCheck = await checkUserQuota(user.id, estimatedTokens)
+  if (!quotaCheck.allowed) {
+    const quotaExceededMessage = quotaCheck.limit === -1 
+      ? 'An error occurred while checking your usage quota.'
+      : `Monthly token limit reached (${quotaCheck.currentUsage.toLocaleString()}/${quotaCheck.limit.toLocaleString()}). Please upgrade your plan or wait for next month's reset.`
+    
+    return NextResponse.json(
+      { 
+        error: quotaExceededMessage,
+        quota: {
+          used: quotaCheck.currentUsage,
+          limit: quotaCheck.limit,
+          plan: quotaCheck.planId
+        }
+      },
+      { status: 429 }
+    )
+  }
 
   // Fetch user profile for defaults if not provided
   if (temperature === undefined || max_tokens === undefined) {
@@ -515,7 +565,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     useEnhancedContext, 
     userPrompt,
     enableWebSearch,
-    reasoning
+    reasoning,
+    user.id
   ).catch(error => {
     log.error('Background AI processing failed', error)
     // Update node status to failed

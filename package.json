@@ -12,6 +12,7 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@sentry/nextjs": "^10.10.0",
+    "@stripe/stripe-js": "^7.9.0",
     "@supabase/auth-helpers-nextjs": "^0.8.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.0.0",
@@ -38,6 +39,7 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "stripe": "^18.5.0",
     "uuid": "^9.0.0",
     "zod": "^3.0.0",
     "zustand": "^4.0.0"

@@ -11,13 +11,26 @@ export const createClient = () => {
     {
       cookies: {
         get(name: string) {
-          return cookieStore.get(name)?.value
+          try {
+            return cookieStore.get(name)?.value
+          } catch (error) {
+            console.error(`Error reading cookie ${name}:`, error)
+            return undefined
+          }
         },
         set(name: string, value: string, options: any) {
-          cookieStore.set({ name, value, ...options })
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch (error) {
+            console.error(`Error setting cookie ${name}:`, error)
+          }
         },
         remove(name: string, options: any) {
-          cookieStore.set({ name, value: '', ...options })
+          try {
+            cookieStore.set({ name, value: '', ...options })
+          } catch (error) {
+            console.error(`Error removing cookie ${name}:`, error)
+          }
         },
       },
     }
