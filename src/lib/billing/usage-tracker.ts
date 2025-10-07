@@ -177,15 +177,34 @@ function calculateCost(modelId: string, tokens: number): number {
  */
 export async function getUserPlan(userId: string): Promise<string> {
   const supabase = createClient()
-  
+
   try {
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('subscription_plan')
+    // Get current usage quota to determine plan
+    const nextMonth = new Date()
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    nextMonth.setDate(1)
+    nextMonth.setHours(0, 0, 0, 0)
+
+    const { data: quota, error } = await supabase
+      .from('usage_quotas')
+      .select('plan_id')
       .eq('user_id', userId)
+      .gte('reset_date', nextMonth.toISOString())
       .single()
 
-    return profile?.subscription_plan || 'free'
+    if (error || !quota) {
+      log.warn('Failed to get user plan from usage_quotas, defaulting to free', error)
+
+      // Try to initialize quota for this user
+      await supabase.rpc('initialize_user_quota', {
+        user_id: userId,
+        plan_id: 'free'
+      })
+
+      return 'free'
+    }
+
+    return quota.plan_id || 'free'
   } catch (error) {
     log.warn('Failed to get user plan', error)
     return 'free'
@@ -197,7 +216,229 @@ export async function getUserPlan(userId: string): Promise<string> {
  */
 export async function canUseAdvancedModels(userId: string): Promise<boolean> {
   const plan = await getUserPlan(userId)
-  return plan === 'pro' || plan === 'enterprise' || plan === 'pro-yearly' || plan === 'enterprise-yearly'
+  return plan === 'plus' || plan === 'pro' || plan === 'enterprise' ||
+         plan === 'plus-yearly' || plan === 'pro-yearly' || plan === 'enterprise-yearly'
+}
+
+/**
+ * Check if user can perform web search
+ */
+export async function canUseWebSearch(userId: string): Promise<{
+  allowed: boolean
+  currentUsage: number
+  limit: number
+}> {
+  const supabase = createClient()
+
+  try {
+    // Use database function to check web search quota
+    const { data, error } = await supabase.rpc('can_use_web_search', {
+      user_id: userId
+    })
+
+    if (error) {
+      log.error('Failed to check web search quota', error)
+      return { allowed: false, currentUsage: 0, limit: 0 }
+    }
+
+    // Get current usage details
+    const nextMonth = new Date()
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    nextMonth.setDate(1)
+    nextMonth.setHours(0, 0, 0, 0)
+
+    const { data: quota } = await supabase
+      .from('usage_quotas')
+      .select('web_searches_used, web_searches_limit')
+      .eq('user_id', userId)
+      .gte('reset_date', nextMonth.toISOString())
+      .single()
+
+    return {
+      allowed: data === true,
+      currentUsage: quota?.web_searches_used || 0,
+      limit: quota?.web_searches_limit || 10
+    }
+  } catch (error) {
+    log.error('Error checking web search quota', error)
+    return { allowed: false, currentUsage: 0, limit: 0 }
+  }
+}
+
+/**
+ * Increment web search usage counter
+ */
+export async function trackWebSearchUsage(userId: string): Promise<boolean> {
+  const supabase = createClient()
+
+  try {
+    // Use database function to increment web search usage
+    const { data, error } = await supabase.rpc('increment_web_search_usage', {
+      user_id: userId
+    })
+
+    if (error) {
+      log.error('Failed to increment web search usage', error)
+      return false
+    }
+
+    if (!data) {
+      log.warn('Web search usage update rejected - quota exceeded', {
+        userId
+      })
+      return false
+    }
+
+    log.debug('Web search usage tracked successfully', {
+      userId
+    })
+
+    return true
+  } catch (error) {
+    log.error('Error tracking web search usage', error)
+    return false
+  }
+}
+
+/**
+ * Check if user can create a new session
+ */
+export async function canCreateSession(userId: string): Promise<{
+  allowed: boolean
+  currentSessions: number
+  limit: number
+}> {
+  const supabase = createClient()
+
+  try {
+    // Get current usage quota
+    const nextMonth = new Date()
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    nextMonth.setDate(1)
+    nextMonth.setHours(0, 0, 0, 0)
+
+    const { data: quota, error } = await supabase
+      .from('usage_quotas')
+      .select('sessions_this_month, sessions_limit')
+      .eq('user_id', userId)
+      .gte('reset_date', nextMonth.toISOString())
+      .single()
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      log.error('Failed to fetch session quota', error)
+      return { allowed: false, currentSessions: 0, limit: 0 }
+    }
+
+    // If no quota record exists, initialize with free plan
+    if (!quota) {
+      const { error: initError } = await supabase.rpc('initialize_user_quota', {
+        user_id: userId,
+        plan_id: 'free'
+      })
+
+      if (initError) {
+        log.error('Failed to initialize user quota', initError)
+        return { allowed: false, currentSessions: 0, limit: 0 }
+      }
+
+      // Return free plan limits
+      return {
+        allowed: true,
+        currentSessions: 0,
+        limit: 3
+      }
+    }
+
+    const { sessions_this_month, sessions_limit } = quota
+
+    // -1 means unlimited
+    if (sessions_limit === -1) {
+      return {
+        allowed: true,
+        currentSessions: sessions_this_month,
+        limit: -1
+      }
+    }
+
+    // Check if user has reached the limit
+    const canCreate = sessions_this_month < sessions_limit
+
+    return {
+      allowed: canCreate,
+      currentSessions: sessions_this_month,
+      limit: sessions_limit
+    }
+  } catch (error) {
+    log.error('Error checking session creation quota', error)
+    return { allowed: false, currentSessions: 0, limit: 0 }
+  }
+}
+
+/**
+ * Increment session count for the user
+ */
+export async function incrementSessionCount(userId: string): Promise<boolean> {
+  const supabase = createClient()
+
+  try {
+    // Get current usage quota
+    const nextMonth = new Date()
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    nextMonth.setDate(1)
+    nextMonth.setHours(0, 0, 0, 0)
+
+    const { data: quota, error: fetchError } = await supabase
+      .from('usage_quotas')
+      .select('sessions_this_month, sessions_limit')
+      .eq('user_id', userId)
+      .gte('reset_date', nextMonth.toISOString())
+      .single()
+
+    if (fetchError) {
+      log.error('Failed to fetch session quota for increment', fetchError)
+      return false
+    }
+
+    if (!quota) {
+      log.warn('No quota record found for user', { userId })
+      return false
+    }
+
+    // Check if incrementing would exceed limit (-1 means unlimited)
+    if (quota.sessions_limit !== -1 && quota.sessions_this_month >= quota.sessions_limit) {
+      log.warn('Session limit reached, cannot increment', {
+        userId,
+        currentSessions: quota.sessions_this_month,
+        limit: quota.sessions_limit
+      })
+      return false
+    }
+
+    // Increment session count
+    const { error: updateError } = await supabase
+      .from('usage_quotas')
+      .update({
+        sessions_this_month: quota.sessions_this_month + 1,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId)
+      .gte('reset_date', nextMonth.toISOString())
+
+    if (updateError) {
+      log.error('Failed to increment session count', updateError)
+      return false
+    }
+
+    log.debug('Session count incremented successfully', {
+      userId,
+      newCount: quota.sessions_this_month + 1
+    })
+
+    return true
+  } catch (error) {
+    log.error('Error incrementing session count', error)
+    return false
+  }
 }
 
 /**

@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getChatSessionsPooled, createChatSessionPooled } from '@/lib/db/pooled-operations'
-import { 
-  withErrorHandler, 
-  createAppError, 
-  ErrorCategory, 
+import {
+  withErrorHandler,
+  createAppError,
+  ErrorCategory,
   classifyDatabaseError,
-  withRetry 
+  withRetry
 } from '@/lib/errors/error-handler'
 import { loadOptimizedSessions, executeOptimizedQuery, clearSessionCache } from '@/lib/db/query-optimizer'
 import { log } from '@/lib/utils/logger'
+import { canCreateSession, incrementSessionCount } from '@/lib/billing/usage-tracker'
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const supabase = createClient()
@@ -99,6 +100,26 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     throw createAppError(
       'User authentication required',
       ErrorCategory.AUTHENTICATION
+    )
+  }
+
+  // Check session creation quota
+  const sessionQuota = await canCreateSession(user.id)
+  if (!sessionQuota.allowed) {
+    const limitMessage = sessionQuota.limit === -1
+      ? 'unlimited'
+      : `${sessionQuota.limit}`
+
+    throw createAppError(
+      'Session creation limit reached',
+      ErrorCategory.QUOTA_EXCEEDED,
+      {
+        userMessage: `You have reached your session limit (${sessionQuota.currentSessions}/${limitMessage}). Please upgrade your plan or delete unused sessions.`,
+        context: {
+          currentSessions: sessionQuota.currentSessions,
+          limit: sessionQuota.limit
+        }
+      }
     )
   }
 
@@ -199,6 +220,15 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       lastAccessedAt: new Date(sessionRaw.last_accessed_at),
     }
   
+  // Increment session count after successful creation
+  const incrementSuccess = await incrementSessionCount(user.id)
+  if (!incrementSuccess) {
+    log.warn('Failed to increment session count, but session was created', {
+      userId: user.id,
+      sessionId: session.id
+    })
+  }
+
   // Clear session cache to ensure fresh data on next fetch
   clearSessionCache(user.id)
 

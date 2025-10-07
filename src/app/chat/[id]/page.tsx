@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
@@ -11,6 +11,8 @@ import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
+import { FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
+import { LeftSidebar } from '@/components/layout/left-sidebar'
 
 interface Props {
   params: { id: string }
@@ -25,6 +27,7 @@ export default function ChatSessionPage({ params }: Props) {
   const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
   const [loadingSession, setLoadingSession] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showNotFound, setShowNotFound] = useState(false)
 
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
@@ -34,6 +37,21 @@ export default function ChatSessionPage({ params }: Props) {
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
   const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
+  const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
+
+  // Calculate available models based on user's subscription plan
+  const availableModels = useMemo(() => {
+    const userPlan = userProfile?.subscription_plan || 'free'
+
+    // Free plan: only free plan models
+    if (userPlan === 'free') {
+      return AVAILABLE_MODELS.filter(model => FREE_PLAN_MODELS.includes(model.id))
+    }
+
+    // Plus, Pro, Enterprise: all models
+    return AVAILABLE_MODELS
+  }, [userProfile])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -43,24 +61,44 @@ export default function ChatSessionPage({ params }: Props) {
 
   useEffect(() => {
     if (user && params.id) {
+      // Reset states when session changes
+      setShowNotFound(false)
+      setError(null)
+      setLoadingSession(true)
+
       fetchSession()
       fetchUserProfile()
+
+      // Show "Session not found" after 10 seconds if still loading
+      const timeoutId = setTimeout(() => {
+        if (loadingSession && !session) {
+          setShowNotFound(true)
+        }
+      }, 10000)
+
+      return () => clearTimeout(timeoutId)
     }
   }, [user, params.id])
   
   const fetchUserProfile = async () => {
     if (!user) return
-    
+
     try {
-      const response = await fetch('/api/user/profile')
+      const response = await fetch('/api/profile')
       if (response.ok) {
         const { data } = await response.json()
+
+        // If subscription_plan is not set, default to 'free'
+        if (!data.subscription_plan) {
+          data.subscription_plan = 'free'
+        }
+
         setUserProfile(data)
+
         // Set selected model to user's default if available
         if (data.default_model) {
           setSelectedModel(data.default_model)
         }
-        log.debug('User profile loaded', { defaultModel: data.default_model })
       }
     } catch (error) {
       log.error('Failed to fetch user profile', error)
@@ -138,6 +176,16 @@ export default function ChatSessionPage({ params }: Props) {
         .then(() => log.debug('Copied to clipboard', { nodeReference }))
         .catch(err => log.error('Failed to copy to clipboard', err))
     }
+  }
+
+  const handleSessionSelect = (sessionId: string) => {
+    // Navigate to the selected session
+    router.push(`/chat/${sessionId}`)
+  }
+
+  const handleNewSession = () => {
+    // Navigate to new chat page
+    router.push('/chat')
   }
 
   const handleSendMessage = async (message: string) => {
@@ -388,7 +436,8 @@ export default function ChatSessionPage({ params }: Props) {
     setTimeout(checkStatus, 2000) // Initial check after 2 seconds
   }
 
-  if (loading || loadingSession || !user) {
+  // Only show full page loading on initial auth load
+  if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
@@ -396,60 +445,74 @@ export default function ChatSessionPage({ params }: Props) {
     )
   }
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-4">Error</h2>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <button
-            onClick={() => router.push('/chat')}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Back to Chat
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (!session) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg">Session not found</div>
-      </div>
-    )
-  }
-
   return (
     <div className="relative flex h-screen">
       <AnimatedBackground opacity={0.4} />
+      {/* Left Sidebar */}
+      <LeftSidebar
+        currentSessionId={session?.id}
+        currentSession={session}
+        onSessionSelect={handleSessionSelect}
+        onNewSession={handleNewSession}
+        isCollapsed={isLeftSidebarCollapsed}
+        onToggleCollapse={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
+        onMobileOpenChange={setIsLeftSidebarMobileOpen}
+      />
+
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-hidden">
-            <ChatTreeView
-              nodes={chatNodes}
-              currentNodeId={currentNodeId}
-              onNodeClick={handleNodeClick}
-              onNodeIdClick={handleNodeIdClick}
-              onBackgroundClick={handleBackgroundClick}
-              isLeftSidebarCollapsed={true}
-              isRightSidebarOpen={isSidebarOpen}
-              rightSidebarWidth={rightSidebarWidth}
-            />
+            {error ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-center">
+                  <h2 className="text-xl font-semibold mb-4">Error</h2>
+                  <p className="text-muted-foreground mb-4">{error}</p>
+                  <button
+                    onClick={() => router.push('/chat')}
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    Back to Chat
+                  </button>
+                </div>
+              </div>
+            ) : showNotFound && !session ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-center">
+                  <div className="text-lg mb-4">Session not found</div>
+                  <button
+                    onClick={() => router.push('/chat')}
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    Back to Chat
+                  </button>
+                </div>
+              </div>
+            ) : session ? (
+              <ChatTreeView
+                nodes={chatNodes}
+                currentNodeId={currentNodeId}
+                onNodeClick={handleNodeClick}
+                onNodeIdClick={handleNodeIdClick}
+                onBackgroundClick={handleBackgroundClick}
+                isLeftSidebarCollapsed={isLeftSidebarCollapsed}
+                isRightSidebarOpen={isSidebarOpen}
+                rightSidebarWidth={rightSidebarWidth}
+              />
+            ) : null}
           </div>
         </div>
       </div>
 
       {/* Glassmorphism Chat Input - Floating */}
-      <GlassmorphismChatInput 
-        onSendMessage={handleSendMessage} 
+      <GlassmorphismChatInput
+        onSendMessage={handleSendMessage}
         availableNodes={chatNodes}
         onInputMount={setInsertTextFunction}
         onFocusChange={setIsInputFocused}
         selectedModel={selectedModel}
         onModelChange={setSelectedModel}
+        availableModels={availableModels}
         enableReasoning={enableReasoning}
         onReasoningToggle={setEnableReasoning}
         currentNodeId={currentNodeId}
@@ -458,8 +521,9 @@ export default function ChatSessionPage({ params }: Props) {
           return currentNode ? currentNode.prompt : undefined
         })()}
         isRightSidebarOpen={isSidebarOpen}
-        isLeftSidebarCollapsed={true}
+        isLeftSidebarCollapsed={isLeftSidebarCollapsed}
         rightSidebarWidth={rightSidebarWidth}
+        isLeftSidebarMobileOpen={isLeftSidebarMobileOpen}
       />
 
       {/* Node Detail Sidebar */}

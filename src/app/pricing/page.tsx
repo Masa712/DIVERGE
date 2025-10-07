@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
@@ -8,7 +8,7 @@ import { SUBSCRIPTION_PLANS, YEARLY_PLANS, formatPrice } from '@/types/subscript
 import { getStripe } from '@/lib/stripe/client'
 import { Check, Star } from 'lucide-react'
 
-export default function PricingPage() {
+function PricingContent() {
   const [isYearly, setIsYearly] = useState(false)
   const [loading, setLoading] = useState<string | null>(null)
   const { user } = useAuth()
@@ -225,7 +225,7 @@ export default function PricingPage() {
                 Is there a free trial?
               </h3>
               <p className="text-slate-300">
-                Our Free plan includes 10,000 tokens monthly. No credit card required to get started.
+                Our Free plan includes 500,000 tokens monthly with 8 AI models. No credit card required to get started.
               </p>
             </div>
             <div className="bg-slate-800 p-6 rounded-lg">
@@ -240,5 +240,20 @@ export default function PricingPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-4 mx-auto" />
+          <p className="text-slate-300">Loading pricing...</p>
+        </div>
+      </div>
+    }>
+      <PricingContent />
+    </Suspense>
   )
 }

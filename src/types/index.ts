@@ -1,9 +1,10 @@
-export type ModelProvider = 'OpenAI' | 'Anthropic' | 'Google' | 'xAI'
+export type ModelProvider = 'OpenAI' | 'Anthropic' | 'Google' | 'xAI' | 'DeepSeek'
 
-export type ModelId = 
+export type ModelId =
   // OpenAI Latest Models via OpenRouter
   | 'openai/gpt-5'
   | 'openai/gpt-5-mini'
+  | 'openai/gpt-5-nano'
   | 'openai/gpt-oss-120b'
   | 'openai/o3'
   | 'openai/gpt-4.1'
@@ -17,8 +18,11 @@ export type ModelId =
   | 'google/gemini-2.5-pro'
   // xAI Latest Models via OpenRouter (Note: x-ai with hyphen, not xai)
   | 'x-ai/grok-4'
+  | 'x-ai/grok-4-fast'
   | 'x-ai/grok-3'
   | 'x-ai/grok-3-mini'
+  // DeepSeek Latest Models via OpenRouter
+  | 'deepseek/deepseek-chat-v3.1'
 
 // Model configuration with OpenRouter
 export interface ModelConfig {
@@ -115,26 +119,49 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     costPerMillionTokens: { input: 2.5, output: 7.5 }
   },
   // xAI Latest Models
-  { 
-    id: 'x-ai/grok-4', 
-    name: 'Grok 4', 
+  {
+    id: 'x-ai/grok-4',
+    name: 'Grok 4',
     provider: 'xAI',
     contextLength: 256000,
     costPerMillionTokens: { input: 18, output: 54 }
   },
-  { 
-    id: 'x-ai/grok-3', 
-    name: 'Grok 3', 
+  {
+    id: 'x-ai/grok-4-fast',
+    name: 'Grok 4 Fast',
     provider: 'xAI',
-    contextLength: 128000,
+    contextLength: 2000000,
     costPerMillionTokens: { input: 10, output: 30 }
   },
-  { 
-    id: 'x-ai/grok-3-mini', 
-    name: 'Grok 3 Mini', 
+  {
+    id: 'x-ai/grok-3',
+    name: 'Grok 3',
     provider: 'xAI',
-    contextLength: 64000,
-    costPerMillionTokens: { input: 4, output: 12 }
+    contextLength: 131000,
+    costPerMillionTokens: { input: 10, output: 30 }
+  },
+  {
+    id: 'x-ai/grok-3-mini',
+    name: 'Grok 3 Mini',
+    provider: 'xAI',
+    contextLength: 131000,
+    costPerMillionTokens: { input: 0.3, output: 0.5 }
+  },
+  // DeepSeek Latest Models
+  {
+    id: 'deepseek/deepseek-chat-v3.1',
+    name: 'DeepSeek V3.1',
+    provider: 'DeepSeek',
+    contextLength: 164000,
+    costPerMillionTokens: { input: 0.27, output: 1.10 }
+  },
+  // OpenAI GPT-5 Nano
+  {
+    id: 'openai/gpt-5-nano',
+    name: 'GPT-5 Nano',
+    provider: 'OpenAI',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 0.05, output: 0.4 }
   },
 ]
 
@@ -248,6 +275,7 @@ export interface UserProfile {
   default_model?: ModelId
   default_temperature?: number
   default_max_tokens?: number
+  subscription_plan?: string
   preferences?: Record<string, any>
   created_at?: Date
   updated_at?: Date

@@ -14,6 +14,7 @@ export enum ErrorCategory {
   EXTERNAL_API = 'external_api',
   NETWORK = 'network',
   RATE_LIMIT = 'rate_limit',
+  QUOTA_EXCEEDED = 'quota_exceeded',
   INTERNAL = 'internal',
   NOT_FOUND = 'not_found',
   CONFLICT = 'conflict',
@@ -87,6 +88,12 @@ const ERROR_CONFIG: Record<ErrorCategory, {
     defaultSeverity: ErrorSeverity.LOW,
     retryable: true,
     userMessageTemplate: 'Too many requests. Please wait a moment before trying again.',
+  },
+  [ErrorCategory.QUOTA_EXCEEDED]: {
+    defaultStatusCode: 403,
+    defaultSeverity: ErrorSeverity.LOW,
+    retryable: false,
+    userMessageTemplate: 'Usage limit exceeded. Please upgrade your plan or wait for quota reset.',
   },
   [ErrorCategory.INTERNAL]: {
     defaultStatusCode: 500,

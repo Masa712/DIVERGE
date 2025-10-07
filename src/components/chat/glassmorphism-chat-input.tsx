@@ -6,7 +6,7 @@ import { extractNodeReferences } from '@/lib/utils/node-references'
 import { ChatNode } from '@/types'
 import { PaperAirplaneIcon, PlusIcon, MagnifyingGlassIcon, BoltIcon } from '@heroicons/react/24/outline'
 import { ModelSelector } from './model-selector'
-import { AVAILABLE_MODELS, ModelId } from '@/types'
+import { AVAILABLE_MODELS, ModelId, ModelConfig } from '@/types'
 import { supportsReasoning } from '@/lib/openrouter/client'
 
 interface Props {
@@ -15,10 +15,11 @@ interface Props {
   availableNodes?: ChatNode[]
   onInputMount?: (insertFunction: (text: string) => void) => void
   onFocusChange?: (focused: boolean) => void
-  
+
   // Model selector props
   selectedModel: ModelId
   onModelChange: (model: ModelId) => void
+  availableModels?: ModelConfig[]
   
   // Web search props
   enableWebSearch?: boolean
@@ -40,14 +41,15 @@ interface Props {
   isLeftSidebarMobileOpen?: boolean
 }
 
-export function GlassmorphismChatInput({ 
-  onSendMessage, 
-  disabled = false, 
-  availableNodes = [], 
-  onInputMount, 
+export function GlassmorphismChatInput({
+  onSendMessage,
+  disabled = false,
+  availableNodes = [],
+  onInputMount,
   onFocusChange,
   selectedModel,
   onModelChange,
+  availableModels = AVAILABLE_MODELS,
   enableWebSearch = true,
   onWebSearchToggle,
   enableReasoning = false,
@@ -114,18 +116,18 @@ export function GlassmorphismChatInput({
   // Function to insert text at cursor position
   const insertAtCursor = useCallback((text: string) => {
     const textarea = textareaRef.current
-    if (!textarea) return
+    if (!textarea || !text) return
 
     const start = textarea.selectionStart
     const end = textarea.selectionEnd
     const currentValue = textarea.value
-    
+
     const newValue = currentValue.substring(0, start) + text + currentValue.substring(end)
     setMessage(newValue)
-    
+
     // Set cursor position after inserted text
     setTimeout(() => {
-      if (textarea) {
+      if (textarea && text) {
         const newPosition = start + text.length
         textarea.setSelectionRange(newPosition, newPosition)
         textarea.focus()
@@ -300,11 +302,11 @@ export function GlassmorphismChatInput({
           </div>
           
           {/* Right - Model Selector and Send */}
-          <div className="flex items-center space-x-2">            
+          <div className="flex items-center space-x-2">
             <ModelSelector
               selectedModel={selectedModel}
               onModelChange={onModelChange}
-              availableModels={AVAILABLE_MODELS}
+              availableModels={availableModels}
               compact={true}
             />
             

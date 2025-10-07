@@ -18,7 +18,8 @@ import { recordError } from '@/lib/errors/error-monitoring'
 import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
 import { log } from '@/lib/utils/logger'
 import { tavilyClient } from '@/lib/tavily'
-import { checkUserQuota, trackTokenUsage, canUseAdvancedModels, estimateTokens } from '@/lib/billing/usage-tracker'
+import { checkUserQuota, trackTokenUsage, canUseAdvancedModels, estimateTokens, canUseWebSearch, trackWebSearchUsage, getUserPlan } from '@/lib/billing/usage-tracker'
+import { isModelAvailableForFreePlan, isAdvancedModel, getModelAccessErrorMessage } from '@/lib/billing/model-restrictions'
 
 // Background processing function for AI responses
 async function processAIResponseInBackground(
@@ -50,49 +51,70 @@ async function processAIResponseInBackground(
     })}, ${currentDate.getFullYear()}. The current year is ${currentDate.getFullYear()}, not 2024.`
     
     // Check if web search should be performed
-    log.info('Web search evaluation', { 
-      enableWebSearch, 
+    log.info('Web search evaluation', {
+      enableWebSearch,
       tavilyConfigured: tavilyClient.isConfigured(),
       userPrompt: userPrompt.substring(0, 100) + '...'
     })
-    
+
     if (enableWebSearch && tavilyClient.isConfigured()) {
-      // When web search is enabled, always perform search for all queries
-      log.info('Web search enabled, performing search for query', { query: userPrompt.substring(0, 100) + '...' })
-      
-      try {
-        log.info('Performing web search for query', { query: userPrompt })
-        const searchResults = await tavilyClient.search(userPrompt, {
-          maxResults: 3,
-          includeAnswer: true,
-          searchDepth: 'basic'
+      // Check web search quota before performing search
+      const webSearchQuota = await canUseWebSearch(userId)
+
+      if (!webSearchQuota.allowed) {
+        log.warn('Web search quota exceeded', {
+          userId,
+          currentUsage: webSearchQuota.currentUsage,
+          limit: webSearchQuota.limit
         })
-        
-        if (searchResults && searchResults.results.length > 0) {
-          webSearchResults = searchResults
-          
-          // Add search context to messages with date reminder
-          const searchContext = `${dateContext}
+        // Continue without web search - don't fail the entire request
+      } else {
+        // When web search is enabled and quota available, perform search
+        log.info('Web search enabled with quota available, performing search', {
+          query: userPrompt.substring(0, 100) + '...',
+          remaining: webSearchQuota.limit === -1 ? 'unlimited' : webSearchQuota.limit - webSearchQuota.currentUsage
+        })
+
+        try {
+          log.info('Performing web search for query', { query: userPrompt })
+          const searchResults = await tavilyClient.search(userPrompt, {
+            maxResults: 3,
+            includeAnswer: true,
+            searchDepth: 'basic'
+          })
+
+          if (searchResults && searchResults.results.length > 0) {
+            webSearchResults = searchResults
+
+            // Track web search usage
+            const tracked = await trackWebSearchUsage(userId)
+            if (!tracked) {
+              log.warn('Failed to track web search usage', { userId })
+            }
+
+            // Add search context to messages with date reminder
+            const searchContext = `${dateContext}
 
 Web search results for "${userPrompt}":
 ${searchResults.answer ? `Summary: ${searchResults.answer}\n\n` : ''}
-${searchResults.results.map((r, i) => 
+${searchResults.results.map((r, i) =>
   `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.content.substring(0, 200)}...\n`
 ).join('\n')}
 
 Based on these search results and knowing that today is ${currentDate.getFullYear()}, please provide an informed response.`
-          
-          // Insert search results before the user message
-          finalMessages = [
-            ...messages.slice(0, -1),
-            { role: 'system', content: searchContext },
-            messages[messages.length - 1]
-          ]
-          
-          log.info('Web search completed', { resultCount: searchResults.results.length })
+
+            // Insert search results before the user message
+            finalMessages = [
+              ...messages.slice(0, -1),
+              { role: 'system', content: searchContext },
+              messages[messages.length - 1]
+            ]
+
+            log.info('Web search completed', { resultCount: searchResults.results.length })
+          }
+        } catch (searchError) {
+          log.warn('Web search failed, continuing without search results', searchError)
         }
-      } catch (searchError) {
-        log.warn('Web search failed, continuing without search results', searchError)
       }
     }
     
@@ -383,15 +405,28 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     reasoning = false
   } = body
 
-  // Check if user can access advanced models
-  const hasAdvancedAccess = await canUseAdvancedModels(user.id)
-  const advancedModels = ['openai/gpt-5', 'anthropic/claude-opus-4.1', 'anthropic/claude-opus-4', 'x-ai/grok-4']
-  
-  if (advancedModels.includes(model) && !hasAdvancedAccess) {
-    return NextResponse.json(
-      { error: 'Advanced models require a Pro or Enterprise subscription. Please upgrade your plan.' },
-      { status: 403 }
-    )
+  // Check model access based on user's plan
+  const userPlan = await getUserPlan(user.id)
+
+  // Free plan: Check if model is in the allowed list
+  if (userPlan === 'free') {
+    if (!isModelAvailableForFreePlan(model)) {
+      return NextResponse.json(
+        { error: getModelAccessErrorMessage('free', model) },
+        { status: 403 }
+      )
+    }
+  }
+
+  // Plus/Pro plans: Check for advanced models
+  if (isAdvancedModel(model)) {
+    const hasAdvancedAccess = await canUseAdvancedModels(user.id)
+    if (!hasAdvancedAccess) {
+      return NextResponse.json(
+        { error: getModelAccessErrorMessage(userPlan, model) },
+        { status: 403 }
+      )
+    }
   }
 
   // Estimate token usage for quota check  

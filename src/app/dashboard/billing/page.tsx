@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
@@ -14,7 +14,7 @@ interface BillingData {
   plan: SubscriptionPlan | null
 }
 
-export default function BillingDashboard() {
+function BillingDashboardContent() {
   const [billingData, setBillingData] = useState<BillingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [portalLoading, setPortalLoading] = useState(false)
@@ -275,26 +275,58 @@ export default function BillingDashboard() {
                       <span className="text-slate-300">Sessions Used</span>
                       <span className="text-white">
                         {billingData.usage.sessionsThisMonth} / {' '}
-                        {billingData.usage.sessionsLimit === -1 
-                          ? 'Unlimited' 
+                        {billingData.usage.sessionsLimit === -1
+                          ? 'Unlimited'
                           : billingData.usage.sessionsLimit
                         }
                       </span>
                     </div>
                     {billingData.usage.sessionsLimit !== -1 && (
                       <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div 
+                        <div
                           className={`h-2 rounded-full transition-all duration-300 ${
                             getUsageColor(getUsagePercentage(
-                              billingData.usage.sessionsThisMonth, 
+                              billingData.usage.sessionsThisMonth,
                               billingData.usage.sessionsLimit
                             ))
                           }`}
-                          style={{ 
+                          style={{
                             width: `${getUsagePercentage(
-                              billingData.usage.sessionsThisMonth, 
+                              billingData.usage.sessionsThisMonth,
                               billingData.usage.sessionsLimit
-                            )}%` 
+                            )}%`
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Web Search Usage */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-slate-300">Web Searches Used</span>
+                      <span className="text-white">
+                        {billingData.usage.webSearchesUsed || 0} / {' '}
+                        {billingData.usage.webSearchesLimit === -1
+                          ? 'Unlimited'
+                          : billingData.usage.webSearchesLimit || 0
+                        }
+                      </span>
+                    </div>
+                    {billingData.usage.webSearchesLimit !== -1 && (
+                      <div className="w-full bg-slate-700 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            getUsageColor(getUsagePercentage(
+                              billingData.usage.webSearchesUsed || 0,
+                              billingData.usage.webSearchesLimit || 10
+                            ))
+                          }`}
+                          style={{
+                            width: `${getUsagePercentage(
+                              billingData.usage.webSearchesUsed || 0,
+                              billingData.usage.webSearchesLimit || 10
+                            )}%`
                           }}
                         />
                       </div>
@@ -350,5 +382,20 @@ export default function BillingDashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function BillingDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-4 mx-auto" />
+          <p className="text-slate-300">Loading billing information...</p>
+        </div>
+      </div>
+    }>
+      <BillingDashboardContent />
+    </Suspense>
   )
 }

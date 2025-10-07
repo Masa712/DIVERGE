@@ -1,21 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
-import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
+import { Session, ChatNode, ModelId, AVAILABLE_MODELS, UserProfile as UserProfileType } from '@/types'
 import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-input'
 import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { LeftSidebar } from '@/components/layout/left-sidebar'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
+import { FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
 
 interface UserProfile {
   default_model: ModelId | null
   default_temperature: number
   default_max_tokens: number
+  subscription_plan?: string
 }
 
 export default function ChatPage() {
@@ -31,7 +33,6 @@ export default function ChatPage() {
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
   const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
-  const [loadingSession, setLoadingSession] = useState(false)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
@@ -42,6 +43,19 @@ export default function ChatPage() {
   const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
   const [enableWebSearch, setEnableWebSearch] = useState(true) // Web search toggle
   const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
+
+  // Calculate available models based on user's subscription plan
+  const availableModels = useMemo(() => {
+    const userPlan = userProfile?.subscription_plan || 'free'
+
+    // Free plan: only free plan models
+    if (userPlan === 'free') {
+      return AVAILABLE_MODELS.filter(model => FREE_PLAN_MODELS.includes(model.id))
+    }
+
+    // Plus, Pro, Enterprise: all models
+    return AVAILABLE_MODELS
+  }, [userProfile])
 
   useEffect(() => {
     log.debug('Auth check', { loading, userPresent: !!user })
@@ -60,16 +74,23 @@ export default function ChatPage() {
         const response = await fetch('/api/profile')
         if (response.ok) {
           const { data } = await response.json()
+
+          // If subscription_plan is not set, default to 'free'
+          if (!data.subscription_plan) {
+            data.subscription_plan = 'free'
+          }
+
           setUserProfile({
             default_model: data.default_model,
             default_temperature: data.default_temperature,
-            default_max_tokens: data.default_max_tokens
+            default_max_tokens: data.default_max_tokens,
+            subscription_plan: data.subscription_plan
           })
+
           // Set selected model to user's default if available
           if (data.default_model) {
             setSelectedModel(data.default_model)
           }
-          log.debug('User profile loaded', { defaultModel: data.default_model, temperature: data.default_temperature, maxTokens: data.default_max_tokens })
         }
       } catch (error) {
         log.warn('Failed to load user profile', error)
@@ -78,44 +99,6 @@ export default function ChatPage() {
 
     fetchUserProfile()
   }, [user])
-
-  const fetchSession = async (sessionId: string) => {
-    log.info('Fetching session', { sessionId })
-    setLoadingSession(true)
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`)
-      if (response.ok) {
-        const { data } = await response.json()
-        const { session, chatNodes } = data
-        log.info('Session loaded successfully', { sessionId: session.id, sessionName: session.name, nodeCount: chatNodes?.length || 0 })
-        setCurrentSession(session)
-        setChatNodes(chatNodes || [])
-        // Set current node to the last node
-        if (chatNodes && chatNodes.length > 0) {
-          setCurrentNodeId(chatNodes[chatNodes.length - 1].id)
-        }
-      } else if (response.status === 404) {
-        log.warn('Session not found', { sessionId })
-        showError('Session not found. It may have been deleted.')
-        // Clear current session and trigger sidebar refresh
-        setCurrentSession(null)
-        setChatNodes([])
-        setCurrentNodeId(undefined)
-        // Trigger sidebar refresh by calling onNewSession
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('session-sync-needed'))
-        }
-      } else {
-        log.error('Session fetch failed', { status: response.status })
-        showError('Failed to load session')
-      }
-    } catch (error) {
-      log.error('Error fetching session', error)
-      showError('Failed to load session')
-    } finally {
-      setLoadingSession(false)
-    }
-  }
 
   // Poll for session name updates when first node is created
   useEffect(() => {
@@ -154,10 +137,8 @@ export default function ChatPage() {
   }, [currentSession?.id, currentSession?.name, chatNodes.length])
 
   const handleSessionSelect = (sessionId: string) => {
-    fetchSession(sessionId)
-    // Close right sidebar when switching sessions
-    setIsSidebarOpen(false)
-    setSelectedNodeForDetail(null)
+    // Navigate to the specific session page
+    router.push(`/chat/${sessionId}`)
   }
 
   const handleNewSession = () => {
@@ -553,11 +534,12 @@ export default function ChatPage() {
             </div>
 
             {/* Glassmorphism Chat Input - Floating */}
-            <GlassmorphismChatInput 
-              onSendMessage={handleSendMessage} 
+            <GlassmorphismChatInput
+              onSendMessage={handleSendMessage}
               availableNodes={chatNodes}
               selectedModel={selectedModel}
               onModelChange={setSelectedModel}
+              availableModels={availableModels}
               enableWebSearch={enableWebSearch}
               onWebSearchToggle={setEnableWebSearch}
               enableReasoning={enableReasoning}

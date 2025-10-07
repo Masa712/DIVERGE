@@ -11,8 +11,12 @@ export interface SubscriptionPlan {
     sessionsPerMonth: number
     advancedModels: boolean
     prioritySupport: boolean
-    webSearch: boolean
+    webSearchLimit: number // -1 for unlimited, 0 for none
+    historyDays: number // -1 for unlimited
+    customPromptsLimit: number
     exportFeatures: boolean
+    apiAccess: boolean
+    priorityProcessing: boolean
   }
   stripePriceId: string
   popular?: boolean
@@ -39,6 +43,8 @@ export interface UsageQuota {
   monthlyTokensLimit: number
   sessionsThisMonth: number
   sessionsLimit: number
+  webSearchesUsed: number
+  webSearchesLimit: number
   resetDate: Date
 }
 
@@ -52,92 +58,112 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     currency: 'usd',
     interval: 'month',
     features: [
-      'Up to 10,000 tokens per month',
-      'Basic AI models (GPT-4o)',
-      'Up to 5 sessions per month',
+      '500,000 tokens per month',
+      '8 basic AI models (DeepSeek V3.1, Grok-4 Fast, GPT-5 Nano, etc.)',
+      '10 web searches per month',
+      '3 sessions saved',
+      '7 days history',
       'Community support'
     ],
     limits: {
-      monthlyTokens: 10000,
-      sessionsPerMonth: 5,
+      monthlyTokens: 500000,
+      sessionsPerMonth: 3,
       advancedModels: false,
       prioritySupport: false,
-      webSearch: false,
-      exportFeatures: false
+      webSearchLimit: 10,
+      historyDays: 7,
+      customPromptsLimit: 0,
+      exportFeatures: false,
+      apiAccess: false,
+      priorityProcessing: false
     },
     stripePriceId: '' // No Stripe needed for free plan
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    description: 'Perfect for professionals and power users',
+    id: 'plus',
+    name: 'Plus',
+    description: 'Perfect for power users and professionals',
     price: 2000, // $20.00
     currency: 'usd',
     interval: 'month',
     features: [
-      'Up to 100,000 tokens per month',
-      'Access to all AI models including GPT-5, Claude Opus 4',
+      '4,000,000 tokens per month (hybrid limits)',
+      'All AI models with smart allocation',
+      '200 web searches per month',
       'Unlimited sessions',
-      'Web search capabilities',
-      'Export conversations',
+      '90 days history',
+      '1 custom system prompt',
+      'Markdown export',
+      'Smart mode (cost optimization)',
       'Priority support'
     ],
     limits: {
-      monthlyTokens: 100000,
+      monthlyTokens: 4000000,
       sessionsPerMonth: -1, // unlimited
       advancedModels: true,
       prioritySupport: true,
-      webSearch: true,
-      exportFeatures: true
+      webSearchLimit: 200,
+      historyDays: 90,
+      customPromptsLimit: 1,
+      exportFeatures: true,
+      apiAccess: false,
+      priorityProcessing: false
     },
-    stripePriceId: 'price_pro_monthly', // Will be set from Stripe dashboard
+    stripePriceId: 'price_plus_monthly', // Will be set from Stripe dashboard
     popular: true
   },
   {
-    id: 'enterprise',
-    name: 'Enterprise',
-    description: 'For teams and organizations with high usage',
-    price: 10000, // $100.00
+    id: 'pro',
+    name: 'Pro',
+    description: 'For developers and enterprise users',
+    price: 5000, // $50.00
     currency: 'usd',
     interval: 'month',
     features: [
-      'Unlimited tokens',
-      'Access to all AI models',
+      '15,000,000 tokens per month (unlimited)',
+      'All AI models unlimited',
+      'Unlimited web searches',
       'Unlimited sessions',
-      'Web search capabilities',
-      'Advanced export features',
-      'Priority support',
-      'Custom integrations',
-      'Team management'
+      'Unlimited history',
+      '5 custom system prompts',
+      'All export formats (MD/JSON/HTML/PDF)',
+      '10,000 API calls per month',
+      'Priority processing',
+      'Session sharing with edit access',
+      'Priority support'
     ],
     limits: {
-      monthlyTokens: -1, // unlimited
+      monthlyTokens: 15000000,
       sessionsPerMonth: -1, // unlimited
       advancedModels: true,
       prioritySupport: true,
-      webSearch: true,
-      exportFeatures: true
+      webSearchLimit: -1, // unlimited
+      historyDays: -1, // unlimited
+      customPromptsLimit: 5,
+      exportFeatures: true,
+      apiAccess: true,
+      priorityProcessing: true
     },
-    stripePriceId: 'price_enterprise_monthly' // Will be set from Stripe dashboard
+    stripePriceId: 'price_pro_monthly' // Will be set from Stripe dashboard
   }
 ]
 
 export const YEARLY_PLANS: SubscriptionPlan[] = [
   {
-    ...SUBSCRIPTION_PLANS[1], // Pro plan
-    id: 'pro-yearly',
-    name: 'Pro (Yearly)',
+    ...SUBSCRIPTION_PLANS[1], // Plus plan
+    id: 'plus-yearly',
+    name: 'Plus (Yearly)',
     price: 20000, // $200.00 (2 months free)
     interval: 'year',
-    stripePriceId: 'price_pro_yearly'
+    stripePriceId: 'price_plus_yearly'
   },
   {
-    ...SUBSCRIPTION_PLANS[2], // Enterprise plan
-    id: 'enterprise-yearly',
-    name: 'Enterprise (Yearly)',
-    price: 100000, // $1000.00 (2 months free)
+    ...SUBSCRIPTION_PLANS[2], // Pro plan
+    id: 'pro-yearly',
+    name: 'Pro (Yearly)',
+    price: 50000, // $500.00 (2 months free)
     interval: 'year',
-    stripePriceId: 'price_enterprise_yearly'
+    stripePriceId: 'price_pro_yearly'
   }
 ]
 

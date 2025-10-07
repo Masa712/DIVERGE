@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Zap, Shield, Sparkles, CheckCircle } from 'lucide-react'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 
-export default function LandingPage() {
+function LandingPageContent() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -313,5 +313,20 @@ export default function LandingPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+export default function LandingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-4 mx-auto" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <LandingPageContent />
+    </Suspense>
   )
 }
