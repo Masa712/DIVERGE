@@ -12,6 +12,18 @@ interface Props {
 export function ModelSelector({ selectedModel, onModelChange, availableModels, compact = false }: Props) {
   const selectedModelConfig = availableModels.find(m => m.id === selectedModel)
 
+  // Group models by provider
+  const modelsByProvider = availableModels.reduce((acc, model) => {
+    if (!acc[model.provider]) {
+      acc[model.provider] = []
+    }
+    acc[model.provider].push(model)
+    return acc
+  }, {} as Record<string, ModelConfig[]>)
+
+  // Sort providers alphabetically
+  const sortedProviders = Object.keys(modelsByProvider).sort()
+
   if (compact) {
     return (
       <select
@@ -19,10 +31,14 @@ export function ModelSelector({ selectedModel, onModelChange, availableModels, c
         onChange={(e) => onModelChange(e.target.value as ModelId)}
         className="rounded-lg bg-white/10 border border-white/20 px-2 py-1 text-xs text-gray-700 focus:bg-white/20 focus:border-white/30 focus:outline-none transition-all duration-200 text-right"
       >
-        {availableModels.map((model) => (
-          <option key={model.id} value={model.id}>
-            {model.name}
-          </option>
+        {sortedProviders.map((provider) => (
+          <optgroup key={provider} label={provider}>
+            {modelsByProvider[provider].map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
     )
@@ -35,15 +51,20 @@ export function ModelSelector({ selectedModel, onModelChange, availableModels, c
         onChange={(e) => onModelChange(e.target.value as ModelId)}
         className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-right"
       >
-        {availableModels.map((model) => (
-          <option key={model.id} value={model.id}>
-            {model.name} ({model.provider})
-          </option>
+        {sortedProviders.map((provider) => (
+          <optgroup key={provider} label={provider}>
+            {modelsByProvider[provider].map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name} - {model.contextLength.toLocaleString()} tokens
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
-      
+
       {selectedModelConfig && (
         <div className="text-xs text-muted-foreground">
+          <div>Provider: {selectedModelConfig.provider}</div>
           <div>{selectedModelConfig.contextLength.toLocaleString()} tokens</div>
           <div>
             ${selectedModelConfig.costPerMillionTokens.input}/${selectedModelConfig.costPerMillionTokens.output} per 1M tokens

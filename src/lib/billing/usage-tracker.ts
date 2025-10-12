@@ -42,8 +42,8 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
     // If no quota record exists, initialize with free plan
     if (!quota) {
       const { error: initError } = await supabase.rpc('initialize_user_quota', {
-        user_id: userId,
-        plan_id: 'free'
+        p_user_id: userId,
+        p_plan_id: 'free'
       })
 
       if (initError) {
@@ -51,11 +51,11 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
         return { allowed: false, currentUsage: 0, limit: 0, planId: 'free' }
       }
 
-      // Return free plan limits
+      // Return free plan limits (updated to 500K for free plan)
       return {
-        allowed: estimatedTokens <= 10000,
+        allowed: estimatedTokens <= 500000,
         currentUsage: 0,
-        limit: 10000,
+        limit: 500000,
         planId: 'free'
       }
     }
@@ -197,8 +197,8 @@ export async function getUserPlan(userId: string): Promise<string> {
 
       // Try to initialize quota for this user
       await supabase.rpc('initialize_user_quota', {
-        user_id: userId,
-        plan_id: 'free'
+        p_user_id: userId,
+        p_plan_id: 'free'
       })
 
       return 'free'
@@ -332,8 +332,8 @@ export async function canCreateSession(userId: string): Promise<{
     // If no quota record exists, initialize with free plan
     if (!quota) {
       const { error: initError } = await supabase.rpc('initialize_user_quota', {
-        user_id: userId,
-        plan_id: 'free'
+        p_user_id: userId,
+        p_plan_id: 'free'
       })
 
       if (initError) {

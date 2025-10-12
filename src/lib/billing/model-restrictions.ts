@@ -5,26 +5,20 @@
 import { ModelId } from '@/types'
 
 /**
- * Free plan: 11 basic low-cost models
+ * Free plan: 5 basic ultra-low-cost models
  * Based on the revenue plan specification and available ModelId types
- * Includes newest high-efficiency models with large context windows
+ * Focused on the most cost-effective models for free tier
  */
 export const FREE_PLAN_MODELS: ModelId[] = [
   // Ultra low-cost models (< $1/M tokens)
   'deepseek/deepseek-chat-v3.1', // DeepSeek V3.1 (164K context, $0.27 input)
-  'x-ai/grok-3-mini', // Grok 3 Mini (131K context, $0.30 input)
   'google/gemini-2.5-flash', // Gemini Flash (1M context, $0.25 input)
   'openai/gpt-5-nano', // GPT-5 Nano (400K context, $0.05 input)
 
   // Low-cost models ($1-10/M tokens)
-  'openai/gpt-5-mini', // GPT-5 Mini (128K context, $8 input)
   'openai/gpt-oss-120b', // GPT OSS 120B (128K context, $5 input)
-  'openai/gpt-4o-2024-11-20', // GPT-4o (128K context, $5 input)
-  'anthropic/claude-sonnet-4', // Claude Sonnet 4 (250K context, $8 input)
 
-  // Medium-cost models with large context
-  'google/gemini-2.5-pro', // Gemini Pro (2M context, $2.5 input)
-  'x-ai/grok-3', // Grok 3 (131K context, $10 input)
+  // Medium-cost with large context
   'x-ai/grok-4-fast', // Grok 4 Fast (2M context, $10 input)
 ]
 
@@ -94,7 +88,7 @@ export function getModelTier(model: string): 'high' | 'medium' | 'low' | null {
  */
 export function getModelAccessErrorMessage(plan: string, model: string): string {
   if (plan === 'free') {
-    return `This model is not available on the Free plan. Please upgrade to Plus or Pro to access all models. Free plan includes: ${FREE_PLAN_MODELS.slice(0, 3).join(', ')} and 5 more models.`
+    return `This model is not available on the Free plan. Please upgrade to Plus or Pro to access all models. Free plan includes: ${FREE_PLAN_MODELS.slice(0, 3).join(', ')} and 2 more models.`
   }
 
   if (isAdvancedModel(model)) {
