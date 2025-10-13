@@ -3,18 +3,23 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
-import { 
+import {
   UserIcon,
   KeyIcon,
   CpuChipIcon,
   ChatBubbleLeftRightIcon,
   ArrowLeftIcon,
   CheckIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  CreditCardIcon,
+  ArrowTrendingUpIcon,
+  StarIcon
 } from '@heroicons/react/24/outline'
 import { SystemPromptSettings } from '@/components/settings/system-prompt-settings'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { SubscriptionPlan, UserSubscription, UsageQuota, getPlanById, formatPrice } from '@/types/subscription'
 
 interface UserProfile {
   display_name: string
@@ -24,13 +29,20 @@ interface UserProfile {
   email: string
 }
 
+interface BillingData {
+  subscription: UserSubscription | null
+  usage: UsageQuota | null
+  plan: SubscriptionPlan | null
+}
+
 export default function SettingsPage() {
   const router = useRouter()
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
-  
+  const supabase = createClientComponentClient()
+
   // Profile state
   const [profile, setProfile] = useState<UserProfile>({
     display_name: '',
@@ -39,31 +51,26 @@ export default function SettingsPage() {
     default_max_tokens: 1000,
     email: ''
   })
-  
+
+  // Billing state
+  const [billingData, setBillingData] = useState<BillingData | null>(null)
+  const [billingLoading, setBillingLoading] = useState(true)
+
   // Password state
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   })
-  const [showPasswordForm, setShowPasswordForm] = useState(false)
-  
+
   // Active tab
   const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'model' | 'prompt'>('profile')
-
-  useEffect(() => {
-    if (!user) {
-      router.push('/auth')
-      return
-    }
-    fetchProfile()
-  }, [user])
 
   const fetchProfile = async () => {
     try {
       const response = await fetch('/api/profile')
       if (!response.ok) throw new Error('Failed to fetch profile')
-      
+
       const data = await response.json()
       setProfile(data.data)
     } catch (error) {
@@ -73,6 +80,53 @@ export default function SettingsPage() {
       setLoading(false)
     }
   }
+
+  const fetchBillingData = async () => {
+    if (!user) return
+
+    try {
+      setBillingLoading(true)
+
+      // Fetch subscription data
+      const { data: subscriptionData } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single()
+
+      // Fetch usage data
+      const { data: usageData } = await supabase
+        .from('usage_quotas')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('reset_date', new Date().toISOString())
+        .single()
+
+      const plan = subscriptionData
+        ? getPlanById(subscriptionData.plan_id)
+        : getPlanById('free')
+
+      setBillingData({
+        subscription: subscriptionData,
+        usage: usageData,
+        plan: plan || null,
+      })
+    } catch (error) {
+      console.error('Error fetching billing data:', error)
+    } finally {
+      setBillingLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/auth')
+      return
+    }
+    fetchProfile()
+    fetchBillingData()
+  }, [user])
 
   const saveProfile = async () => {
     setSaving(true)
@@ -132,8 +186,7 @@ export default function SettingsPage() {
       
       setMessage({ type: 'success', text: 'Password changed successfully' })
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
-      setShowPasswordForm(false)
-      
+
       // Clear message after 3 seconds
       setTimeout(() => setMessage(null), 3000)
     } catch (error) {
@@ -272,6 +325,172 @@ export default function SettingsPage() {
               >
                 {saving ? 'Saving...' : 'Save Profile'}
               </button>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200 my-8"></div>
+
+              {/* Current Plan Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <CreditCardIcon className="w-5 h-5 text-blue-500" />
+                    Current Plan
+                  </h3>
+                  {billingData?.plan && billingData.plan.id !== 'free' && (
+                    <button
+                      onClick={() => router.push('/pricing')}
+                      className="px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all"
+                    >
+                      Change Plan
+                    </button>
+                  )}
+                </div>
+
+                {billingLoading ? (
+                  <div className="h-24 bg-gray-100 rounded-lg animate-pulse"></div>
+                ) : billingData?.plan ? (
+                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-2xl font-bold text-gray-900">{billingData.plan.name}</h4>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-gray-900">
+                          {formatPrice(billingData.plan.price)}
+                        </div>
+                        {billingData.plan.price > 0 && (
+                          <div className="text-sm text-gray-600">/{billingData.plan.interval}</div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-gray-700 mb-4">{billingData.plan.description}</p>
+
+                    {billingData.plan.id === 'free' && (
+                      <button
+                        onClick={() => router.push('/pricing')}
+                        className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all flex items-center justify-center gap-2"
+                      >
+                        <StarIcon className="w-4 h-4" />
+                        Upgrade to Plus or Pro
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No plan information available
+                  </div>
+                )}
+              </div>
+
+              {/* Usage This Month Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                  <ArrowTrendingUpIcon className="w-5 h-5 text-green-500" />
+                  Usage This Month
+                </h3>
+
+                {billingLoading ? (
+                  <div className="h-32 bg-gray-100 rounded-lg animate-pulse"></div>
+                ) : billingData?.usage ? (
+                  <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 space-y-4">
+                    {/* Token Usage */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Tokens Used</span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {billingData.usage.monthlyTokensUsed.toLocaleString()} / {' '}
+                          {billingData.usage.monthlyTokensLimit === -1
+                            ? 'Unlimited'
+                            : billingData.usage.monthlyTokensLimit.toLocaleString()
+                          }
+                        </span>
+                      </div>
+                      {billingData.usage.monthlyTokensLimit !== -1 && (
+                        <div className="w-full bg-gray-300 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              ((billingData.usage.monthlyTokensUsed / billingData.usage.monthlyTokensLimit) * 100) < 50
+                                ? 'bg-green-500'
+                                : ((billingData.usage.monthlyTokensUsed / billingData.usage.monthlyTokensLimit) * 100) < 80
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
+                            }`}
+                            style={{
+                              width: `${Math.min((billingData.usage.monthlyTokensUsed / billingData.usage.monthlyTokensLimit) * 100, 100)}%`
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Session Usage */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Sessions Used</span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {billingData.usage.sessionsThisMonth} / {' '}
+                          {billingData.usage.sessionsLimit === -1
+                            ? 'Unlimited'
+                            : billingData.usage.sessionsLimit
+                          }
+                        </span>
+                      </div>
+                      {billingData.usage.sessionsLimit !== -1 && (
+                        <div className="w-full bg-gray-300 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              ((billingData.usage.sessionsThisMonth / billingData.usage.sessionsLimit) * 100) < 50
+                                ? 'bg-green-500'
+                                : ((billingData.usage.sessionsThisMonth / billingData.usage.sessionsLimit) * 100) < 80
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
+                            }`}
+                            style={{
+                              width: `${Math.min((billingData.usage.sessionsThisMonth / billingData.usage.sessionsLimit) * 100, 100)}%`
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Web Search Usage */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-700">Web Searches Used</span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {billingData.usage.webSearchesUsed || 0} / {' '}
+                          {billingData.usage.webSearchesLimit === -1
+                            ? 'Unlimited'
+                            : billingData.usage.webSearchesLimit || 0
+                          }
+                        </span>
+                      </div>
+                      {billingData.usage.webSearchesLimit !== -1 && (
+                        <div className="w-full bg-gray-300 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              (((billingData.usage.webSearchesUsed || 0) / (billingData.usage.webSearchesLimit || 10)) * 100) < 50
+                                ? 'bg-green-500'
+                                : (((billingData.usage.webSearchesUsed || 0) / (billingData.usage.webSearchesLimit || 10)) * 100) < 80
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
+                            }`}
+                            style={{
+                              width: `${Math.min(((billingData.usage.webSearchesUsed || 0) / (billingData.usage.webSearchesLimit || 10)) * 100, 100)}%`
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-gray-500 pt-2 border-t border-gray-300">
+                      Usage resets on {new Date(billingData.usage.resetDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    No usage data available
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
