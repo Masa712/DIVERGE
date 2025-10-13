@@ -59,7 +59,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     interval: 'month',
     features: [
       '500,000 tokens per month',
-      '8 basic AI models (DeepSeek V3.1, Grok-4 Fast, GPT-5 Nano, etc.)',
+      '5 basic AI models (DeepSeek V3.1, Gemini Flash, GPT-5 Nano, etc.)',
       '10 web searches per month',
       '3 sessions saved',
       '7 days history',
@@ -109,7 +109,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       apiAccess: false,
       priorityProcessing: false
     },
-    stripePriceId: 'price_plus_monthly', // Will be set from Stripe dashboard
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PLUS_MONTHLY || 'price_plus_monthly',
     popular: true
   },
   {
@@ -144,7 +144,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       apiAccess: true,
       priorityProcessing: true
     },
-    stripePriceId: 'price_pro_monthly' // Will be set from Stripe dashboard
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY || 'price_pro_monthly'
   }
 ]
 
@@ -155,7 +155,7 @@ export const YEARLY_PLANS: SubscriptionPlan[] = [
     name: 'Plus (Yearly)',
     price: 20000, // $200.00 (2 months free)
     interval: 'year',
-    stripePriceId: 'price_plus_yearly'
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PLUS_YEARLY || 'price_plus_yearly'
   },
   {
     ...SUBSCRIPTION_PLANS[2], // Pro plan
@@ -163,7 +163,7 @@ export const YEARLY_PLANS: SubscriptionPlan[] = [
     name: 'Pro (Yearly)',
     price: 50000, // $500.00 (2 months free)
     interval: 'year',
-    stripePriceId: 'price_pro_yearly'
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY || 'price_pro_yearly'
   }
 ]
 

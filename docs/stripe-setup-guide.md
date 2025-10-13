@@ -1,151 +1,198 @@
-# Stripe Payment Setup Guide
+# Stripe商品カタログ作成ガイド
 
-## Prerequisites
-- Stripe account (Test mode for development)
-- Stripe CLI installed (optional but recommended for local testing)
+## 概要
+Divergeの3段階サブスクリプションプラン（Free, Plus, Pro）をStripe Dashboardで設定します。
 
-## Step 1: Environment Variables
+---
 
-Add the following to your `.env.local` file:
+## 前提条件
+- Stripeアカウント作成済み
+- テストモード/本番モードを確認
 
-```env
-# Stripe API Keys (from https://dashboard.stripe.com/apikeys)
-STRIPE_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+---
 
-# Webhook Secret (obtained after creating webhook)
-STRIPE_WEBHOOK_SECRET=whsec_...
+## 📦 作成する商品・価格
 
-# Stripe Price IDs (obtained after creating products)
-NEXT_PUBLIC_STRIPE_PRICE_FREE=price_free_xxx
-NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY=price_xxx
-NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY=price_xxx
-NEXT_PUBLIC_STRIPE_PRICE_ENTERPRISE_MONTHLY=price_xxx
-NEXT_PUBLIC_STRIPE_PRICE_ENTERPRISE_YEARLY=price_xxx
+### 1. Free Plan
+**商品名**: Diverge Free Plan
+**価格**: $0
+**説明**: Basic features with 5 AI models, 500K tokens/month
 
-# Base URL for redirects
-NEXT_PUBLIC_BASE_URL=https://divergeai.app
+**特徴**:
+- 5 AI models
+- 500,000 tokens/month
+- 3 sessions/month
+- 10 web searches/month
+
+---
+
+### 2. Plus Plan
+
+#### Plus Monthly
+**商品名**: Diverge Plus Plan
+**請求間隔**: Monthly
+**価格**: $20/月
+**説明**: Full access to all AI models with 4M tokens/month
+
+**特徴**:
+- All AI models
+- 4,000,000 tokens/month
+- Unlimited sessions
+- 200 web searches/month
+- Priority support
+
+#### Plus Yearly
+**商品名**: Diverge Plus Plan (Annual)
+**請求間隔**: Yearly
+**価格**: $200/年 ($16.67/月相当、2ヶ月無料)
+**説明**: Full access to all AI models with 4M tokens/month (save 2 months!)
+
+**特徴**: Monthly版と同じ + 年間2ヶ月分無料
+
+---
+
+### 3. Pro Plan
+
+#### Pro Monthly
+**商品名**: Diverge Pro Plan
+**請求間隔**: Monthly
+**価格**: $50/月
+**説明**: Unlimited tokens, web searches, and advanced features
+
+**特徴**:
+- All AI models
+- 15,000,000 tokens/month
+- Unlimited sessions
+- Unlimited web searches
+- Priority support
+- API access (10K calls/month)
+- Advanced analytics
+
+#### Pro Yearly
+**商品名**: Diverge Pro Plan (Annual)
+**請求間隔**: Yearly
+**価格**: $500/年 ($41.67/月相当、2ヶ月無料)
+**説明**: Unlimited tokens, web searches, and advanced features (save 2 months!)
+
+**特徴**: Monthly版と同じ + 年間2ヶ月分無料
+
+---
+
+## 🛠️ Stripeダッシュボード作成手順
+
+### ステップ1: Stripeダッシュボードにログイン
+1. https://dashboard.stripe.com にアクセス
+2. 右上のモード切替で **テストモード** または **本番モード** を選択
+
+### ステップ2: 商品を作成
+
+#### Plus Monthly の例
+
+1. **左サイドバー** → **商品カタログ (Product catalog)**
+2. **+ 商品を追加 (+ Add product)** をクリック
+3. 以下を入力：
+
+   **商品情報**:
+   - 名前: `Diverge Plus Plan`
+   - 説明: `Full access to all AI models with 4M tokens/month`
+   - 画像: （任意）プロダクトロゴをアップロード
+
+   **料金情報**:
+   - 料金モデル: `Standard pricing`
+   - 価格: `20` USD
+   - 請求期間: `Monthly`
+   - 請求方法: `Charge automatically`
+
+   **追加オプション**:
+   - 無料トライアル: なし（または希望する期間）
+   - メタデータ（任意）:
+     - `plan_id`: `plus`
+     - `tokens_limit`: `4000000`
+     - `sessions_limit`: `-1`
+     - `web_searches_limit`: `200`
+
+4. **商品を保存 (Save product)** をクリック
+5. **Price ID をコピー** (例: `price_1ABC123xyz...`)
+
+### ステップ3: 残りの商品を作成
+
+同様の手順で以下を作成：
+- Plus Yearly ($200/year)
+- Pro Monthly ($50/month)
+- Pro Yearly ($500/year)
+
+**注意**: Freeプランは商品作成不要（Stripe決済なし）
+
+---
+
+## 📋 作成する Price ID 一覧表
+
+作成後、以下の表を埋めてください：
+
+| プラン | 請求間隔 | 価格 | Price ID |
+|--------|----------|------|----------|
+| Plus | Monthly | $20 | `price_________________` |
+| Plus | Yearly | $200 | `price_________________` |
+| Pro | Monthly | $50 | `price_________________` |
+| Pro | Yearly | $500 | `price_________________` |
+
+---
+
+## 🔧 コードへの反映方法
+
+作成したPrice IDを取得したら、私に教えてください。
+コードを自動更新します。
+
+必要な情報：
+```
+Plus Monthly: price_xxxxx
+Plus Yearly: price_yyyyy
+Pro Monthly: price_zzzzz
+Pro Yearly: price_wwwww
 ```
 
-## Step 2: Create Products in Stripe Dashboard
+---
 
-1. Go to [Stripe Products](https://dashboard.stripe.com/products)
-2. Create the following products:
+## 🔐 Webhook設定
 
-### Free Plan
-- **Name**: Free Plan
-- **Description**: Get started with basic AI conversations
-- **Price**: $0 or skip (no payment needed)
+### エンドポイントを追加
 
-### Pro Plan
-- **Name**: Pro Plan  
-- **Description**: Perfect for professionals and power users
-- **Prices**:
-  - Monthly: $20.00 (recurring monthly)
-  - Yearly: $200.00 (recurring yearly - 2 months free)
-
-### Enterprise Plan
-- **Name**: Enterprise Plan
-- **Description**: For teams and organizations with high usage
-- **Prices**:
-  - Monthly: $100.00 (recurring monthly)
-  - Yearly: $1000.00 (recurring yearly - 2 months free)
-
-## Step 3: Configure Webhook Endpoint
-
-### For Production:
-1. Go to [Stripe Webhooks](https://dashboard.stripe.com/webhooks)
-2. Click "Add endpoint"
-3. Enter URL: `https://divergeai.app/api/stripe/webhook`
-4. Select events:
+1. **Stripe Dashboard** → **開発者 (Developers)** → **Webhooks**
+2. **+ エンドポイントを追加 (+ Add endpoint)** をクリック
+3. エンドポイントURL: `https://yourdomain.com/api/stripe/webhook`
+4. 監視するイベントを選択:
    - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.payment_succeeded`
    - `invoice.payment_failed`
-5. Copy the webhook signing secret (starts with `whsec_`)
+5. **エンドポイントを追加 (Add endpoint)** をクリック
+6. **署名シークレット (Signing secret)** をコピー
+7. 環境変数 `STRIPE_WEBHOOK_SECRET` に設定
 
-### For Local Testing:
-```bash
-# Install Stripe CLI
-brew install stripe/stripe-cli/stripe
+---
 
-# Login to your Stripe account
-stripe login
+## ✅ 動作確認チェックリスト
 
-# Forward webhooks to local server
-stripe listen --forward-to localhost:3000/api/stripe/webhook
+### テストモード
+- [ ] Plus Monthly の商品・価格が作成された
+- [ ] Plus Yearly の商品・価格が作成された
+- [ ] Pro Monthly の商品・価格が作成された
+- [ ] Pro Yearly の商品・価格が作成された
+- [ ] Price ID がすべてコピーされた
 
-# The CLI will display your webhook secret
-# Copy it to STRIPE_WEBHOOK_SECRET in .env.local
-```
+---
 
-## Step 4: Update Price IDs in Code
+## 📞 次のステップ
 
-After creating products, update the price IDs in your environment variables:
+1. Stripeダッシュボードで4つの商品を作成
+2. 4つの Price ID をコピー
+3. 私に Price ID を教えてください → コードを自動更新します
 
-1. Go to each product in Stripe Dashboard
-2. Copy the Price ID (starts with `price_`)
-3. Update the corresponding environment variable
+---
 
-## Step 5: Test the Payment Flow
-
-### Test Cards for Stripe
-- **Success**: 4242 4242 4242 4242
-- **Decline**: 4000 0000 0000 0002
-- **3D Secure**: 4000 0025 0000 3155
-
-### Testing Steps:
-1. Start your development server: `npm run dev`
-2. If testing webhooks locally, run: `stripe listen --forward-to localhost:3000/api/stripe/webhook`
-3. Navigate to `/pricing` page
-4. Select a plan and click "Get Started"
-5. Complete checkout with test card
-6. Verify:
-   - Redirect to billing page with success message
-   - Subscription created in database
-   - User quota updated
-
-## Step 6: Database Verification
-
-Check if tables are created:
-```sql
--- Check user subscriptions
-SELECT * FROM user_subscriptions WHERE user_id = 'YOUR_USER_ID';
-
--- Check usage quotas
-SELECT * FROM usage_quotas WHERE user_id = 'YOUR_USER_ID';
-```
-
-## Step 7: Production Deployment Checklist
-
-- [ ] Switch to live Stripe keys (remove 'test' from keys)
-- [ ] Update webhook URL to production domain
-- [ ] Set production environment variables in Vercel/hosting platform
-- [ ] Test with small real payment first
-- [ ] Enable Stripe fraud detection rules
-- [ ] Set up billing alerts and monitoring
-
-## Troubleshooting
-
-### Webhook not receiving events
-- Check webhook secret is correct
-- Verify URL is accessible (no auth blocking)
-- Check Stripe webhook logs for errors
-
-### Payment succeeds but subscription not created
-- Check database migrations are run
-- Verify webhook events are being processed
-- Check application logs for errors
-
-### User can't access paid features
-- Verify subscription status in database
-- Check usage quota is properly initialized
-- Ensure model access checks are working
-
-## Support Resources
-
-- [Stripe Documentation](https://stripe.com/docs)
-- [Stripe API Reference](https://stripe.com/docs/api)
-- [Stripe Support](https://support.stripe.com/)
+## 🔗 参考リンク
+- [Stripe 商品・価格の作成](https://stripe.com/docs/products-prices/overview)
+- [Stripe Webhook](https://stripe.com/docs/webhooks)
+- [Stripe Testing](https://stripe.com/docs/testing)
