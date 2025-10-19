@@ -20,19 +20,20 @@ interface Props {
   selectedModel: ModelId
   onModelChange: (model: ModelId) => void
   availableModels?: ModelConfig[]
-  
+  modelSelectorDisabled?: boolean
+
   // Web search props
   enableWebSearch?: boolean
   onWebSearchToggle?: (enabled: boolean) => void
-  
+
   // Reasoning props
   enableReasoning?: boolean
   onReasoningToggle?: (enabled: boolean) => void
-  
+
   // Context info props
   currentNodeId?: string
   currentNodePrompt?: string
-  
+
   // Sidebar state
   isRightSidebarOpen?: boolean
   isLeftSidebarCollapsed?: boolean
@@ -50,6 +51,7 @@ export function GlassmorphismChatInput({
   selectedModel,
   onModelChange,
   availableModels = AVAILABLE_MODELS,
+  modelSelectorDisabled = false,
   enableWebSearch = true,
   onWebSearchToggle,
   enableReasoning = false,
@@ -308,6 +310,7 @@ export function GlassmorphismChatInput({
               onModelChange={onModelChange}
               availableModels={availableModels}
               compact={true}
+              disabled={modelSelectorDisabled}
             />
             
             {/* Send Button */}

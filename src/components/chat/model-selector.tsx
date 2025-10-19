@@ -7,9 +7,10 @@ interface Props {
   onModelChange: (model: ModelId) => void
   availableModels: ModelConfig[]
   compact?: boolean
+  disabled?: boolean
 }
 
-export function ModelSelector({ selectedModel, onModelChange, availableModels, compact = false }: Props) {
+export function ModelSelector({ selectedModel, onModelChange, availableModels, compact = false, disabled = false }: Props) {
   const selectedModelConfig = availableModels.find(m => m.id === selectedModel)
 
   // Group models by provider
@@ -29,7 +30,9 @@ export function ModelSelector({ selectedModel, onModelChange, availableModels, c
       <select
         value={selectedModel}
         onChange={(e) => onModelChange(e.target.value as ModelId)}
-        className="rounded-lg bg-white/10 border border-white/20 px-2 py-1 text-xs text-gray-700 focus:bg-white/20 focus:border-white/30 focus:outline-none transition-all duration-200 text-right"
+        disabled={disabled}
+        className="rounded-lg bg-white/10 border border-white/20 px-2 py-1 text-xs text-gray-700 focus:bg-white/20 focus:border-white/30 focus:outline-none transition-all duration-200 text-right disabled:opacity-50 disabled:cursor-not-allowed"
+        title={disabled ? 'Loading subscription plan...' : undefined}
       >
         {sortedProviders.map((provider) => (
           <optgroup key={provider} label={provider}>
@@ -49,7 +52,9 @@ export function ModelSelector({ selectedModel, onModelChange, availableModels, c
       <select
         value={selectedModel}
         onChange={(e) => onModelChange(e.target.value as ModelId)}
-        className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-right"
+        disabled={disabled}
+        className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary text-right disabled:opacity-50 disabled:cursor-not-allowed"
+        title={disabled ? 'Loading subscription plan...' : undefined}
       >
         {sortedProviders.map((provider) => (
           <optgroup key={provider} label={provider}>

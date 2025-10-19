@@ -34,6 +34,7 @@ export default function ChatPage() {
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
   const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
   
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
@@ -71,6 +72,7 @@ export default function ChatPage() {
 
     const fetchUserProfile = async () => {
       try {
+        setProfileLoading(true)
         const response = await fetch('/api/profile')
         if (response.ok) {
           const { data } = await response.json()
@@ -94,6 +96,15 @@ export default function ChatPage() {
         }
       } catch (error) {
         log.warn('Failed to load user profile', error)
+        // Even on error, stop loading to avoid infinite disabled state
+        setUserProfile({
+          default_model: null,
+          default_temperature: 0.7,
+          default_max_tokens: 8000,
+          subscription_plan: 'free'
+        })
+      } finally {
+        setProfileLoading(false)
       }
     }
 
@@ -540,6 +551,7 @@ export default function ChatPage() {
               selectedModel={selectedModel}
               onModelChange={setSelectedModel}
               availableModels={availableModels}
+              modelSelectorDisabled={profileLoading}
               enableWebSearch={enableWebSearch}
               onWebSearchToggle={setEnableWebSearch}
               enableReasoning={enableReasoning}
