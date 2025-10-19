@@ -47,6 +47,12 @@ export default function ChatPage() {
 
   // Calculate available models based on user's subscription plan
   const availableModels = useMemo(() => {
+    // While loading profile, show all models (will be disabled anyway)
+    // This prevents flickering from free models to paid models
+    if (profileLoading) {
+      return AVAILABLE_MODELS
+    }
+
     const userPlan = userProfile?.subscription_plan || 'free'
 
     // Free plan: only free plan models
@@ -56,7 +62,7 @@ export default function ChatPage() {
 
     // Plus, Pro, Enterprise: all models
     return AVAILABLE_MODELS
-  }, [userProfile])
+  }, [userProfile, profileLoading])
 
   useEffect(() => {
     log.debug('Auth check', { loading, userPresent: !!user })
