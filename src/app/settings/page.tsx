@@ -18,8 +18,7 @@ import {
 import { SystemPromptSettings } from '@/components/settings/system-prompt-settings'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { SubscriptionPlan, UserSubscription, UsageQuota, getPlanById, formatPrice } from '@/types/subscription'
+import { SubscriptionPlan, UserSubscription, UsageQuota, formatPrice } from '@/types/subscription'
 
 interface UserProfile {
   display_name: string
@@ -41,7 +40,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
-  const supabase = createClientComponentClient()
 
   // Profile state
   const [profile, setProfile] = useState<UserProfile>({
@@ -55,6 +53,7 @@ export default function SettingsPage() {
   // Billing state
   const [billingData, setBillingData] = useState<BillingData | null>(null)
   const [billingLoading, setBillingLoading] = useState(true)
+  const [portalLoading, setPortalLoading] = useState(false)
 
   // Password state
   const [passwordForm, setPasswordForm] = useState({
@@ -87,33 +86,64 @@ export default function SettingsPage() {
     try {
       setBillingLoading(true)
 
-      // Fetch subscription data
-      const { data: subscriptionData } = await supabase
-        .from('user_subscriptions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .single()
+      console.log('🔍 [Settings] Fetching billing data via API...')
 
-      // Fetch usage data
-      const { data: usageData } = await supabase
-        .from('usage_quotas')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('reset_date', new Date().toISOString())
-        .single()
+      // Use the new billing API endpoint (server-side)
+      const response = await fetch('/api/billing')
 
-      const plan = subscriptionData
-        ? getPlanById(subscriptionData.plan_id)
-        : getPlanById('free')
+      if (!response.ok) {
+        throw new Error('Failed to fetch billing data')
+      }
+
+      const result = await response.json()
+      const { subscription, usage, plan } = result.data
+
+      console.log('✅ [Settings] API response:', result.data)
+
+      // Convert snake_case to camelCase for usage data
+      let finalUsageData: UsageQuota | null = null
+      if (usage) {
+        finalUsageData = {
+          userId: usage.user_id,
+          planId: usage.plan_id,
+          monthlyTokensUsed: usage.monthly_tokens_used,
+          monthlyTokensLimit: usage.monthly_tokens_limit,
+          sessionsThisMonth: usage.sessions_this_month,
+          sessionsLimit: usage.sessions_limit,
+          webSearchesUsed: usage.web_searches_used || 0,
+          webSearchesLimit: usage.web_searches_limit || 10,
+          resetDate: new Date(usage.reset_date),
+        }
+      }
+
+      // Convert snake_case to camelCase for subscription data
+      let finalSubscriptionData: UserSubscription | null = null
+      if (subscription) {
+        finalSubscriptionData = {
+          id: subscription.id,
+          userId: subscription.user_id,
+          planId: subscription.plan_id,
+          stripeSubscriptionId: subscription.stripe_subscription_id,
+          stripeCustomerId: subscription.stripe_customer_id,
+          status: subscription.status,
+          currentPeriodStart: new Date(subscription.current_period_start),
+          currentPeriodEnd: new Date(subscription.current_period_end),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          createdAt: new Date(subscription.created_at),
+          updatedAt: new Date(subscription.updated_at),
+        }
+      }
 
       setBillingData({
-        subscription: subscriptionData,
-        usage: usageData,
-        plan: plan || null,
+        subscription: finalSubscriptionData,
+        usage: finalUsageData,
+        plan: plan,
       })
+
+      console.log('✅ [Settings] Billing data set successfully')
     } catch (error) {
-      console.error('Error fetching billing data:', error)
+      console.error('❌ [Settings] Error fetching billing data:', error)
+      setMessage({ type: 'error', text: 'Failed to load billing information' })
     } finally {
       setBillingLoading(false)
     }
@@ -165,10 +195,10 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: 'Passwords do not match' })
       return
     }
-    
+
     setSaving(true)
     setMessage(null)
-    
+
     try {
       const response = await fetch('/api/profile/password', {
         method: 'POST',
@@ -178,12 +208,12 @@ export default function SettingsPage() {
           newPassword: passwordForm.newPassword
         })
       })
-      
+
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.userMessage || 'Failed to change password')
       }
-      
+
       setMessage({ type: 'success', text: 'Password changed successfully' })
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
 
@@ -194,6 +224,33 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to change password' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleManageBilling = async () => {
+    if (!billingData?.subscription) {
+      router.push('/pricing')
+      return
+    }
+
+    setPortalLoading(true)
+
+    try {
+      const response = await fetch('/api/stripe/create-portal', {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create portal session')
+      }
+
+      const { url } = await response.json()
+      window.location.href = url
+    } catch (error) {
+      console.error('Error creating portal session:', error)
+      setMessage({ type: 'error', text: 'Failed to open billing portal' })
+    } finally {
+      setPortalLoading(false)
     }
   }
 
@@ -337,12 +394,21 @@ export default function SettingsPage() {
                     Current Plan
                   </h3>
                   {billingData?.plan && billingData.plan.id !== 'free' && (
-                    <button
-                      onClick={() => router.push('/pricing')}
-                      className="px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all"
-                    >
-                      Change Plan
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleManageBilling}
+                        disabled={portalLoading}
+                        className="px-4 py-2 text-sm bg-white border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 transition-all disabled:opacity-50"
+                      >
+                        {portalLoading ? 'Loading...' : 'Manage Billing'}
+                      </button>
+                      <button
+                        onClick={() => router.push('/pricing')}
+                        className="px-4 py-2 text-sm bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all"
+                      >
+                        Change Plan
+                      </button>
+                    </div>
                   )}
                 </div>
 

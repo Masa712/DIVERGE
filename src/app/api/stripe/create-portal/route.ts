@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     // Create portal session
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    const returnUrl = `${baseUrl}/dashboard/billing`
+    const returnUrl = `${baseUrl}/chat`
 
     const session = await createPortalSession(
       profile.stripe_customer_id,
