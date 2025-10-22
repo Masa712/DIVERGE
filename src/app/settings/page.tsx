@@ -806,7 +806,4 @@ export default function SettingsPage() {
       </div>
     </div>
   )
-      setTimeout(() => setMessage(null), 3000)
-      router.replace('/settings', { scroll: false })
-    }
-  }, [searchParams, router])
+}
