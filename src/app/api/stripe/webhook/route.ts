@@ -180,8 +180,16 @@ async function upsertSubscription(userId: string, subscription: Stripe.Subscript
   const sub = subscription as any
 
   const planId = sub.metadata?.plan_id || 'unknown'
-  const currentPeriodStart = convertStripeTimestamp(sub.current_period_start)
-  const currentPeriodEnd = convertStripeTimestamp(sub.current_period_end)
+  const currentPeriodStart = convertStripeTimestamp(
+    sub.current_period_start,
+    sub.items?.data?.[0]?.current_period_start,
+    'current_period_start'
+  )
+  const currentPeriodEnd = convertStripeTimestamp(
+    sub.current_period_end,
+    sub.items?.data?.[0]?.current_period_end,
+    'current_period_end'
+  )
 
   const subscriptionData = {
     user_id: userId,
@@ -324,20 +332,29 @@ function getPlanLimits(planId: string): {
 }
 
 function convertStripeTimestamp(
-  value: number | string | null | undefined
+  value: number | string | null | undefined,
+  fallback: number | string | null | undefined,
+  fieldName: string
 ): string {
-  if (value === null || value === undefined) {
-    throw new Error('Missing timestamp value from Stripe payload')
+  const source = value ?? fallback
+
+  if (source === null || source === undefined) {
+    log.warn('Missing timestamp value from Stripe payload, defaulting to now', { fieldName })
+    return new Date().toISOString()
   }
 
-  if (typeof value === 'number') {
-    return new Date(value * 1000).toISOString()
+  if (typeof source === 'number') {
+    return new Date(source * 1000).toISOString()
   }
 
-  const parsed = new Date(value)
+  const parsed = new Date(source)
 
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`Invalid timestamp value from Stripe payload: ${value}`)
+    log.warn('Invalid timestamp value from Stripe payload, defaulting to now', {
+      fieldName,
+      value: source,
+    })
+    return new Date().toISOString()
   }
 
   return parsed.toISOString()
