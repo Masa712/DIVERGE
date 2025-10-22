@@ -112,6 +112,8 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   log.info('Processing subscription deletion', { subscriptionId: subscription.id })
 
+  const userId = subscription.metadata?.user_id
+
   const { error } = await supabaseAdmin
     .from('user_subscriptions')
     .update({
@@ -125,7 +127,22 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     throw error
   }
 
-  log.info('Subscription deleted successfully', { subscriptionId: subscription.id })
+  // Revert user to free plan
+  if (userId) {
+    await supabaseAdmin
+      .from('user_profiles')
+      .update({
+        subscription_status: 'canceled',
+        subscription_plan: 'free',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+
+    // Update usage_quotas back to free plan
+    await updateUsageQuotaPlan(userId, 'free')
+  }
+
+  log.info('Subscription deleted successfully', { subscriptionId: subscription.id, userId })
 }
 
 async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
@@ -161,15 +178,19 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 async function upsertSubscription(userId: string, subscription: Stripe.Subscription) {
   // Cast subscription to any to bypass TypeScript strict checking for webhook data
   const sub = subscription as any
-  
+
+  const planId = sub.metadata?.plan_id || 'unknown'
+  const currentPeriodStart = convertStripeTimestamp(sub.current_period_start)
+  const currentPeriodEnd = convertStripeTimestamp(sub.current_period_end)
+
   const subscriptionData = {
     user_id: userId,
-    plan_id: sub.metadata?.plan_id || 'unknown',
+    plan_id: planId,
     stripe_subscription_id: sub.id,
     stripe_customer_id: sub.customer as string,
     status: sub.status,
-    current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
-    current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+    current_period_start: currentPeriodStart,
+    current_period_end: currentPeriodEnd,
     cancel_at_period_end: sub.cancel_at_period_end,
     updated_at: new Date().toISOString(),
   }
@@ -190,8 +211,134 @@ async function upsertSubscription(userId: string, subscription: Stripe.Subscript
     .from('user_profiles')
     .update({
       subscription_status: subscription.status,
-      subscription_plan: subscription.metadata?.plan_id,
+      subscription_plan: planId,
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', userId)
+
+  // Update usage_quotas with new plan limits
+  await updateUsageQuotaPlan(userId, planId)
+}
+
+/**
+ * Update usage quota plan and limits for a user
+ */
+async function updateUsageQuotaPlan(userId: string, planId: string) {
+  // Get plan limits
+  const limits = getPlanLimits(planId)
+
+  // Calculate next month's reset date in UTC
+  const nextMonth = new Date()
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
+  nextMonth.setUTCDate(1)
+  nextMonth.setUTCHours(0, 0, 0, 0)
+
+  // Check if quota exists for current period
+  const { data: existingQuota } = await supabaseAdmin
+    .from('usage_quotas')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('reset_date', nextMonth.toISOString())
+    .maybeSingle()
+
+  if (existingQuota) {
+    // Update existing quota with new limits
+    const { error: updateError } = await supabaseAdmin
+      .from('usage_quotas')
+      .update({
+        plan_id: planId,
+        monthly_tokens_limit: limits.monthly_tokens_limit,
+        sessions_limit: limits.sessions_limit,
+        web_searches_limit: limits.web_searches_limit,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('reset_date', nextMonth.toISOString())
+
+    if (updateError) {
+      log.error('Failed to update usage quota', { userId, planId, error: updateError })
+    } else {
+      log.info('Usage quota updated successfully', { userId, planId, limits })
+    }
+  } else {
+    // Create new quota record
+    const { error: insertError } = await supabaseAdmin
+      .from('usage_quotas')
+      .insert({
+        user_id: userId,
+        plan_id: planId,
+        monthly_tokens_used: 0,
+        monthly_tokens_limit: limits.monthly_tokens_limit,
+        sessions_this_month: 0,
+        sessions_limit: limits.sessions_limit,
+        web_searches_used: 0,
+        web_searches_limit: limits.web_searches_limit,
+        reset_date: nextMonth.toISOString(),
+      })
+
+    if (insertError) {
+      log.error('Failed to create usage quota', { userId, planId, error: insertError })
+    } else {
+      log.info('Usage quota created successfully', { userId, planId, limits })
+    }
+  }
+}
+
+/**
+ * Get plan limits based on plan ID
+ */
+function getPlanLimits(planId: string): {
+  monthly_tokens_limit: number
+  sessions_limit: number
+  web_searches_limit: number
+} {
+  const planLimits: Record<string, { monthly_tokens_limit: number; sessions_limit: number; web_searches_limit: number }> = {
+    free: {
+      monthly_tokens_limit: 500000,
+      sessions_limit: 3,
+      web_searches_limit: 10,
+    },
+    plus: {
+      monthly_tokens_limit: 4000000,
+      sessions_limit: -1, // unlimited
+      web_searches_limit: 200,
+    },
+    'plus-yearly': {
+      monthly_tokens_limit: 4000000,
+      sessions_limit: -1, // unlimited
+      web_searches_limit: 200,
+    },
+    pro: {
+      monthly_tokens_limit: 15000000,
+      sessions_limit: -1, // unlimited
+      web_searches_limit: -1, // unlimited
+    },
+    'pro-yearly': {
+      monthly_tokens_limit: 15000000,
+      sessions_limit: -1, // unlimited
+      web_searches_limit: -1, // unlimited
+    },
+  }
+
+  return planLimits[planId] || planLimits.free
+}
+
+function convertStripeTimestamp(
+  value: number | string | null | undefined
+): string {
+  if (value === null || value === undefined) {
+    throw new Error('Missing timestamp value from Stripe payload')
+  }
+
+  if (typeof value === 'number') {
+    return new Date(value * 1000).toISOString()
+  }
+
+  const parsed = new Date(value)
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid timestamp value from Stripe payload: ${value}`)
+  }
+
+  return parsed.toISOString()
 }
