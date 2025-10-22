@@ -26,7 +26,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
   // If profile doesn't exist, create one
   if (error && error.code === 'PGRST116') {
     log.info('Creating new user profile', { userId: user.id })
-    
+
     const { data: newProfile, error: createError } = await supabase
       .from('user_profiles')
       .insert({
@@ -35,7 +35,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       })
       .select()
       .single()
-    
+
     if (createError) {
       throw createAppError(
         'Failed to create user profile',
@@ -43,16 +43,17 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
         { context: { userId: user.id }, cause: createError }
       )
     }
-    
+
     return NextResponse.json({
       success: true,
       data: {
         ...newProfile,
-        email: user.email // Include email from auth
+        email: user.email, // Include email from auth
+        subscription_plan: 'free' // Default for new users
       }
     })
   }
-  
+
   if (error) {
     throw createAppError(
       'Failed to fetch user profile',
@@ -61,11 +62,26 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     )
   }
 
+  // Check for active subscription to get the most up-to-date plan
+  const { data: subscription } = await supabase
+    .from('user_subscriptions')
+    .select('plan_id, status')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  // Determine subscription plan with priority:
+  // 1. Active subscription (most authoritative)
+  // 2. User profile subscription_plan
+  // 3. Default to 'free'
+  const subscriptionPlan = subscription?.plan_id || profile.subscription_plan || 'free'
+
   return NextResponse.json({
     success: true,
     data: {
       ...profile,
-      email: user.email // Include email from auth
+      email: user.email, // Include email from auth
+      subscription_plan: subscriptionPlan // Override with active subscription if exists
     }
   })
 })

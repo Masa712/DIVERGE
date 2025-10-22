@@ -53,24 +53,30 @@ function BillingDashboardContent() {
     try {
       setLoading(true)
 
+      // Calculate next month's reset date in UTC
+      const nextMonth = new Date()
+      nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
+      nextMonth.setUTCDate(1)
+      nextMonth.setUTCHours(0, 0, 0, 0)
+
       // Fetch subscription data
       const { data: subscriptionData } = await supabase
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'active')
-        .single()
+        .maybeSingle()
 
       // Fetch usage data
       const { data: usageData } = await supabase
         .from('usage_quotas')
         .select('*')
         .eq('user_id', user.id)
-        .gte('reset_date', new Date().toISOString())
-        .single()
+        .eq('reset_date', nextMonth.toISOString())
+        .maybeSingle()
 
-      const plan = subscriptionData 
-        ? getPlanById(subscriptionData.plan_id) 
+      const plan = subscriptionData
+        ? getPlanById(subscriptionData.plan_id)
         : getPlanById('free')
 
       setBillingData({

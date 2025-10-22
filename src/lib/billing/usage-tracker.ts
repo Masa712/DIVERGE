@@ -21,18 +21,18 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
   const supabase = createClient()
   
   try {
-    // Get current usage quota
+    // Get current usage quota - use UTC for consistency with database
     const nextMonth = new Date()
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-    nextMonth.setDate(1)
-    nextMonth.setHours(0, 0, 0, 0)
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
+    nextMonth.setUTCDate(1)
+    nextMonth.setUTCHours(0, 0, 0, 0)
 
     const { data: quota, error } = await supabase
       .from('usage_quotas')
       .select('*')
       .eq('user_id', userId)
-      .gte('reset_date', nextMonth.toISOString())
-      .single()
+      .eq('reset_date', nextMonth.toISOString())
+      .maybeSingle()
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
       log.error('Failed to fetch user quota', error)
@@ -189,8 +189,8 @@ export async function getUserPlan(userId: string): Promise<string> {
       .from('usage_quotas')
       .select('plan_id')
       .eq('user_id', userId)
-      .gte('reset_date', nextMonth.toISOString())
-      .single()
+      .eq('reset_date', nextMonth.toISOString())
+      .maybeSingle()
 
     if (error || !quota) {
       log.warn('Failed to get user plan from usage_quotas, defaulting to free', error)
@@ -251,8 +251,8 @@ export async function canUseWebSearch(userId: string): Promise<{
       .from('usage_quotas')
       .select('web_searches_used, web_searches_limit')
       .eq('user_id', userId)
-      .gte('reset_date', nextMonth.toISOString())
-      .single()
+      .eq('reset_date', nextMonth.toISOString())
+      .maybeSingle()
 
     return {
       allowed: data === true,
@@ -311,18 +311,18 @@ export async function canCreateSession(userId: string): Promise<{
   const supabase = createClient()
 
   try {
-    // Get current usage quota
+    // Get current usage quota - use UTC for consistency with database
     const nextMonth = new Date()
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-    nextMonth.setDate(1)
-    nextMonth.setHours(0, 0, 0, 0)
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
+    nextMonth.setUTCDate(1)
+    nextMonth.setUTCHours(0, 0, 0, 0)
 
     const { data: quota, error } = await supabase
       .from('usage_quotas')
       .select('sessions_this_month, sessions_limit')
       .eq('user_id', userId)
-      .gte('reset_date', nextMonth.toISOString())
-      .single()
+      .eq('reset_date', nextMonth.toISOString())
+      .maybeSingle()
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
       log.error('Failed to fetch session quota', error)
@@ -381,18 +381,18 @@ export async function incrementSessionCount(userId: string): Promise<boolean> {
   const supabase = createClient()
 
   try {
-    // Get current usage quota
+    // Get current usage quota - use UTC for consistency with database
     const nextMonth = new Date()
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-    nextMonth.setDate(1)
-    nextMonth.setHours(0, 0, 0, 0)
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
+    nextMonth.setUTCDate(1)
+    nextMonth.setUTCHours(0, 0, 0, 0)
 
     const { data: quota, error: fetchError } = await supabase
       .from('usage_quotas')
       .select('sessions_this_month, sessions_limit')
       .eq('user_id', userId)
-      .gte('reset_date', nextMonth.toISOString())
-      .single()
+      .eq('reset_date', nextMonth.toISOString())
+      .maybeSingle()
 
     if (fetchError) {
       log.error('Failed to fetch session quota for increment', fetchError)
@@ -422,7 +422,7 @@ export async function incrementSessionCount(userId: string): Promise<boolean> {
         updated_at: new Date().toISOString()
       })
       .eq('user_id', userId)
-      .gte('reset_date', nextMonth.toISOString())
+      .eq('reset_date', nextMonth.toISOString())
 
     if (updateError) {
       log.error('Failed to increment session count', updateError)

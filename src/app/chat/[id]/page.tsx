@@ -37,11 +37,16 @@ export default function ChatSessionPage({ params }: Props) {
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
   const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
   const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
 
   // Calculate available models based on user's subscription plan
   const availableModels = useMemo(() => {
+    if (profileLoading) {
+      return AVAILABLE_MODELS
+    }
+
     const userPlan = userProfile?.subscription_plan || 'free'
 
     // Free plan: only free plan models
@@ -51,7 +56,7 @@ export default function ChatSessionPage({ params }: Props) {
 
     // Plus, Pro, Enterprise: all models
     return AVAILABLE_MODELS
-  }, [userProfile])
+  }, [userProfile, profileLoading])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -83,6 +88,8 @@ export default function ChatSessionPage({ params }: Props) {
   const fetchUserProfile = async () => {
     if (!user) return
 
+    setProfileLoading(true)
+
     try {
       const response = await fetch('/api/profile')
       if (response.ok) {
@@ -99,9 +106,13 @@ export default function ChatSessionPage({ params }: Props) {
         if (data.default_model) {
           setSelectedModel(data.default_model)
         }
+      } else {
+        log.warn('Failed to fetch user profile', { status: response.status })
       }
     } catch (error) {
       log.error('Failed to fetch user profile', error)
+    } finally {
+      setProfileLoading(false)
     }
   }
 
@@ -513,6 +524,7 @@ export default function ChatSessionPage({ params }: Props) {
         selectedModel={selectedModel}
         onModelChange={setSelectedModel}
         availableModels={availableModels}
+        modelSelectorDisabled={profileLoading}
         enableReasoning={enableReasoning}
         onReasoningToggle={setEnableReasoning}
         currentNodeId={currentNodeId}

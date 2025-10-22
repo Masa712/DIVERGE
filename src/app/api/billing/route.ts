@@ -16,11 +16,14 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     )
   }
 
-  // Calculate next month's reset date in UTC
-  const nextMonth = new Date()
-  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
-  nextMonth.setUTCDate(1)
-  nextMonth.setUTCHours(0, 0, 0, 0)
+  // Calculate the first day of next month at UTC midnight without overflow issues
+  const now = new Date()
+  const nextMonth = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth() + 1,
+    1, // first day of next month
+    0, 0, 0, 0
+  ))
 
   // Fetch active subscription
   const { data: subscriptionData, error: subError } = await supabase

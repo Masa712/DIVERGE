@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import {
@@ -34,6 +34,68 @@ interface BillingData {
   plan: SubscriptionPlan | null
 }
 
+function normalizeToUtcMidnight(date: Date) {
+  return new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    0,
+    0,
+    0,
+    0
+  ))
+}
+
+function getDaysInMonthUtc(year: number, month: number) {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+}
+
+function addMonthsUtc(date: Date, monthsToAdd: number, referenceDay: number) {
+  const target = new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + monthsToAdd,
+    1,
+    0,
+    0,
+    0,
+    0
+  ))
+
+  const clampedDay = Math.min(referenceDay, getDaysInMonthUtc(
+    target.getUTCFullYear(),
+    target.getUTCMonth()
+  ))
+
+  target.setUTCDate(clampedDay)
+  return target
+}
+
+function addYearsUtc(date: Date, yearsToAdd: number, referenceDay: number) {
+  const year = date.getUTCFullYear() + yearsToAdd
+  const month = date.getUTCMonth()
+  const clampedDay = Math.min(referenceDay, getDaysInMonthUtc(year, month))
+
+  return new Date(Date.UTC(year, month, clampedDay, 0, 0, 0, 0))
+}
+
+function calculateNextResetDate(
+  baseDate: Date,
+  interval: 'month' | 'year',
+  now: Date
+) {
+  const normalizedStart = normalizeToUtcMidnight(baseDate)
+  const referenceDay = normalizedStart.getUTCDate()
+  let candidate = normalizedStart
+
+  while (candidate <= now) {
+    candidate = interval === 'year'
+      ? addYearsUtc(candidate, 1, referenceDay)
+      : addMonthsUtc(candidate, 1, referenceDay)
+  }
+
+  return candidate
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const { user } = useAuth()
@@ -64,6 +126,32 @@ export default function SettingsPage() {
 
   // Active tab
   const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'model' | 'prompt'>('profile')
+
+  const nextUsageResetDate = useMemo(() => {
+    if (!billingData) return null
+
+    const now = new Date()
+    const baseDate = billingData.subscription
+      ? billingData.subscription.createdAt
+      : user?.created_at
+        ? new Date(user.created_at)
+        : null
+
+    if (!baseDate) {
+      return billingData.usage?.resetDate ?? null
+    }
+
+    const interval = billingData.subscription
+      ? billingData.plan?.interval ?? 'month'
+      : 'month'
+
+    try {
+      return calculateNextResetDate(baseDate, interval, now)
+    } catch (error) {
+      console.error('Failed to calculate next usage reset date:', error)
+      return billingData.usage?.resetDate ?? null
+    }
+  }, [billingData, user])
 
   const fetchProfile = async () => {
     try {
@@ -547,9 +635,11 @@ export default function SettingsPage() {
                       )}
                     </div>
 
-                    <div className="text-xs text-gray-500 pt-2 border-t border-gray-300">
-                      Usage resets on {new Date(billingData.usage.resetDate).toLocaleDateString()}
-                    </div>
+                    {nextUsageResetDate && (
+                      <div className="text-xs text-gray-500 pt-2 border-t border-gray-300">
+                        Usage resets on {nextUsageResetDate.toLocaleDateString()}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">

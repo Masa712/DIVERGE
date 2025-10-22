@@ -263,15 +263,43 @@ Based on these search results and the conversation context, please provide an in
     // Track token usage for billing
     if (usage) {
       const totalTokens = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0)
-      await trackTokenUsage({
+      log.info('Attempting to track token usage', {
+        userId,
+        totalTokens,
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens,
+        modelId: model
+      })
+
+      const tracked = await trackTokenUsage({
         userId,
         tokensUsed: totalTokens,
         modelId: model,
         sessionId,
         nodeId: chatNode.id
       }).catch(error => {
-        log.warn('Failed to track token usage', error)
+        log.error('Failed to track token usage - detailed error', {
+          error,
+          errorMessage: error?.message,
+          errorStack: error?.stack,
+          userId,
+          totalTokens
+        })
+        return false
       })
+
+      if (!tracked) {
+        log.error('Token usage tracking returned false', {
+          userId,
+          totalTokens,
+          modelId: model
+        })
+      } else {
+        log.info('Token usage tracked successfully', {
+          userId,
+          totalTokens
+        })
+      }
     }
     
     // Generate AI title for the session if it's the first node (depth = 0 and no parentNodeId)
