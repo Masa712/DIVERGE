@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { testRedisConnection, getRedisHealth, isRedisAvailable } from '@/lib/redis/client'
-import { getRedisEnhancedContextCache } from '@/lib/db/redis-enhanced-context-cache'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,17 +9,15 @@ export async function GET(request: NextRequest) {
     // Get Redis health metrics
     const health = await getRedisHealth()
     
-    // Get cache statistics
-    const cache = getRedisEnhancedContextCache()
-    const cacheStats = await cache.getCacheStats()
-    
     const status = {
       redis: {
         available: await isRedisAvailable(),
         connected: connectionTest,
         health,
       },
-      cache: cacheStats,
+      cache: {
+        enabled: await isRedisAvailable(),
+      },
       timestamp: new Date().toISOString(),
     }
     
