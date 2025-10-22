@@ -118,6 +118,24 @@ export default function SettingsPage() {
   const [billingLoading, setBillingLoading] = useState(true)
   const [portalLoading, setPortalLoading] = useState(false)
 
+  useEffect(() => {
+    const billingSuccess = searchParams.get('billing_success')
+    const billingCanceled = searchParams.get('billing_canceled')
+
+    if (billingSuccess === 'true' || billingCanceled === 'true') {
+      setActiveTab('profile')
+      setMessage({
+        type: billingSuccess === 'true' ? 'success' : 'error',
+        text:
+          billingSuccess === 'true'
+            ? 'Payment successful! Your subscription has been updated.'
+            : 'Payment was canceled. You can try again anytime.',
+      })
+      setTimeout(() => setMessage(null), 3000)
+      router.replace('/settings', { scroll: false })
+    }
+  }, [searchParams, router])
+
   // Password state
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -788,19 +806,6 @@ export default function SettingsPage() {
       </div>
     </div>
   )
-}
-  useEffect(() => {
-    const billingSuccess = searchParams.get('billing_success')
-    const billingCanceled = searchParams.get('billing_canceled')
-
-    if (billingSuccess === 'true') {
-      setActiveTab('profile')
-      setMessage({ type: 'success', text: 'Payment successful! Your subscription has been updated.' })
-      setTimeout(() => setMessage(null), 3000)
-      router.replace('/settings', { scroll: false })
-    } else if (billingCanceled === 'true') {
-      setActiveTab('profile')
-      setMessage({ type: 'error', text: 'Payment was canceled. You can try again anytime.' })
       setTimeout(() => setMessage(null), 3000)
       router.replace('/settings', { scroll: false })
     }
