@@ -220,6 +220,7 @@ async function upsertSubscription(userId: string, subscription: Stripe.Subscript
     .update({
       subscription_status: subscription.status,
       subscription_plan: planId,
+      stripe_customer_id: sub.customer as string,
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', userId)
