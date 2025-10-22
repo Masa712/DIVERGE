@@ -12,7 +12,7 @@
 #### 実装詳細:
 - **Stripe Billing Portal**: ユーザーがセルフサービスでサブスクリプション管理可能
   - ファイル: `src/app/api/stripe/create-portal/route.ts`
-  - UI: `/dashboard/billing` の "Manage Billing" ボタン
+  - UI: `/settings` の "Manage Billing" ボタン
 
 - **解除関数**: `cancelSubscription()`
   - ファイル: `src/lib/stripe/server.ts:108-127`
@@ -31,7 +31,7 @@ async function handleSubscriptionDeleted(subscription) {
 ```
 
 #### ユーザー体験:
-1. ユーザーが `/dashboard/billing` で "Manage Billing" をクリック
+1. ユーザーが `/settings` の "Manage Billing" をクリック
 2. Stripe Billing Portalにリダイレクト
 3. "Cancel subscription" オプションが表示
 4. 解除後も期間終了まで利用可能
@@ -201,7 +201,7 @@ export async function checkUsageAlerts(userId: string) {
 **現状**: Stripe Billing Portal でのみ確認可能
 
 **推奨実装**:
-- `/dashboard/billing/invoices` ページ
+- `/settings` 内の請求履歴タブ (例: `/settings?tab=billing-invoices`)
 - 過去の請求書一覧
 - PDFダウンロード
 - 支払い履歴

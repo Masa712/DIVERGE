@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import {
   UserIcon,
@@ -98,6 +98,7 @@ function calculateNextResetDate(
 
 export default function SettingsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -788,3 +789,19 @@ export default function SettingsPage() {
     </div>
   )
 }
+  useEffect(() => {
+    const billingSuccess = searchParams.get('billing_success')
+    const billingCanceled = searchParams.get('billing_canceled')
+
+    if (billingSuccess === 'true') {
+      setActiveTab('profile')
+      setMessage({ type: 'success', text: 'Payment successful! Your subscription has been updated.' })
+      setTimeout(() => setMessage(null), 3000)
+      router.replace('/settings', { scroll: false })
+    } else if (billingCanceled === 'true') {
+      setActiveTab('profile')
+      setMessage({ type: 'error', text: 'Payment was canceled. You can try again anytime.' })
+      setTimeout(() => setMessage(null), 3000)
+      router.replace('/settings', { scroll: false })
+    }
+  }, [searchParams, router])

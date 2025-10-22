@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
 
     // Create checkout session
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    const successUrl = `${baseUrl}/dashboard/billing?success=true&session_id={CHECKOUT_SESSION_ID}`
-    const cancelUrl = `${baseUrl}/dashboard/billing?canceled=true`
+    const successUrl = `${baseUrl}/settings?billing_success=true&session_id={CHECKOUT_SESSION_ID}`
+    const cancelUrl = `${baseUrl}/settings?billing_canceled=true`
 
     const session = await createCheckoutSession(
       customerId,
