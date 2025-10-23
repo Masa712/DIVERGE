@@ -130,7 +130,7 @@ function BillingFeedback({
 
 function SettingsContent() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -270,13 +270,16 @@ function SettingsContent() {
   }
 
   useEffect(() => {
+    if (authLoading) return
+
     if (!user) {
-      router.push('/auth')
+      router.replace('/auth?redirect=/settings')
       return
     }
+
     fetchProfile()
     fetchBillingData()
-  }, [user])
+  }, [authLoading, router, user])
 
   const saveProfile = async () => {
     setSaving(true)
