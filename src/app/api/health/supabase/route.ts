@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConnectionPool } from '@/lib/supabase/connection-pool'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const pool = getConnectionPool()

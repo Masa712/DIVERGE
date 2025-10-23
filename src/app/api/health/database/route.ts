@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getConnectionPool } from '@/lib/supabase/connection-pool'
 import { getQueryPerformanceStats, INDEX_SUGGESTIONS } from '@/lib/db/query-optimizer'
-import { 
-  withErrorHandler, 
-  createAppError, 
-  ErrorCategory 
+import {
+  withErrorHandler,
+  createAppError,
+  ErrorCategory
 } from '@/lib/errors/error-handler'
+
+export const dynamic = 'force-dynamic'
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url)

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getErrorMetrics, getErrorTrends } from '@/lib/errors/error-monitoring'
-import { 
-  withErrorHandler, 
-  createAppError, 
-  ErrorCategory 
+import {
+  withErrorHandler,
+  createAppError,
+  ErrorCategory
 } from '@/lib/errors/error-handler'
+
+export const dynamic = 'force-dynamic'
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url)

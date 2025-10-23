@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
@@ -17,7 +17,7 @@ const resolveRedirect = (rawRedirect: string | null) => {
   }
 }
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackContent() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -45,5 +45,23 @@ export default function OAuthCallbackPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function OAuthCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-white relative">
+        <AnimatedBackground opacity={0.3} />
+        <div className="relative z-10 text-center space-y-4">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div>
+            <p className="text-lg font-semibold text-gray-800">Loading...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <OAuthCallbackContent />
+    </Suspense>
   )
 }
