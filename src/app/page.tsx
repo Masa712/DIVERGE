@@ -1,33 +1,14 @@
 'use client'
 
-import { useEffect, Suspense } from 'react'
+import { Suspense } from 'react'
 import { useAuth } from '@/components/providers/auth-provider'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { ArrowRight, Zap, Shield, Sparkles, CheckCircle } from 'lucide-react'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 
 function LandingPageContent() {
   const { user, loading } = useAuth()
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  // Handle OAuth callback (when redirected from Supabase)
-  useEffect(() => {
-    // Check if this is an OAuth callback
-    const code = searchParams.get('code')
-    const redirect = searchParams.get('redirect')
-
-    if (code && user && !loading) {
-      // User just logged in via OAuth, check for redirect parameter
-      if (redirect) {
-        // Use the redirect parameter from URL
-        router.replace(redirect)
-      } else {
-        // Default to chat if no specific redirect was provided
-        router.replace('/chat')
-      }
-    }
-  }, [user, loading, searchParams, router])
 
   const handleGetStarted = () => {
     if (user) {

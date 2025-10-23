@@ -92,14 +92,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error
   }
 
+  const buildCallbackUrl = (redirectPath?: string) => {
+    if (redirectPath) {
+      const params = new URLSearchParams({ redirect: redirectPath })
+      return `${window.location.origin}/auth/callback/exchange?${params.toString()}`
+    }
+    return `${window.location.origin}/auth/callback/exchange`
+  }
+
   const signInWithGoogle = async (redirectPath?: string) => {
     // Build redirect URL with optional redirect parameter
-    let callbackUrl = `${window.location.origin}/`
-    if (redirectPath) {
-      // Encode the redirect path as a URL parameter
-      const params = new URLSearchParams({ redirect: redirectPath })
-      callbackUrl = `${window.location.origin}/?${params.toString()}`
-    }
+    const callbackUrl = buildCallbackUrl(redirectPath)
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -112,12 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithX = async (redirectPath?: string) => {
     // Build redirect URL with optional redirect parameter
-    let callbackUrl = `${window.location.origin}/`
-    if (redirectPath) {
-      // Encode the redirect path as a URL parameter
-      const params = new URLSearchParams({ redirect: redirectPath })
-      callbackUrl = `${window.location.origin}/?${params.toString()}`
-    }
+    const callbackUrl = buildCallbackUrl(redirectPath)
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'twitter',
