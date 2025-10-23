@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import {
@@ -96,9 +96,40 @@ function calculateNextResetDate(
   return candidate
 }
 
-export default function SettingsPage() {
+// Separate component to handle billing feedback using useSearchParams
+function BillingFeedback({
+  setActiveTab,
+  setMessage
+}: {
+  setActiveTab: (tab: 'profile' | 'password' | 'model' | 'prompt') => void
+  setMessage: (msg: { type: 'success' | 'error', text: string } | null) => void
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const billingSuccess = searchParams.get('billing_success')
+    const billingCanceled = searchParams.get('billing_canceled')
+
+    if (billingSuccess === 'true' || billingCanceled === 'true') {
+      setActiveTab('profile')
+      setMessage({
+        type: billingSuccess === 'true' ? 'success' : 'error',
+        text:
+          billingSuccess === 'true'
+            ? 'Payment successful! Your subscription has been updated.'
+            : 'Payment was canceled. You can try again anytime.',
+      })
+      setTimeout(() => setMessage(null), 3000)
+      router.replace('/settings', { scroll: false })
+    }
+  }, [searchParams, router, setActiveTab, setMessage])
+
+  return null
+}
+
+function SettingsContent() {
+  const router = useRouter()
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -117,24 +148,6 @@ export default function SettingsPage() {
   const [billingData, setBillingData] = useState<BillingData | null>(null)
   const [billingLoading, setBillingLoading] = useState(true)
   const [portalLoading, setPortalLoading] = useState(false)
-
-  useEffect(() => {
-    const billingSuccess = searchParams.get('billing_success')
-    const billingCanceled = searchParams.get('billing_canceled')
-
-    if (billingSuccess === 'true' || billingCanceled === 'true') {
-      setActiveTab('profile')
-      setMessage({
-        type: billingSuccess === 'true' ? 'success' : 'error',
-        text:
-          billingSuccess === 'true'
-            ? 'Payment successful! Your subscription has been updated.'
-            : 'Payment was canceled. You can try again anytime.',
-      })
-      setTimeout(() => setMessage(null), 3000)
-      router.replace('/settings', { scroll: false })
-    }
-  }, [searchParams, router])
 
   // Password state
   const [passwordForm, setPasswordForm] = useState({
@@ -371,8 +384,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="relative min-h-screen p-8">
-      <AnimatedBackground opacity={0.2} />
+    <>
+      <BillingFeedback setActiveTab={setActiveTab} setMessage={setMessage} />
+      <div className="relative min-h-screen p-8">
+        <AnimatedBackground opacity={0.2} />
       {/* Back Button */}
       <button
         onClick={() => router.push('/chat')}
@@ -804,6 +819,21 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
+  )
+}
+
+// Main export with Suspense boundary
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="relative min-h-screen flex items-center justify-center">
+        <AnimatedBackground opacity={0.3} />
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
   )
 }
