@@ -341,11 +341,11 @@ export async function canCreateSession(userId: string): Promise<{
         return { allowed: false, currentSessions: 0, limit: 0 }
       }
 
-      // Return free plan limits
+      // Return free plan limits (unlimited sessions)
       return {
         allowed: true,
         currentSessions: 0,
-        limit: 3
+        limit: -1
       }
     }
 

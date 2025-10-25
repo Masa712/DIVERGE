@@ -1,5 +1,5 @@
 -- Update initialize_user_quota function to support new 3-tier plan system
--- Free: 500K tokens, 3 sessions, 10 web searches
+-- Free: 500K tokens, unlimited sessions, 10 web searches
 -- Plus: 4M tokens, unlimited sessions, 200 web searches
 -- Pro: 15M tokens, unlimited sessions, unlimited web searches
 

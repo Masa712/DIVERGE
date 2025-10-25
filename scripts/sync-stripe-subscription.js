@@ -235,7 +235,7 @@ function getPlanLimits(planId) {
   const planLimits = {
     free: {
       monthly_tokens_limit: 500000,
-      sessions_limit: 3,
+      sessions_limit: -1,
       web_searches_limit: 10,
     },
     plus: {

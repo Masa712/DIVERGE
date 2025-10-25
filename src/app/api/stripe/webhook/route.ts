@@ -304,7 +304,7 @@ function getPlanLimits(planId: string): {
   const planLimits: Record<string, { monthly_tokens_limit: number; sessions_limit: number; web_searches_limit: number }> = {
     free: {
       monthly_tokens_limit: 500000,
-      sessions_limit: 3,
+      sessions_limit: -1,
       web_searches_limit: 10,
     },
     plus: {

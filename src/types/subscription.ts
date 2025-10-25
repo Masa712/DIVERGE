@@ -61,13 +61,13 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       '500,000 tokens per month',
       '5 basic AI models (DeepSeek V3.1, Gemini Flash, GPT-5 Nano, etc.)',
       '10 web searches per month',
-      '3 sessions saved',
+      'Unlimited sessions saved',
       '7 days history',
       'Community support'
     ],
     limits: {
       monthlyTokens: 500000,
-      sessionsPerMonth: 3,
+      sessionsPerMonth: -1,
       advancedModels: false,
       prioritySupport: false,
       webSearchLimit: 10,

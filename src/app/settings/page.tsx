@@ -614,32 +614,12 @@ function SettingsContent() {
 
                     {/* Session Usage */}
                     <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-gray-700">Sessions Used</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Sessions</span>
                         <span className="text-sm font-semibold text-gray-900">
-                          {billingData.usage.sessionsThisMonth} / {' '}
-                          {billingData.usage.sessionsLimit === -1
-                            ? 'Unlimited'
-                            : billingData.usage.sessionsLimit
-                          }
+                          {billingData.usage.sessionsThisMonth} used (Unlimited)
                         </span>
                       </div>
-                      {billingData.usage.sessionsLimit !== -1 && (
-                        <div className="w-full bg-gray-300 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              ((billingData.usage.sessionsThisMonth / billingData.usage.sessionsLimit) * 100) < 50
-                                ? 'bg-green-500'
-                                : ((billingData.usage.sessionsThisMonth / billingData.usage.sessionsLimit) * 100) < 80
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }`}
-                            style={{
-                              width: `${Math.min((billingData.usage.sessionsThisMonth / billingData.usage.sessionsLimit) * 100, 100)}%`
-                            }}
-                          />
-                        </div>
-                      )}
                     </div>
 
                     {/* Web Search Usage */}

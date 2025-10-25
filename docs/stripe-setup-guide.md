@@ -21,7 +21,7 @@ Divergeの3段階サブスクリプションプラン（Free, Plus, Pro）をStr
 **特徴**:
 - 5 AI models
 - 500,000 tokens/month
-- 3 sessions/month
+- Unlimited sessions
 - 10 web searches/month
 
 ---
