@@ -332,6 +332,7 @@ function CompactTreeViewInner({
             isCurrentNode,
             subtreeWidth,
             onNodeClick: handleNodeClick,
+            onNodeIdClick,
           },
           draggable: false,
           selectable: true,
