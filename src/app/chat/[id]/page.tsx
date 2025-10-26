@@ -33,7 +33,6 @@ export default function ChatSessionPage({ params }: Props) {
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [insertTextFunction, setInsertTextFunction] = useState<((text: string) => void) | null>(null)
-  const [isInputFocused, setIsInputFocused] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
   const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
@@ -178,9 +177,11 @@ export default function ChatSessionPage({ params }: Props) {
   }
 
   const handleNodeIdClick = (nodeReference: string) => {
-    log.debug('Node ID clicked', { nodeReference, isInputFocused, hasInsertFunction: !!insertTextFunction })
-    if (isInputFocused && insertTextFunction) {
+    log.debug('Node ID clicked', { nodeReference, hasInsertFunction: !!insertTextFunction })
+    if (insertTextFunction) {
+      // Always insert if the function is available, regardless of focus state
       insertTextFunction(nodeReference + ' ')
+      log.debug('Inserted node reference', { nodeReference })
     } else {
       // Copy to clipboard as fallback
       navigator.clipboard.writeText(nodeReference)
@@ -520,7 +521,6 @@ export default function ChatSessionPage({ params }: Props) {
         onSendMessage={handleSendMessage}
         availableNodes={chatNodes}
         onInputMount={setInsertTextFunction}
-        onFocusChange={setIsInputFocused}
         selectedModel={selectedModel}
         onModelChange={setSelectedModel}
         availableModels={availableModels}
