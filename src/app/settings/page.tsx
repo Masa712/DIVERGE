@@ -612,16 +612,6 @@ function SettingsContent() {
                       )}
                     </div>
 
-                    {/* Session Usage */}
-                    <div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-gray-700">Sessions</span>
-                        <span className="text-sm font-semibold text-gray-900">
-                          {billingData.usage.sessionsThisMonth} used (Unlimited)
-                        </span>
-                      </div>
-                    </div>
-
                     {/* Web Search Usage */}
                     <div>
                       <div className="flex justify-between items-center mb-2">

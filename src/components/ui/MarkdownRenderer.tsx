@@ -139,12 +139,12 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           ),
           // Custom list styling
           ul: ({ node, children, ...props }) => (
-            <ul {...props} className="list-disc list-inside my-3 space-y-1">
+            <ul {...props} className="list-disc my-3 space-y-1 pl-6">
               {children}
             </ul>
           ),
           ol: ({ node, children, ...props }) => (
-            <ol {...props} className="list-decimal list-inside my-3 space-y-1">
+            <ol {...props} className="list-decimal my-3 space-y-1 pl-6">
               {children}
             </ol>
           ),
