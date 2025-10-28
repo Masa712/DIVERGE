@@ -520,7 +520,7 @@ export default function ChatSessionPage({ params }: Props) {
       <GlassmorphismChatInput
         onSendMessage={handleSendMessage}
         availableNodes={chatNodes}
-        onInputMount={setInsertTextFunction}
+        onInputMount={(fn) => setInsertTextFunction(() => fn)}
         selectedModel={selectedModel}
         onModelChange={setSelectedModel}
         availableModels={availableModels}
