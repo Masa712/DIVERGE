@@ -13,7 +13,8 @@ import {
   ExclamationCircleIcon,
   CreditCardIcon,
   ArrowTrendingUpIcon,
-  StarIcon
+  StarIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline'
 import { SystemPromptSettings } from '@/components/settings/system-prompt-settings'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
@@ -130,7 +131,7 @@ function BillingFeedback({
 
 function SettingsContent() {
   const router = useRouter()
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, signOut } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -158,6 +159,9 @@ function SettingsContent() {
 
   // Active tab
   const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'model' | 'prompt'>('profile')
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [accountDeleted, setAccountDeleted] = useState(false)
 
   const nextUsageResetDate = useMemo(() => {
     if (!billingData) return null
@@ -273,13 +277,15 @@ function SettingsContent() {
     if (authLoading) return
 
     if (!user) {
-      router.replace('/auth?redirect=/settings')
+      if (!accountDeleted) {
+        router.replace('/auth?redirect=/settings')
+      }
       return
     }
 
     fetchProfile()
     fetchBillingData()
-  }, [authLoading, router, user])
+  }, [authLoading, router, user, accountDeleted])
 
   const saveProfile = async () => {
     setSaving(true)
@@ -374,6 +380,52 @@ function SettingsContent() {
       setMessage({ type: 'error', text: 'Failed to open billing portal' })
     } finally {
       setPortalLoading(false)
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation.trim().toUpperCase() !== 'DELETE') {
+      setMessage({ type: 'error', text: 'Please type DELETE to confirm account removal' })
+      return
+    }
+
+    const confirmed = window.confirm(
+      'This will permanently delete your account, conversations, and billing data. This action cannot be undone.'
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingAccount(true)
+    setAccountDeleted(false)
+    setMessage(null)
+
+    try {
+      const response = await fetch('/api/account', {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.userMessage || 'Failed to delete account')
+      }
+
+      setAccountDeleted(true)
+      setMessage({ type: 'success', text: 'Account deleted. Redirecting…' })
+
+      await signOut()
+      router.replace('/auth?accountDeleted=true')
+    } catch (error) {
+      console.error('Error deleting account:', error)
+      setAccountDeleted(false)
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to delete account'
+      })
+    } finally {
+      setDeletingAccount(false)
+      setDeleteConfirmation('')
     }
   }
 
@@ -653,6 +705,41 @@ function SettingsContent() {
                     No usage data available
                   </div>
                 )}
+              </div>
+
+              {/* Danger Zone */}
+              <div className="border-t border-gray-200 my-8"></div>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-red-600 flex items-center gap-2">
+                  <TrashIcon className="w-5 h-5" />
+                  Danger Zone
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Deleting your account will permanently remove all conversations, comments, and billing records.
+                  This action cannot be undone.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Type DELETE to confirm
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmation}
+                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                    placeholder="DELETE"
+                    className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:border-red-500 focus:outline-none transition-colors uppercase tracking-widest"
+                  />
+                </div>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={
+                    deletingAccount ||
+                    deleteConfirmation.trim().toUpperCase() !== 'DELETE'
+                  }
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deletingAccount ? 'Deleting account…' : 'Delete Account'}
+                </button>
               </div>
             </div>
           )}

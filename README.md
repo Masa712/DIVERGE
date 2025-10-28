@@ -47,9 +47,12 @@ Required environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anon/public key
 - `SUPABASE_SERVICE_KEY` - Your Supabase service role key
+- `STRIPE_SECRET_KEY` - Required for billing, subscription management, およびアカウント削除処理
 - `OPENAI_API_KEY` - Your OpenAI API key
 - `ANTHROPIC_API_KEY` - Your Anthropic API key
 - `GOOGLE_AI_API_KEY` - Your Google AI API key
+
+> 本番反映前に、`SUPABASE_SERVICE_KEY` と `STRIPE_SECRET_KEY` がデプロイ環境でも設定されているかを確認し、アカウント削除フローが動作することを必ず検証してください。
 
 ### 3. Set up Supabase Database
 

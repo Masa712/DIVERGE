@@ -27,6 +27,7 @@ function AuthPageContent() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -35,10 +36,19 @@ function AuthPageContent() {
   useEffect(() => {
     // Check for error from callback
     const errorParam = searchParams.get('error')
+    const accountDeleted = searchParams.get('accountDeleted')
+
     if (errorParam === 'authentication_failed') {
       setError('Authentication failed. Please try again.')
     } else if (errorParam === 'callback_failed') {
       setError('Something went wrong. Please try again.')
+    }
+
+    if (accountDeleted === 'true') {
+      setNotice({
+        type: 'success',
+        text: 'アカウントを削除しました。必要であれば新しくサインアップできます。'
+      })
     }
   }, [searchParams])
 
@@ -100,6 +110,18 @@ function AuthPageContent() {
             {isSignUp ? 'Create your account' : 'Sign in to continue'}
           </p>
         </div>
+
+        {notice && (
+          <div
+            className={`rounded-lg p-3 text-sm ${
+              notice.type === 'success'
+                ? 'bg-green-50 text-green-800 border border-green-200'
+                : 'bg-red-50 text-red-800 border border-red-200'
+            }`}
+          >
+            {notice.text}
+          </div>
+        )}
 
         {/* Social Login Buttons */}
         <div className="space-y-3">
