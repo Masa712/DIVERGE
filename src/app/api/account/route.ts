@@ -58,7 +58,7 @@ export const DELETE = withErrorHandler(async (_request: NextRequest) => {
       })
 
       try {
-        await cancelSubscription(subscription.stripe_subscription_id, false)
+        await cancelSubscription(subscription.stripe_subscription_id, true)
       } catch (error) {
         throw createAppError('Failed to cancel billing subscription', ErrorCategory.EXTERNAL_API, {
           cause: error as Error,

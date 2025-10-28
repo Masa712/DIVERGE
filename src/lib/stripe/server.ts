@@ -122,19 +122,32 @@ export async function getSubscription(
 
 export async function cancelSubscription(
   subscriptionId: string,
-  atPeriodEnd = true
+  immediately = false
 ): Promise<Stripe.Subscription> {
   try {
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
-      cancel_at_period_end: atPeriodEnd,
-    })
-    
-    log.info('Stripe subscription cancelled', { 
-      subscriptionId, 
-      atPeriodEnd 
-    })
-    
-    return subscription
+    if (immediately) {
+      // Cancel subscription immediately
+      const subscription = await stripe.subscriptions.cancel(subscriptionId)
+
+      log.info('Stripe subscription cancelled immediately', {
+        subscriptionId,
+        cancelledAt: subscription.canceled_at
+      })
+
+      return subscription
+    } else {
+      // Cancel at period end (default behavior)
+      const subscription = await stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: true,
+      })
+
+      log.info('Stripe subscription set to cancel at period end', {
+        subscriptionId,
+        cancelAt: subscription.cancel_at
+      })
+
+      return subscription
+    }
   } catch (error) {
     log.error('Failed to cancel subscription', error)
     throw error
