@@ -83,43 +83,60 @@ export async function buildFlexibleEnhancedContext(
   
   console.log(`🔗 Using ONLY direct ancestors: ${ancestors.length} nodes (no cross-branch contamination)`)
   
-  // 2. Apply strategy-based node selection ONLY to ancestors
-  // No siblings from other branches should be included
+  // 2. Reserve tokens for explicit references (PRIORITY FIX)
+  let reservedTokensForReferences = 0
+  if (includeReferences.length > 0) {
+    // Reserve approximately 2000 tokens per reference (conservative estimate)
+    // This ensures referenced nodes can actually be included
+    const tokensPerReference = 2000
+    reservedTokensForReferences = Math.min(
+      includeReferences.length * tokensPerReference,
+      maxTokens * 0.6 // Reserve up to 60% of tokens for references
+    )
+    console.log(`🔖 Reserving ${reservedTokensForReferences} tokens for ${includeReferences.length} explicit references`)
+  }
+  
+  // 3. Calculate available tokens for ancestors
+  const tokensForAncestors = maxTokens - reservedTokensForReferences
+  
+  // 4. Apply strategy-based node selection ONLY to ancestors with reduced budget
   const weightedNodes = calculateNodeWeights(ancestors, userPrompt, strategy, priority, model)
   
   console.log(`📊 Strategy analysis: ${ancestors.length} ancestor candidates, top weight: ${weightedNodes[0]?.weight.toFixed(2)}`)
   
-  // 3. Smart token allocation based on strategy
-  const tokenAllocation = calculateTokenAllocation(strategy, maxTokens, options.customWeights)
+  // 5. Smart token allocation based on strategy with reduced budget
+  const tokenAllocation = calculateTokenAllocation(strategy, tokensForAncestors, options.customWeights)
   let selectionResult = selectOptimalNodes(weightedNodes, tokenAllocation, model, adaptiveTokens)
   
-  // 4. Adaptive token rebalancing if enabled
-  if (adaptiveTokens && selectionResult.totalTokens < maxTokens * 0.6) {
+  // 6. Adaptive token rebalancing if enabled
+  if (adaptiveTokens && selectionResult.totalTokens < tokensForAncestors * 0.6) {
     console.log('🔄 Adaptive rebalancing: expanding context')
-    const expandedAllocation = expandTokenAllocation(tokenAllocation, maxTokens * 0.8 - selectionResult.totalTokens)
+    const expandedAllocation = expandTokenAllocation(tokenAllocation, tokensForAncestors * 0.8 - selectionResult.totalTokens)
     selectionResult = selectOptimalNodes(weightedNodes, expandedAllocation, model, false)
     adaptiveAdjustments++
   }
   
-  // 5. Build messages from selected nodes
+  // 7. Build messages from selected nodes
   buildMessagesFromSelection(selectionResult.selectedNodes, messages, strategy, model)
   
   // Update estimated tokens after building messages from selected nodes
   estimatedTokens = selectionResult.totalTokens
   
-  // 6. Handle explicit references with remaining token budget
+  // 8. Handle explicit references with RESERVED token budget (PRIORITY FIX)
   if (includeReferences.length > 0) {
-    const remainingTokens = maxTokens - estimatedTokens
-    console.log(`📌 Processing ${includeReferences.length} node references with ${remainingTokens} remaining tokens`)
-    await addReferencedContent(sessionId, includeReferences, messages, remainingTokens, model, includedNodes)
+    // Use the reserved tokens plus any unused tokens from ancestor selection
+    const unusedAncestorTokens = tokensForAncestors - estimatedTokens
+    const availableForReferences = reservedTokensForReferences + unusedAncestorTokens
+    console.log(`📌 Processing ${includeReferences.length} node references with ${availableForReferences} tokens (${reservedTokensForReferences} reserved + ${unusedAncestorTokens} unused)`)
+    await addReferencedContent(sessionId, includeReferences, messages, availableForReferences, model, includedNodes)
     // Update estimated tokens after adding references
     estimatedTokens = countMessageTokens(messages, model)
   }
   
-  // 7. Add user prompt
+  // 9. Add user prompt
   messages.push({ role: 'user', content: userPrompt })
   
-  // 8. Final accurate token count
+  // 10. Final accurate token count
   const accurateTokens = countMessageTokens(messages, model)
   const tokenEfficiency = estimatedTokens > 0 ? accurateTokens / estimatedTokens : 1
   
@@ -360,29 +377,84 @@ async function addReferencedContent(
   const resolvedRefs = await resolveNodeReferences(sessionId, references)
   
   let addedCount = 0
+  let truncatedCount = 0
+  
   for (const { refId, node: refNode } of resolvedRefs) {
-    if (!refNode || remainingTokens <= 0) {
-      if (!refNode) {
-        console.log(`⚠️ Could not resolve reference: ${refId}`)
-      }
+    if (!refNode) {
+      console.log(`⚠️ Could not resolve reference: ${refId}`)
+      continue
+    }
+    
+    if (remainingTokens <= 100) {
+      console.log(`⏭️ Skipping reference ${refId} - insufficient tokens remaining (${remainingTokens})`)
       break
     }
     
-    const refContent = `REFERENCE [${refId}]: "${refNode.prompt}" → "${refNode.response || 'No response'}"`
-    const refTokens = countTokens(refContent, model)
+    // Try to include full content first
+    const fullContent = `REFERENCE [${refId}]: "${refNode.prompt}" → "${refNode.response || 'No response'}"`
+    const fullTokens = countTokens(fullContent, model)
     
-    if (refTokens <= remainingTokens) {
-      messages.push({ role: 'system', content: refContent })
-      remainingTokens -= refTokens
+    if (fullTokens <= remainingTokens) {
+      // Full content fits
+      messages.push({ role: 'system', content: fullContent })
+      remainingTokens -= fullTokens
       includedNodes.push(refNode.id)
       addedCount++
-      console.log(`✅ Added reference ${refId} (${refTokens} tokens)`)
+      console.log(`✅ Added full reference ${refId} (${fullTokens} tokens)`)
     } else {
-      console.log(`⏭️ Skipping reference ${refId} - insufficient tokens (needs ${refTokens}, has ${remainingTokens})`)
+      // Try truncated content with smart summarization
+      const prompt = refNode.prompt || ''
+      const response = refNode.response || 'No response'
+      
+      // Calculate how much we can include
+      const promptTokens = countTokens(prompt, model)
+      const responseTokens = countTokens(response, model)
+      const headerTokens = countTokens(`REFERENCE [${refId}]: "" → "" [truncated]`, model)
+      const availableForContent = remainingTokens - headerTokens - 50 // 50 token buffer
+      
+      if (availableForContent < 100) {
+        // Not enough space even for truncated content
+        console.log(`⏭️ Skipping reference ${refId} - insufficient tokens even for truncation (needs ${fullTokens}, has ${remainingTokens})`)
+        continue
+      }
+      
+      // Prioritize prompt over response, and truncate intelligently
+      let includedPrompt = prompt
+      let includedResponse = response
+      
+      if (promptTokens + responseTokens > availableForContent) {
+        // Need to truncate
+        if (promptTokens > availableForContent * 0.3) {
+          // Prompt is long, truncate it
+          const promptChars = Math.floor((availableForContent * 0.3 / promptTokens) * prompt.length)
+          includedPrompt = prompt.substring(0, promptChars) + '...'
+        }
+        
+        // Truncate response to fit remaining space
+        const remainingSpace = availableForContent - countTokens(includedPrompt, model)
+        if (responseTokens > remainingSpace) {
+          const responseChars = Math.floor((remainingSpace / responseTokens) * response.length)
+          includedResponse = response.substring(0, responseChars) + '...'
+        }
+      }
+      
+      const truncatedContent = `REFERENCE [${refId}]: "${includedPrompt}" → "${includedResponse}" [truncated]`
+      const truncatedTokens = countTokens(truncatedContent, model)
+      
+      if (truncatedTokens <= remainingTokens) {
+        messages.push({ role: 'system', content: truncatedContent })
+        remainingTokens -= truncatedTokens
+        includedNodes.push(refNode.id)
+        addedCount++
+        truncatedCount++
+        console.log(`✂️ Added truncated reference ${refId} (${truncatedTokens} tokens, saved ${fullTokens - truncatedTokens})`)
+      } else {
+        console.log(`⏭️ Skipping reference ${refId} - truncation failed (needs ${truncatedTokens}, has ${remainingTokens})`)
+      }
     }
   }
   
-  console.log(`📌 Added ${addedCount}/${references.length} references to context`)
+  console.log(`📌 Added ${addedCount}/${references.length} references to context (${truncatedCount} truncated)`)
 }
 
 /**

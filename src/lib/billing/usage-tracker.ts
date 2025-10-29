@@ -179,11 +179,14 @@ export async function getUserPlan(userId: string): Promise<string> {
   const supabase = createClient()
 
   try {
-    // Get current usage quota to determine plan
-    const nextMonth = new Date()
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-    nextMonth.setDate(1)
-    nextMonth.setHours(0, 0, 0, 0)
+    // Get current usage quota to determine plan - use UTC to match database
+    const now = new Date()
+    const nextMonth = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth() + 1,
+      1, // first day of next month
+      0, 0, 0, 0
+    ))
 
     const { data: quota, error } = await supabase
       .from('usage_quotas')
@@ -241,11 +244,14 @@ export async function canUseWebSearch(userId: string): Promise<{
       return { allowed: false, currentUsage: 0, limit: 0 }
     }
 
-    // Get current usage details
-    const nextMonth = new Date()
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-    nextMonth.setDate(1)
-    nextMonth.setHours(0, 0, 0, 0)
+    // Get current usage details - use UTC to match database function
+    const now = new Date()
+    const nextMonth = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth() + 1,
+      1, // first day of next month
+      0, 0, 0, 0
+    ))
 
     const { data: quota } = await supabase
       .from('usage_quotas')

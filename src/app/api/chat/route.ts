@@ -131,7 +131,7 @@ Based on these search results and knowing that today is ${currentDate.getFullYea
         // Build enhanced context with intelligent strategy selection
         const enhancedContext = await buildContextWithStrategy(parentNodeId, userPrompt, {
           includeSiblings: false, // FIXED: Prevent cross-branch contamination
-          maxTokens: 3000, // Leave room for new prompt and response
+          maxTokens: 4000, // Increased from 3000 to better support node references
           includeReferences: referencedNodes,
           model: model // Pass model for accurate token counting
         })
