@@ -17,16 +17,7 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     )
   }
 
-  // Calculate the first day of next month at UTC midnight without overflow issues
-  const now = new Date()
-  const nextMonth = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth() + 1,
-    1, // first day of next month
-    0, 0, 0, 0
-  ))
-
-  // Fetch active subscription
+  // Fetch active subscription first
   const { data: subscriptionData, error: subError } = await supabase
     .from('user_subscriptions')
     .select('*')
@@ -42,12 +33,17 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
     )
   }
 
-  // Fetch usage quota
+  // FIXED: Fetch current usage quota - use "next reset after now" instead of exact match
+  // This avoids timestamp precision issues (milliseconds vs microseconds)
+  const now = new Date()
+
   const { data: usageData, error: usageError } = await supabase
     .from('usage_quotas')
     .select('*')
     .eq('user_id', user.id)
-    .eq('reset_date', nextMonth.toISOString())
+    .gte('reset_date', now.toISOString())  // reset_date >= now
+    .order('reset_date', { ascending: true })  // earliest first
+    .limit(1)
     .maybeSingle()
 
   if (usageError && usageError.code !== 'PGRST116') {
@@ -56,6 +52,12 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
       ErrorCategory.DATABASE,
       { context: { userId: user.id }, cause: usageError }
     )
+  }
+
+  if (usageData) {
+    console.log('📅 [Billing API] Found usage quota with reset date:', new Date(usageData.reset_date).toISOString())
+  } else {
+    console.log('⚠️ [Billing API] No usage quota found for user')
   }
 
   // Determine plan with priority: subscription > usage_quota > user_profile > default free

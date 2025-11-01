@@ -18,6 +18,24 @@ import {
   inferOptimalStrategy,
   getDefaultPriority
 } from './context-strategies'
+import { summarizeNodeWithAI } from './node-summarizer'
+
+/**
+ * Debug mode check for enhanced context diagnostics
+ * Set DEBUG_ENHANCED_CONTEXT=true in .env to enable detailed logging
+ */
+const isDebugMode = (): boolean => {
+  return process.env.DEBUG_ENHANCED_CONTEXT === 'true'
+}
+
+/**
+ * Conditional debug logging
+ */
+const debugLog = (...args: any[]): void => {
+  if (isDebugMode()) {
+    console.log(...args)
+  }
+}
 
 export interface FlexibleEnhancedContext {
   messages: Array<{ role: string; content: string }>
@@ -50,7 +68,7 @@ export async function buildFlexibleEnhancedContext(
   // Intelligent defaults
   const strategy = options.strategy || inferOptimalStrategy(userPrompt)
   const priority = options.priority || getDefaultPriority(strategy)
-  const maxTokens = options.maxTokens || 4000
+  const maxTokens = options.maxTokens || 8000 // Increased from 4000 to support deeper conversation history (12-15 nodes)
   const model = options.model || 'gpt-4o'
   const includeReferences = options.includeReferences || []
   const adaptiveTokens = options.adaptiveTokens ?? true
@@ -101,26 +119,48 @@ export async function buildFlexibleEnhancedContext(
   
   // 4. Apply strategy-based node selection ONLY to ancestors with reduced budget
   const weightedNodes = calculateNodeWeights(ancestors, userPrompt, strategy, priority, model)
-  
+
   console.log(`📊 Strategy analysis: ${ancestors.length} ancestor candidates, top weight: ${weightedNodes[0]?.weight.toFixed(2)}`)
-  
-  // 5. Smart token allocation based on strategy with reduced budget
-  const tokenAllocation = calculateTokenAllocation(strategy, tokensForAncestors, options.customWeights)
-  let selectionResult = selectOptimalNodes(weightedNodes, tokenAllocation, model, adaptiveTokens)
-  
-  // 6. Adaptive token rebalancing if enabled
-  if (adaptiveTokens && selectionResult.totalTokens < tokensForAncestors * 0.6) {
-    console.log('🔄 Adaptive rebalancing: expanding context')
-    const expandedAllocation = expandTokenAllocation(tokenAllocation, tokensForAncestors * 0.8 - selectionResult.totalTokens)
-    selectionResult = selectOptimalNodes(weightedNodes, expandedAllocation, model, false)
-    adaptiveAdjustments++
+
+  // 🔍 DIAGNOSTIC: Log each ancestor node's details (only in debug mode)
+  debugLog('🔍 DIAGNOSTIC: Ancestor nodes breakdown:')
+  if (isDebugMode()) {
+    weightedNodes.forEach((wn, index) => {
+      debugLog(`  [${index}] ID: ${wn.node.id.substring(0, 8)}, Depth: ${wn.node.depth}, Tokens: ${wn.tokenCount}, Weight: ${wn.weight.toFixed(3)}, Reason: ${wn.reason}`)
+      debugLog(`      Prompt preview: ${wn.node.prompt.substring(0, 60)}...`)
+    })
   }
   
+  // 5. NEW: Use smart selection with AI summarization
+  console.log('🤖 Using AI-powered smart selection with summarization')
+  const smartSelection = await selectOptimalNodesWithSummarization(
+    weightedNodes,
+    tokensForAncestors,
+    model,
+    3 // Keep 3 most recent nodes in full (increased from 2 with 8000 token budget)
+  )
+
+  // 🔍 DIAGNOSTIC: Log selection result (only in debug mode)
+  debugLog('🔍 DIAGNOSTIC: Smart selection result:')
+  debugLog(`  Selected: ${smartSelection.selectedNodes.length}/${weightedNodes.length} nodes`)
+  debugLog(`  Total tokens used: ${smartSelection.totalTokens}/${tokensForAncestors} (${((smartSelection.totalTokens / tokensForAncestors) * 100).toFixed(1)}%)`)
+
+  const summarizedCount = smartSelection.selectedNodes.filter(n => n.summarized).length
+  if (isDebugMode() && summarizedCount > 0) {
+    const totalOriginalTokens = smartSelection.selectedNodes
+      .filter(n => n.summarized)
+      .reduce((sum, n) => sum + (n.originalTokens || 0), 0)
+    const totalSummarizedTokens = smartSelection.selectedNodes
+      .filter(n => n.summarized)
+      .reduce((sum, n) => sum + n.tokenCount, 0)
+    debugLog(`  📝 Summarized ${summarizedCount} nodes: ${totalOriginalTokens} → ${totalSummarizedTokens} tokens (${((1 - totalSummarizedTokens/totalOriginalTokens) * 100).toFixed(0)}% reduction)`)
+  }
+
   // 7. Build messages from selected nodes
-  buildMessagesFromSelection(selectionResult.selectedNodes, messages, strategy, model)
-  
+  buildMessagesFromSelection(smartSelection.selectedNodes, messages, strategy, model)
+
   // Update estimated tokens after building messages from selected nodes
-  estimatedTokens = selectionResult.totalTokens
+  estimatedTokens = smartSelection.totalTokens
   
   // 8. Handle explicit references with RESERVED token budget (PRIORITY FIX)
   if (includeReferences.length > 0) {
@@ -144,7 +184,7 @@ export async function buildFlexibleEnhancedContext(
   const buildTime = Math.round(endTime - startTime)
   
   console.log(`⚡ Flexible context built in ${buildTime}ms using ${strategy} strategy`)
-  console.log(`📏 Selection: ${selectionResult.selectionMeta.selectedCount}/${selectionResult.selectionMeta.candidateCount} nodes, ${accurateTokens} tokens`)
+  console.log(`📏 Selection: ${smartSelection.selectedNodes.length}/${weightedNodes.length} nodes, ${accurateTokens} tokens`)
   console.log(`🚫 Cross-branch isolation: siblings from other branches excluded`)
   
   // Export performance metrics
@@ -153,7 +193,7 @@ export async function buildFlexibleEnhancedContext(
       contextBuildTime: buildTime,
       cacheHitRate: includeReferences.length > 0 ? 85 : 0,
       dbQueries: 1, // Only ancestor query, no session nodes
-      nodesProcessed: selectionResult.selectionMeta.selectedCount,
+      nodesProcessed: smartSelection.selectedNodes.length,
       referencesResolved: includeReferences.length,
       sessionId: sessionId,
       tokenAccuracy: tokenEfficiency,
@@ -163,15 +203,14 @@ export async function buildFlexibleEnhancedContext(
       strategy: strategy,
       priority: priority,
       adaptiveAdjustments: adaptiveAdjustments,
-      candidateCount: selectionResult.selectionMeta.candidateCount,
-      averageWeight: selectionResult.selectionMeta.averageWeight,
-      tokenDistribution: selectionResult.tokenDistribution,
+      candidateCount: weightedNodes.length,
+      summarizedCount: smartSelection.selectedNodes.filter(n => n.summarized).length,
       // Context isolation metrics
       ancestorCount: ancestors.length,
       crossBranchIsolation: true
     }
   }
-  
+
   return {
     messages,
     metadata: {
@@ -184,7 +223,23 @@ export async function buildFlexibleEnhancedContext(
       tokenEfficiency,
       strategy,
       priority,
-      selectionResult,
+      selectionResult: {
+        selectedNodes: smartSelection.selectedNodes,
+        totalTokens: smartSelection.totalTokens,
+        strategy,
+        tokenDistribution: {
+          ancestors: smartSelection.totalTokens,
+          siblings: 0,
+          references: 0,
+          summaries: 0
+        },
+        selectionMeta: {
+          candidateCount: weightedNodes.length,
+          selectedCount: smartSelection.selectedNodes.length,
+          averageWeight: 0,
+          primaryReason: 'smart-summarization'
+        }
+      },
       adaptiveAdjustments
     }
   }
@@ -255,6 +310,111 @@ function expandTokenAllocation(
 }
 
 /**
+ * Smart selection with AI summarization for older nodes
+ * Strategy: Summarize old nodes first, then add recent nodes in full
+ */
+async function selectOptimalNodesWithSummarization(
+  weightedNodes: WeightedNode[],
+  maxTokens: number,
+  model: string,
+  recentNodeCount: number = 3 // How many recent nodes to include in full (default: 3 for 8000 token budget)
+): Promise<{
+  selectedNodes: Array<WeightedNode & { summarized?: boolean; originalTokens?: number }>
+  totalTokens: number
+}> {
+  const selectedNodes: Array<WeightedNode & { summarized?: boolean; originalTokens?: number }> = []
+  let totalTokens = 0
+
+  debugLog(`🎯 Smart selection: prioritizing ALL nodes (old=summarized, recent=${recentNodeCount} in full)`)
+
+  // Sort by depth (oldest first for processing)
+  const sortedByDepth = [...weightedNodes].sort((a, b) => a.node.depth - b.node.depth)
+
+  // Separate into old and recent
+  const oldNodes = sortedByDepth.slice(0, -recentNodeCount)
+  const recentNodes = sortedByDepth.slice(-recentNodeCount)
+
+  // Step 1: Summarize old nodes first (reserve space)
+  const targetSummaryTokens = 200
+  const reservedForOldNodes = oldNodes.length * targetSummaryTokens
+  const reservedForRecentNodes = maxTokens - reservedForOldNodes
+
+  debugLog(`📊 Token allocation: ${reservedForOldNodes} for ${oldNodes.length} old (summarized), ${reservedForRecentNodes} for ${recentNodes.length} recent (full)`)
+
+  // Process old nodes (summarized)
+  for (const wn of oldNodes) {
+    if (totalTokens + targetSummaryTokens <= maxTokens) {
+      try {
+        const { summary, tokens } = await summarizeNodeWithAI(wn.node, targetSummaryTokens, model)
+
+        // Create summarized version
+        const summarizedNode = {
+          ...wn,
+          node: {
+            ...wn.node,
+            prompt: summary.split('\n')[0] || wn.node.prompt,
+            response: summary
+          },
+          tokenCount: tokens,
+          summarized: true,
+          originalTokens: wn.tokenCount
+        }
+
+        selectedNodes.push(summarizedNode)
+        totalTokens += tokens
+        debugLog(`  ✅ SUMMARIZED: ${wn.node.id.substring(0, 8)} (${wn.tokenCount} → ${tokens} tokens, ${((1 - tokens/wn.tokenCount) * 100).toFixed(0)}% reduction, depth: ${wn.node.depth})`)
+      } catch (error) {
+        debugLog(`  ❌ SUMMARIZATION FAILED: ${wn.node.id.substring(0, 8)}, skipping`)
+      }
+    } else {
+      debugLog(`  ⚠️ SKIPPED (budget): ${wn.node.id.substring(0, 8)} (even summarized would exceed budget)`)
+    }
+  }
+
+  // Step 2: Add recent nodes in full (if budget allows)
+  for (const wn of recentNodes) {
+    if (totalTokens + wn.tokenCount <= maxTokens) {
+      selectedNodes.push(wn)
+      totalTokens += wn.tokenCount
+      debugLog(`  ✅ FULL: ${wn.node.id.substring(0, 8)} (${wn.tokenCount} tokens, depth: ${wn.node.depth})`)
+    } else {
+      // If full version doesn't fit, try summarized version
+      debugLog(`  ⚠️ Recent node too large for full version, trying summary: ${wn.node.id.substring(0, 8)}`)
+      if (totalTokens + targetSummaryTokens <= maxTokens) {
+        try {
+          const { summary, tokens } = await summarizeNodeWithAI(wn.node, targetSummaryTokens, model)
+
+          const summarizedNode = {
+            ...wn,
+            node: {
+              ...wn.node,
+              prompt: summary.split('\n')[0] || wn.node.prompt,
+              response: summary
+            },
+            tokenCount: tokens,
+            summarized: true,
+            originalTokens: wn.tokenCount
+          }
+
+          selectedNodes.push(summarizedNode)
+          totalTokens += tokens
+          debugLog(`  ✅ SUMMARIZED (fallback): ${wn.node.id.substring(0, 8)} (${wn.tokenCount} → ${tokens} tokens)`)
+        } catch (error) {
+          debugLog(`  ❌ Could not include node: ${wn.node.id.substring(0, 8)}`)
+        }
+      } else {
+        debugLog(`  ❌ SKIPPED: ${wn.node.id.substring(0, 8)} (no space even for summary)`)
+      }
+    }
+  }
+
+  // Sort back by depth for proper conversation flow
+  selectedNodes.sort((a, b) => a.node.depth - b.node.depth)
+
+  return { selectedNodes, totalTokens }
+}
+
+/**
  * Select optimal nodes based on token allocation and weights
  */
 function selectOptimalNodes(
@@ -307,14 +467,21 @@ function selectFromCategory(
   model: string
 ): number {
   let usedTokens = 0
-  
+
+  // 🔍 DIAGNOSTIC: Log category selection process
+  const categoryName = nodes[0]?.reason.split('-')[0] || 'unknown'
+  console.log(`🔍 DIAGNOSTIC: Selecting from category '${categoryName}' (budget: ${tokenBudget.toFixed(0)} tokens):`)
+
   for (const node of nodes) {
     if (usedTokens + node.tokenCount <= tokenBudget) {
       selectedNodes.push(node)
       usedTokens += node.tokenCount
+      console.log(`  ✅ SELECTED: ${node.node.id.substring(0, 8)} (${node.tokenCount} tokens, total: ${usedTokens})`)
+    } else {
+      console.log(`  ❌ SKIPPED: ${node.node.id.substring(0, 8)} (${node.tokenCount} tokens would exceed budget: ${usedTokens} + ${node.tokenCount} > ${tokenBudget.toFixed(0)})`)
     }
   }
-  
+
   return usedTokens
 }
 

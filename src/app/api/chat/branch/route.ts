@@ -8,13 +8,13 @@ import { ModelId } from '@/types'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
+    const {
       parentNodeId,
       sessionId,
       prompt,
       model,
       temperature = 0.7,
-      maxTokens = 4000, // Increased default for better responses
+      maxTokens = 8000, // Increased from 4000 for longer responses if needed
       systemPrompt,
       useEnhancedContext = true
     } = body
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         // Build enhanced context with intelligent strategy selection
         const enhancedContext = await buildContextWithStrategy(parentNodeId, prompt, {
           includeSiblings: false, // FIXED: Prevent cross-branch contamination
-          maxTokens: 4000, // Increased from 3000 to better support node references
+          maxTokens: 8000, // Increased from 4000 to support deeper conversation history (12-15 nodes)
           includeReferences: referencedNodes,
           model: model // Pass model for accurate token counting
         })

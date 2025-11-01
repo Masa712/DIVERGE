@@ -16,6 +16,23 @@ import {
 import { isRedisAvailable } from '@/lib/redis/client'
 import { getRedisEnhancedContextCache } from './redis-enhanced-context-cache'
 
+/**
+ * Debug mode check for enhanced context diagnostics
+ * Set DEBUG_ENHANCED_CONTEXT=true in .env to enable detailed logging
+ */
+const isDebugMode = (): boolean => {
+  return process.env.DEBUG_ENHANCED_CONTEXT === 'true'
+}
+
+/**
+ * Conditional debug logging
+ */
+const debugLog = (...args: any[]): void => {
+  if (isDebugMode()) {
+    console.log(...args)
+  }
+}
+
 export interface ContextScope {
   ancestors: ChatNode[]      // Direct ancestor chain
   siblings: ChatNode[]        // Sibling branches from same parent
@@ -44,8 +61,8 @@ export { extractNodeReferences } from '@/lib/utils/node-references'
  */
 export async function getSiblingNodes(nodeId: string): Promise<ChatNode[]> {
   const supabase = createClient()
-  
-  console.log(`🔍 Getting siblings for nodeId: ${nodeId}`)
+
+  debugLog(`🔍 Getting siblings for nodeId: ${nodeId}`)
   
   // First, get the current node to find its parent
   const { data: currentNode, error: nodeError } = await supabase
@@ -55,16 +72,16 @@ export async function getSiblingNodes(nodeId: string): Promise<ChatNode[]> {
     .single()
     
   if (nodeError || !currentNode || !currentNode.parent_id) {
-    console.log(`❌ No parent found for node ${nodeId}:`, { 
-      nodeError: nodeError?.message, 
-      hasCurrentNode: !!currentNode, 
-      parentId: currentNode?.parent_id 
+    debugLog(`❌ No parent found for node ${nodeId}:`, {
+      nodeError: nodeError?.message,
+      hasCurrentNode: !!currentNode,
+      parentId: currentNode?.parent_id
     })
     return []
   }
-  
-  console.log(`📊 Current node parent_id: ${currentNode.parent_id}`)
-  
+
+  debugLog(`📊 Current node parent_id: ${currentNode.parent_id}`)
+
   // Get all siblings (excluding current node)
   const { data: siblings, error: siblingsError } = await supabase
     .from('chat_nodes')
@@ -72,15 +89,15 @@ export async function getSiblingNodes(nodeId: string): Promise<ChatNode[]> {
     .eq('parent_id', currentNode.parent_id)
     .neq('id', nodeId)
     .order('created_at', { ascending: true })
-    
-  console.log(`🔎 Sibling query result:`, { 
-    siblingsCount: siblings?.length || 0, 
+
+  debugLog(`🔎 Sibling query result:`, {
+    siblingsCount: siblings?.length || 0,
     error: siblingsError?.message,
-    parentId: currentNode.parent_id 
+    parentId: currentNode.parent_id
   })
-  
+
   if (siblingsError || !siblings) {
-    console.log(`❌ Siblings query failed:`, siblingsError?.message)
+    debugLog(`❌ Siblings query failed:`, siblingsError?.message)
     return []
   }
   
@@ -164,7 +181,7 @@ export async function buildEnhancedContext(
   const startTime = performance.now()
   const {
     includeSiblings = false, // CHANGED: Default to false to prevent cross-branch contamination
-    maxTokens = 4000,
+    maxTokens = 8000, // Increased from 4000 to support deeper conversation history
     includeReferences = [],
     model = 'gpt-4o' // NEW: Default model for token calculations
   } = options
@@ -260,8 +277,8 @@ export async function buildEnhancedContext(
   // 3. Include sibling context only if explicitly requested (DISABLED by default for isolation)
   let siblingCount = 0
   if (includeSiblings && estimatedTokens < maxTokens * 0.8) {
-    console.log(`🔍 Adding sibling context (current: ${estimatedTokens} tokens)`)
-    console.log(`⚠️ WARNING: includeSiblings=true may cause cross-branch contamination`)
+    debugLog(`🔍 Adding sibling context (current: ${estimatedTokens} tokens)`)
+    debugLog(`⚠️ WARNING: includeSiblings=true may cause cross-branch contamination`)
     
     // PERFORMANCE OPTIMIZATION: Use cached sibling nodes
     const siblingNodes = await getCachedSiblingNodes(nodeId, sessionId)

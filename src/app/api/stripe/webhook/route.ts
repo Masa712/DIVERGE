@@ -225,33 +225,35 @@ async function upsertSubscription(userId: string, subscription: Stripe.Subscript
     })
     .eq('user_id', userId)
 
-  // Update usage_quotas with new plan limits
-  await updateUsageQuotaPlan(userId, planId)
+  // Update usage_quotas with new plan limits (pass subscription for cycle-based reset)
+  await updateUsageQuotaPlan(userId, planId, subscription)
 }
 
 /**
  * Update usage quota plan and limits for a user
+ * FIXED: Use subscription cycle (current_period_end) instead of calendar month
  */
-async function updateUsageQuotaPlan(userId: string, planId: string) {
+async function updateUsageQuotaPlan(
+  userId: string,
+  planId: string,
+  subscription?: Stripe.Subscription
+) {
   // Get plan limits
   const limits = getPlanLimits(planId)
 
-  // Calculate next month's reset date in UTC
-  const nextMonth = new Date()
-  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
-  nextMonth.setUTCDate(1)
-  nextMonth.setUTCHours(0, 0, 0, 0)
+  log.info('Updating usage quota plan', { userId, planId, limits })
 
-  // Check if quota exists for current period
-  const { data: existingQuota } = await supabaseAdmin
+  // FIX: Update ALL existing quotas for this user (current and future)
+  const { data: allQuotas, error: fetchError } = await supabaseAdmin
     .from('usage_quotas')
     .select('*')
     .eq('user_id', userId)
-    .eq('reset_date', nextMonth.toISOString())
-    .maybeSingle()
+    .order('reset_date', { ascending: true })
 
-  if (existingQuota) {
-    // Update existing quota with new limits
+  if (fetchError) {
+    log.error('Failed to fetch existing quotas', { userId, error: fetchError })
+  } else if (allQuotas && allQuotas.length > 0) {
+    // Update all existing quotas to new plan
     const { error: updateError } = await supabaseAdmin
       .from('usage_quotas')
       .update({
@@ -262,15 +264,58 @@ async function updateUsageQuotaPlan(userId: string, planId: string) {
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
-      .eq('reset_date', nextMonth.toISOString())
 
     if (updateError) {
-      log.error('Failed to update usage quota', { userId, planId, error: updateError })
+      log.error('Failed to update existing quotas', { userId, planId, error: updateError })
     } else {
-      log.info('Usage quota updated successfully', { userId, planId, limits })
+      log.info('Updated all existing quotas', { userId, planId, count: allQuotas.length })
     }
   } else {
-    // Create new quota record
+    log.info('No existing quotas found, will create new one', { userId })
+  }
+
+  // FIXED: Calculate reset date based on subscription cycle, not calendar month
+  let nextResetDate: Date
+
+  // Cast to any to access webhook-specific fields not in Stripe SDK types
+  const sub = subscription as any
+
+  if (subscription && sub.current_period_end) {
+    // For paid subscriptions: use Stripe subscription cycle
+    const periodEnd = typeof sub.current_period_end === 'number'
+      ? new Date(sub.current_period_end * 1000)
+      : new Date(sub.current_period_end)
+
+    nextResetDate = periodEnd
+    log.info('Using subscription period end as reset date', {
+      userId,
+      resetDate: nextResetDate.toISOString()
+    })
+  } else {
+    // For free plan: use first day of next month (calendar-based)
+    const now = new Date()
+    nextResetDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth() + 1,
+      1,
+      0, 0, 0, 0
+    ))
+    log.info('Using calendar month for free plan', {
+      userId,
+      resetDate: nextResetDate.toISOString()
+    })
+  }
+
+  // Check if quota exists for next period
+  const { data: nextPeriodQuota } = await supabaseAdmin
+    .from('usage_quotas')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('reset_date', nextResetDate.toISOString())
+    .maybeSingle()
+
+  if (!nextPeriodQuota) {
+    // Create new quota record for next period
     const { error: insertError } = await supabaseAdmin
       .from('usage_quotas')
       .insert({
@@ -282,14 +327,16 @@ async function updateUsageQuotaPlan(userId: string, planId: string) {
         sessions_limit: limits.sessions_limit,
         web_searches_used: 0,
         web_searches_limit: limits.web_searches_limit,
-        reset_date: nextMonth.toISOString(),
+        reset_date: nextResetDate.toISOString(),
       })
 
     if (insertError) {
-      log.error('Failed to create usage quota', { userId, planId, error: insertError })
+      log.error('Failed to create next period quota', { userId, planId, error: insertError })
     } else {
-      log.info('Usage quota created successfully', { userId, planId, limits })
+      log.info('Created next period quota successfully', { userId, planId, resetDate: nextResetDate.toISOString() })
     }
+  } else {
+    log.info('Next period quota already exists and was updated', { userId, planId })
   }
 }
 

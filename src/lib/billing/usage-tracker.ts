@@ -10,6 +10,27 @@ export interface UsageData {
 }
 
 /**
+ * Helper function to get current usage quota for any plan type
+ * Works for both calendar-based (Free) and subscription-based (Plus/Pro) resets
+ * FIXED: Uses "next reset after now" instead of hardcoded next month
+ */
+async function getCurrentUsageQuota(userId: string) {
+  const supabase = createClient()
+  const now = new Date()
+
+  const { data, error } = await supabase
+    .from('usage_quotas')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('reset_date', now.toISOString())  // reset_date >= now
+    .order('reset_date', { ascending: true })  // earliest first
+    .limit(1)
+    .maybeSingle()
+
+  return { data, error }
+}
+
+/**
  * Check if user has sufficient quota for the requested operation
  */
 export async function checkUserQuota(userId: string, estimatedTokens: number): Promise<{
@@ -19,20 +40,10 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
   planId: string
 }> {
   const supabase = createClient()
-  
-  try {
-    // Get current usage quota - use UTC for consistency with database
-    const nextMonth = new Date()
-    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
-    nextMonth.setUTCDate(1)
-    nextMonth.setUTCHours(0, 0, 0, 0)
 
-    const { data: quota, error } = await supabase
-      .from('usage_quotas')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('reset_date', nextMonth.toISOString())
-      .maybeSingle()
+  try {
+    // FIXED: Use helper function to get current quota (works for all plan types)
+    const { data: quota, error } = await getCurrentUsageQuota(userId)
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
       log.error('Failed to fetch user quota', error)
@@ -61,7 +72,7 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
     }
 
     const { monthly_tokens_used, monthly_tokens_limit, plan_id } = quota
-    const wouldExceedLimit = monthly_tokens_limit !== -1 && 
+    const wouldExceedLimit = monthly_tokens_limit !== -1 &&
                             (monthly_tokens_used + estimatedTokens) > monthly_tokens_limit
 
     return {
@@ -179,21 +190,8 @@ export async function getUserPlan(userId: string): Promise<string> {
   const supabase = createClient()
 
   try {
-    // Get current usage quota to determine plan - use UTC to match database
-    const now = new Date()
-    const nextMonth = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth() + 1,
-      1, // first day of next month
-      0, 0, 0, 0
-    ))
-
-    const { data: quota, error } = await supabase
-      .from('usage_quotas')
-      .select('plan_id')
-      .eq('user_id', userId)
-      .eq('reset_date', nextMonth.toISOString())
-      .maybeSingle()
+    // FIXED: Use helper function to get current quota (works for all plan types)
+    const { data: quota, error } = await getCurrentUsageQuota(userId)
 
     if (error || !quota) {
       log.warn('Failed to get user plan from usage_quotas, defaulting to free', error)
@@ -244,21 +242,8 @@ export async function canUseWebSearch(userId: string): Promise<{
       return { allowed: false, currentUsage: 0, limit: 0 }
     }
 
-    // Get current usage details - use UTC to match database function
-    const now = new Date()
-    const nextMonth = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth() + 1,
-      1, // first day of next month
-      0, 0, 0, 0
-    ))
-
-    const { data: quota } = await supabase
-      .from('usage_quotas')
-      .select('web_searches_used, web_searches_limit')
-      .eq('user_id', userId)
-      .eq('reset_date', nextMonth.toISOString())
-      .maybeSingle()
+    // FIXED: Use helper function to get current quota (works for all plan types)
+    const { data: quota } = await getCurrentUsageQuota(userId)
 
     return {
       allowed: data === true,
@@ -317,18 +302,8 @@ export async function canCreateSession(userId: string): Promise<{
   const supabase = createClient()
 
   try {
-    // Get current usage quota - use UTC for consistency with database
-    const nextMonth = new Date()
-    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
-    nextMonth.setUTCDate(1)
-    nextMonth.setUTCHours(0, 0, 0, 0)
-
-    const { data: quota, error } = await supabase
-      .from('usage_quotas')
-      .select('sessions_this_month, sessions_limit')
-      .eq('user_id', userId)
-      .eq('reset_date', nextMonth.toISOString())
-      .maybeSingle()
+    // FIXED: Use helper function to get current quota (works for all plan types)
+    const { data: quota, error } = await getCurrentUsageQuota(userId)
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
       log.error('Failed to fetch session quota', error)
@@ -387,18 +362,8 @@ export async function incrementSessionCount(userId: string): Promise<boolean> {
   const supabase = createClient()
 
   try {
-    // Get current usage quota - use UTC for consistency with database
-    const nextMonth = new Date()
-    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
-    nextMonth.setUTCDate(1)
-    nextMonth.setUTCHours(0, 0, 0, 0)
-
-    const { data: quota, error: fetchError } = await supabase
-      .from('usage_quotas')
-      .select('sessions_this_month, sessions_limit')
-      .eq('user_id', userId)
-      .eq('reset_date', nextMonth.toISOString())
-      .maybeSingle()
+    // FIXED: Use helper function to get current quota (works for all plan types)
+    const { data: quota, error: fetchError } = await getCurrentUsageQuota(userId)
 
     if (fetchError) {
       log.error('Failed to fetch session quota for increment', fetchError)
@@ -420,7 +385,7 @@ export async function incrementSessionCount(userId: string): Promise<boolean> {
       return false
     }
 
-    // Increment session count
+    // Increment session count (update using the actual reset_date from the quota)
     const { error: updateError } = await supabase
       .from('usage_quotas')
       .update({
@@ -428,7 +393,7 @@ export async function incrementSessionCount(userId: string): Promise<boolean> {
         updated_at: new Date().toISOString()
       })
       .eq('user_id', userId)
-      .eq('reset_date', nextMonth.toISOString())
+      .eq('reset_date', quota.reset_date)  // Use actual reset_date, not calculated
 
     if (updateError) {
       log.error('Failed to increment session count', updateError)
