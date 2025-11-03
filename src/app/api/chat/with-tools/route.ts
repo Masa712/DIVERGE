@@ -19,11 +19,15 @@ import { recordError } from '@/lib/errors/error-monitoring'
 import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
 import { log } from '@/lib/utils/logger'
 import { tavilyClient } from '@/lib/tavily'
-import { 
-  webSearchTool, 
-  parseFunctionArguments, 
-  createToolResultMessage 
+import {
+  webSearchTool,
+  parseFunctionArguments,
+  createToolResultMessage
 } from '@/lib/openrouter/function-calling'
+import {
+  canUseWebSearch,
+  trackWebSearchUsage
+} from '@/lib/billing/usage-tracker'
 
 import { generateUserSystemPrompt } from '@/lib/db/system-prompt-preferences'
 
@@ -208,15 +212,44 @@ async function processAIResponseWithTools(
             if (toolCall.function.name === 'tavily_search_results_json') {
               try {
                 const searchQuery = JSON.parse(toolCall.function.arguments).query
-                log.debug('Executing web search', { 
+
+                // Check web search quota before executing search
+                const quotaCheck = await canUseWebSearch(userId)
+
+                if (!quotaCheck.allowed) {
+                  log.warn('Web search quota exceeded', {
+                    userId,
+                    currentUsage: quotaCheck.currentUsage,
+                    limit: quotaCheck.limit
+                  })
+
+                  toolResults.push({
+                    tool_call_id: toolCall.id,
+                    role: 'tool',
+                    content: JSON.stringify({
+                      error: 'Quota exceeded',
+                      message: `Web search limit reached (${quotaCheck.currentUsage}/${quotaCheck.limit}). Please upgrade your plan to continue using web search.`
+                    })
+                  })
+                  continue // Skip to next tool call
+                }
+
+                log.debug('Executing web search', {
                   query: searchQuery,
                   parentNodeId,
                   hasEnhancedContext: !!enhancedContext,
-                  enhancedContextLength: enhancedContext?.length || 0
+                  enhancedContextLength: enhancedContext?.length || 0,
+                  quotaRemaining: quotaCheck.limit - quotaCheck.currentUsage
                 })
-                
+
                 const searchResults = await tavilyClient.search(searchQuery, { maxResults: 5 })
-                
+
+                // Track web search usage after successful search
+                const tracked = await trackWebSearchUsage(userId)
+                if (!tracked) {
+                  log.warn('Failed to track web search usage', { userId, searchQuery })
+                }
+
                 // Add current date context to help the model understand timing
                 const currentDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
                 const enhancedSearchResults = {
@@ -227,18 +260,19 @@ async function processAIResponseWithTools(
                     note: `These search results are from ${currentDate}. Please use this date as reference for "current" or "recent" events.`
                   }
                 }
-                
+
                 toolResults.push({
                   tool_call_id: toolCall.id,
                   role: 'tool',
                   content: JSON.stringify(enhancedSearchResults)
                 })
-                
-                log.debug('Web search completed successfully', { 
+
+                log.debug('Web search completed successfully', {
                   resultsCount: searchResults?.results?.length || 0,
                   searchDate: currentDate,
                   toolCallId: toolCall.id,
-                  enhancedSearchResultsLength: JSON.stringify(enhancedSearchResults).length
+                  enhancedSearchResultsLength: JSON.stringify(enhancedSearchResults).length,
+                  tracked
                 })
               } catch (searchError) {
                 log.error('Web search failed', searchError)

@@ -35,6 +35,8 @@ export default function ChatSessionPage({ params }: Props) {
   const [insertTextFunction, setInsertTextFunction] = useState<((text: string) => void) | null>(null)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
   const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
+  const [enableWebSearch, setEnableWebSearch] = useState(true) // Web search toggle (default: true)
+  const [webSearchQuota, setWebSearchQuota] = useState<{ allowed: boolean; currentUsage: number; limit: number } | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
@@ -72,6 +74,7 @@ export default function ChatSessionPage({ params }: Props) {
 
       fetchSession()
       fetchUserProfile()
+      fetchWebSearchQuota()
 
       // Show "Session not found" after 10 seconds if still loading
       const timeoutId = setTimeout(() => {
@@ -113,6 +116,40 @@ export default function ChatSessionPage({ params }: Props) {
     } finally {
       setProfileLoading(false)
     }
+  }
+
+  const fetchWebSearchQuota = async () => {
+    if (!user) return
+
+    try {
+      const response = await fetch('/api/billing')
+      if (response.ok) {
+        const { data } = await response.json()
+        const usage = data.usage
+
+        if (usage) {
+          setWebSearchQuota({
+            allowed: usage.web_searches_limit === -1 || usage.web_searches_used < usage.web_searches_limit,
+            currentUsage: usage.web_searches_used || 0,
+            limit: usage.web_searches_limit || 10
+          })
+        }
+      } else {
+        log.warn('Failed to fetch web search quota', { status: response.status })
+      }
+    } catch (error) {
+      log.error('Failed to fetch web search quota', error)
+    }
+  }
+
+  const handleWebSearchToggle = (enabled: boolean) => {
+    // If trying to enable but quota exceeded, show error and don't toggle
+    if (enabled && webSearchQuota && !webSearchQuota.allowed) {
+      showError(`Web search limit reached (${webSearchQuota.currentUsage}/${webSearchQuota.limit}). Please upgrade your plan.`)
+      return
+    }
+
+    setEnableWebSearch(enabled)
   }
 
   const fetchSession = async () => {
@@ -230,21 +267,27 @@ export default function ChatSessionPage({ params }: Props) {
           parentNodeId: parentNode?.id,
           useEnhancedContext: true, // Explicitly enable enhanced context
           reasoning: enableReasoning,
+          enableWebSearch: enableWebSearch,
         }),
       })
 
       if (response.ok) {
         const result = await response.json()
         const newNode = result.data.node
-        
+
         // Immediately add the streaming node to the UI
         setChatNodes(prev => [...prev, newNode])
         setCurrentNodeId(newNode.id)
-        
+
         // Automatically open right sidebar with the new node details
         setSelectedNodeForDetail(newNode)
         setIsSidebarOpen(true)
-        
+
+        // Refresh web search quota if web search was enabled
+        if (enableWebSearch) {
+          fetchWebSearchQuota()
+        }
+
         // Start polling for node updates
         pollNodeStatus(newNode.id)
       } else {
@@ -527,6 +570,9 @@ export default function ChatSessionPage({ params }: Props) {
         modelSelectorDisabled={profileLoading}
         enableReasoning={enableReasoning}
         onReasoningToggle={setEnableReasoning}
+        enableWebSearch={enableWebSearch}
+        onWebSearchToggle={handleWebSearchToggle}
+        webSearchQuotaExceeded={webSearchQuota ? !webSearchQuota.allowed : false}
         currentNodeId={currentNodeId}
         currentNodePrompt={(() => {
           const currentNode = chatNodes.find(n => n.id === currentNodeId)

@@ -3,6 +3,10 @@ import { OpenRouterClient } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
 import { tavilyClient, WebSearchResponse } from '@/lib/tavily'
+import {
+  canUseWebSearch,
+  trackWebSearchUsage
+} from '@/lib/billing/usage-tracker'
 
 // Define tool schemas for function calling
 const AVAILABLE_TOOLS = [
@@ -152,7 +156,35 @@ export async function POST(request: NextRequest) {
               for (const toolCall of toolResponse.choices[0].message.tool_calls) {
                 if (toolCall.function.name === 'web_search') {
                   const args = JSON.parse(toolCall.function.arguments)
-                  
+
+                  // Check web search quota before executing search
+                  const quotaCheck = await canUseWebSearch(user.id)
+
+                  if (!quotaCheck.allowed) {
+                    console.warn('Web search quota exceeded', {
+                      userId: user.id,
+                      currentUsage: quotaCheck.currentUsage,
+                      limit: quotaCheck.limit
+                    })
+
+                    // Send quota exceeded notification to client
+                    const quotaExceededNotification = JSON.stringify({
+                      id: chatNode.id,
+                      type: 'search_quota_exceeded',
+                      message: `Web search limit reached (${quotaCheck.currentUsage}/${quotaCheck.limit}). Please upgrade your plan to continue using web search.`
+                    })
+                    controller.enqueue(encoder.encode(`data: ${quotaExceededNotification}\n\n`))
+
+                    // Add error message to tool results
+                    currentMessages.push(toolResponse.choices[0].message)
+                    currentMessages.push({
+                      role: 'tool',
+                      content: `Web search limit reached (${quotaCheck.currentUsage}/${quotaCheck.limit}). Please upgrade your plan to continue using web search.`,
+                      tool_call_id: toolCall.id
+                    })
+                    continue // Skip to next tool call
+                  }
+
                   // Send search notification to client
                   const searchNotification = JSON.stringify({
                     id: chatNode.id,
@@ -163,10 +195,16 @@ export async function POST(request: NextRequest) {
 
                   // Execute search
                   const searchResult = await executeWebSearch(args.query)
-                  
+
                   if (searchResult) {
+                    // Track web search usage after successful search
+                    const tracked = await trackWebSearchUsage(user.id)
+                    if (!tracked) {
+                      console.warn('Failed to track web search usage', { userId: user.id, query: args.query })
+                    }
+
                     searchResults.push(searchResult)
-                    
+
                     // Send search results to client
                     const searchData = JSON.stringify({
                       id: chatNode.id,
@@ -178,11 +216,11 @@ export async function POST(request: NextRequest) {
                     // Add search results to context
                     const searchContext = `Web search results for "${args.query}":
 ${searchResult.answer ? `Summary: ${searchResult.answer}\n\n` : ''}
-${searchResult.results.map((r, i) => 
+${searchResult.results.map((r, i) =>
   `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.content}\n`
 ).join('\n')}
 `
-                    
+
                     // Add assistant's tool call and search results to messages
                     currentMessages.push(toolResponse.choices[0].message)
                     currentMessages.push({

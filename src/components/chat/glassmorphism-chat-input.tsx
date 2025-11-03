@@ -25,6 +25,7 @@ interface Props {
   // Web search props
   enableWebSearch?: boolean
   onWebSearchToggle?: (enabled: boolean) => void
+  webSearchQuotaExceeded?: boolean
 
   // Reasoning props
   enableReasoning?: boolean
@@ -54,6 +55,7 @@ export function GlassmorphismChatInput({
   modelSelectorDisabled = false,
   enableWebSearch = true,
   onWebSearchToggle,
+  webSearchQuotaExceeded = false,
   enableReasoning = false,
   onReasoningToggle,
   currentNodeId,
@@ -272,12 +274,19 @@ export function GlassmorphismChatInput({
             {/* Web Search Toggle */}
             <button
               onClick={() => onWebSearchToggle?.(!enableWebSearch)}
+              disabled={webSearchQuotaExceeded}
               className={`w-8 h-8 rounded-full transition-all duration-200 flex items-center justify-center ${
-                enableWebSearch 
-                  ? 'bg-blue-100 hover:bg-blue-200 text-blue-600' 
-                  : 'bg-white/10 hover:bg-white/20 text-gray-500'
+                webSearchQuotaExceeded
+                  ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                  : (enableWebSearch
+                      ? 'bg-blue-100 hover:bg-blue-200 text-blue-600'
+                      : 'bg-white/10 hover:bg-white/20 text-gray-500')
               }`}
-              title={enableWebSearch ? 'Web search enabled' : 'Web search disabled'}
+              title={
+                webSearchQuotaExceeded
+                  ? 'Web search quota exceeded - upgrade your plan'
+                  : (enableWebSearch ? 'Web search enabled' : 'Web search disabled')
+              }
             >
               <MagnifyingGlassIcon className="w-4 h-4" />
             </button>
