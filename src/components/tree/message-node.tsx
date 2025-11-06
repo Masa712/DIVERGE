@@ -18,15 +18,30 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
   const getStatusColor = () => {
     switch (node.status) {
       case 'completed':
-        return 'border-green-500 bg-green-50'
+        return {
+          border: 'bg-gradient-to-br from-yellow-400 via-emerald-500 to-sky-500',
+          background: 'bg-gradient-to-br from-green-50 to-emerald-50'
+        }
       case 'streaming':
-        return 'border-blue-500 bg-blue-50 animate-pulse'
+        return {
+          border: 'bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-500 animate-pulse',
+          background: 'bg-gradient-to-br from-sky-50 to-blue-50'
+        }
       case 'failed':
-        return 'border-red-500 bg-red-50'
+        return {
+          border: 'bg-gradient-to-br from-rose-400 via-red-500 to-pink-500',
+          background: 'bg-gradient-to-br from-rose-50 to-red-50'
+        }
       case 'pending':
-        return 'border-yellow-500 bg-yellow-50'
+        return {
+          border: 'bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-500',
+          background: 'bg-gradient-to-br from-yellow-50 to-amber-50'
+        }
       default:
-        return 'border-gray-300 bg-white'
+        return {
+          border: 'bg-gradient-to-br from-gray-400 to-gray-500',
+          background: 'bg-white'
+        }
     }
   }
 
@@ -36,17 +51,26 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
   }
 
 
+  const statusColors = isCurrentNode
+    ? {
+        border: 'bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-500',
+        background: 'bg-gradient-to-br from-sky-50 to-blue-50'
+      }
+    : getStatusColor()
+
   return (
     <div
-      className={`rounded-lg border-2 p-3 shadow-sm transition-transform will-change-transform ${
-        isCurrentNode ? 'border-blue-500 bg-blue-50' : getStatusColor()
-      } ${onNodeClick ? 'cursor-pointer hover:shadow-md hover:scale-[1.02]' : ''}`}
+      className={`rounded-lg p-0.5 shadow-sm transition-transform will-change-transform ${statusColors.border} ${
+        onNodeClick ? 'cursor-pointer hover:shadow-md hover:scale-[1.02]' : ''
+      }`}
       style={{ minWidth: '250px', maxWidth: '350px' }}
       onClick={() => onNodeClick?.(node.id)}
       title="Click to view full details"
     >
-      <Handle type="target" position={Position.Top} />
-      
+      <Handle type="target" position={Position.Top} className="opacity-0" />
+
+      <div className={`rounded-md p-3 h-full ${statusColors.background}`}>
+
       {/* Model Badge and Node ID */}
       <div className="mb-2 flex items-center justify-between">
         <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium">
@@ -129,9 +153,10 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
           {node.status}
         </span>
       </div>
+      </div>
 
 
-      <Handle type="source" position={Position.Bottom} />
+      <Handle type="source" position={Position.Bottom} className="opacity-0" />
     </div>
   )
 })
