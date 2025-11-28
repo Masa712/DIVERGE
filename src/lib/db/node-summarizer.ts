@@ -46,7 +46,7 @@ AIの回答: ${node.response || '(回答なし)'}
     // Use fast, cost-effective model for summarization
     const client = new OpenRouterClient()
     const response = await client.createChatCompletion({
-      model: 'anthropic/claude-3-haiku', // Fast and cheap
+      model: 'openai/gpt-5-nano', // Fast and cheap
       messages: [{ role: 'user', content: promptText }],
       max_tokens: targetTokens,
       temperature: 0.3, // Lower temperature for consistent summaries
