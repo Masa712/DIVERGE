@@ -2,6 +2,8 @@ export type ModelProvider = 'OpenAI' | 'Anthropic' | 'Google' | 'xAI' | 'DeepSee
 
 export type ModelId =
   // OpenAI Latest Models via OpenRouter
+  | 'openai/gpt-5.1'
+  | 'openai/gpt-5-pro'
   | 'openai/gpt-5'
   | 'openai/gpt-5-mini'
   | 'openai/gpt-5-nano'
@@ -10,18 +12,24 @@ export type ModelId =
   | 'openai/gpt-4.1'
   | 'openai/gpt-4o-2024-11-20'
   // Anthropic Latest Models via OpenRouter
+  | 'anthropic/claude-opus-4.5'
+  | 'anthropic/claude-haiku-4.5'
+  | 'anthropic/claude-sonnet-4.5'
   | 'anthropic/claude-opus-4.1'
   | 'anthropic/claude-opus-4'
   | 'anthropic/claude-sonnet-4'
   // Google Latest Models via OpenRouter
+  | 'google/gemini-3-pro-preview'
   | 'google/gemini-2.5-flash'
   | 'google/gemini-2.5-pro'
   // xAI Latest Models via OpenRouter (Note: x-ai with hyphen, not xai)
+  | 'x-ai/grok-4.1-fast:free'
   | 'x-ai/grok-4'
   | 'x-ai/grok-4-fast'
   | 'x-ai/grok-3'
   | 'x-ai/grok-3-mini'
   // DeepSeek Latest Models via OpenRouter
+  | 'deepseek/deepseek-v3.2-exp'
   | 'deepseek/deepseek-chat-v3.1'
 
 // Model configuration with OpenRouter
@@ -38,87 +46,158 @@ export interface ModelConfig {
 
 // Available models via OpenRouter
 export const AVAILABLE_MODELS: ModelConfig[] = [
-  // OpenAI Latest Models
-  { 
-    id: 'openai/gpt-5', 
-    name: 'GPT-5', 
-    provider: 'OpenAI',
-    contextLength: 256000,
-    costPerMillionTokens: { input: 20, output: 60 }
-  },
-  { 
-    id: 'openai/gpt-5-mini', 
-    name: 'GPT-5 Mini', 
-    provider: 'OpenAI',
-    contextLength: 128000,
-    costPerMillionTokens: { input: 8, output: 24 }
-  },
-  { 
-    id: 'openai/gpt-oss-120b', 
-    name: 'GPT-OSS 120B', 
-    provider: 'OpenAI',
-    contextLength: 128000,
-    costPerMillionTokens: { input: 5, output: 15 }
-  },
-  { 
-    id: 'openai/o3', 
-    name: 'O3', 
-    provider: 'OpenAI',
-    contextLength: 128000,
-    costPerMillionTokens: { input: 15, output: 45 }
-  },
-  { 
-    id: 'openai/gpt-4.1', 
-    name: 'GPT-4.1', 
-    provider: 'OpenAI',
-    contextLength: 128000,
-    costPerMillionTokens: { input: 12, output: 36 }
-  },
-  { 
-    id: 'openai/gpt-4o-2024-11-20', 
-    name: 'GPT-4o', 
-    provider: 'OpenAI',
-    contextLength: 128000,
-    costPerMillionTokens: { input: 5, output: 15 }
-  },
   // Anthropic Latest Models
-  { 
-    id: 'anthropic/claude-opus-4.1', 
-    name: 'Claude Opus 4.1', 
+  {
+    id: 'anthropic/claude-opus-4.5',
+    name: 'Claude Opus 4.5',
+    provider: 'Anthropic',
+    contextLength: 200000,
+    costPerMillionTokens: { input: 5, output: 25 }
+  },
+  {
+    id: 'anthropic/claude-haiku-4.5',
+    name: 'Claude Haiku 4.5',
+    provider: 'Anthropic',
+    contextLength: 200000,
+    costPerMillionTokens: { input: 1, output: 5 }
+  },
+  {
+    id: 'anthropic/claude-sonnet-4.5',
+    name: 'Claude Sonnet 4.5',
+    provider: 'Anthropic',
+    contextLength: 1000000,
+    costPerMillionTokens: { input: 3, output: 15 }
+  },
+  {
+    id: 'anthropic/claude-opus-4.1',
+    name: 'Claude Opus 4.1',
     provider: 'Anthropic',
     contextLength: 400000,
     costPerMillionTokens: { input: 25, output: 100 }
   },
-  { 
-    id: 'anthropic/claude-opus-4', 
-    name: 'Claude Opus 4', 
+  {
+    id: 'anthropic/claude-opus-4',
+    name: 'Claude Opus 4',
     provider: 'Anthropic',
     contextLength: 300000,
     costPerMillionTokens: { input: 20, output: 80 }
   },
-  { 
-    id: 'anthropic/claude-sonnet-4', 
-    name: 'Claude Sonnet 4', 
+  {
+    id: 'anthropic/claude-sonnet-4',
+    name: 'Claude Sonnet 4',
     provider: 'Anthropic',
     contextLength: 250000,
     costPerMillionTokens: { input: 8, output: 32 }
   },
-  // Google Latest Models
-  { 
-    id: 'google/gemini-2.5-flash', 
-    name: 'Gemini 2.5 Flash', 
-    provider: 'Google',
-    contextLength: 1000000,
-    costPerMillionTokens: { input: 0.25, output: 0.75 }
+  // DeepSeek Latest Models
+  {
+    id: 'deepseek/deepseek-v3.2-exp',
+    name: 'DeepSeek V3.2',
+    provider: 'DeepSeek',
+    contextLength: 163840,
+    costPerMillionTokens: { input: 0.216, output: 0.328 }
   },
-  { 
-    id: 'google/gemini-2.5-pro', 
-    name: 'Gemini 2.5 Pro', 
+  {
+    id: 'deepseek/deepseek-chat-v3.1',
+    name: 'DeepSeek V3.1',
+    provider: 'DeepSeek',
+    contextLength: 164000,
+    costPerMillionTokens: { input: 0.27, output: 1.10 }
+  },
+  // Google Latest Models
+  {
+    id: 'google/gemini-3-pro-preview',
+    name: 'Gemini 3 Pro',
+    provider: 'Google',
+    contextLength: 1048576,
+    costPerMillionTokens: { input: 2, output: 12 }
+  },
+  {
+    id: 'google/gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
     provider: 'Google',
     contextLength: 2000000,
     costPerMillionTokens: { input: 2.5, output: 7.5 }
   },
+  {
+    id: 'google/gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    provider: 'Google',
+    contextLength: 1000000,
+    costPerMillionTokens: { input: 0.25, output: 0.75 }
+  },
+  // OpenAI Latest Models
+  {
+    id: 'openai/gpt-5.1',
+    name: 'GPT 5.1',
+    provider: 'OpenAI',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 1.25, output: 10 }
+  },
+  {
+    id: 'openai/gpt-5-pro',
+    name: 'GPT 5 Pro',
+    provider: 'OpenAI',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 15, output: 120 }
+  },
+  {
+    id: 'openai/gpt-5',
+    name: 'GPT 5',
+    provider: 'OpenAI',
+    contextLength: 256000,
+    costPerMillionTokens: { input: 20, output: 60 }
+  },
+  {
+    id: 'openai/gpt-5-mini',
+    name: 'GPT-5 Mini',
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 8, output: 24 }
+  },
+  {
+    id: 'openai/gpt-5-nano',
+    name: 'GPT-5 Nano',
+    provider: 'OpenAI',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 0.05, output: 0.4 }
+  },
+  {
+    id: 'openai/gpt-oss-120b',
+    name: 'GPT-OSS 120B',
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 5, output: 15 }
+  },
+  {
+    id: 'openai/o3',
+    name: 'O3',
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 15, output: 45 }
+  },
+  {
+    id: 'openai/gpt-4.1',
+    name: 'GPT-4.1',
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 12, output: 36 }
+  },
+  {
+    id: 'openai/gpt-4o-2024-11-20',
+    name: 'GPT-4o',
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 5, output: 15 }
+  },
   // xAI Latest Models
+  {
+    id: 'x-ai/grok-4.1-fast:free',
+    name: 'Grok 4.1 Fast',
+    provider: 'xAI',
+    contextLength: 2000000,
+    costPerMillionTokens: { input: 0, output: 0 }
+  },
   {
     id: 'x-ai/grok-4',
     name: 'Grok 4',
@@ -146,22 +225,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     provider: 'xAI',
     contextLength: 131000,
     costPerMillionTokens: { input: 0.3, output: 0.5 }
-  },
-  // DeepSeek Latest Models
-  {
-    id: 'deepseek/deepseek-chat-v3.1',
-    name: 'DeepSeek V3.1',
-    provider: 'DeepSeek',
-    contextLength: 164000,
-    costPerMillionTokens: { input: 0.27, output: 1.10 }
-  },
-  // OpenAI GPT-5 Nano
-  {
-    id: 'openai/gpt-5-nano',
-    name: 'GPT-5 Nano',
-    provider: 'OpenAI',
-    contextLength: 400000,
-    costPerMillionTokens: { input: 0.05, output: 0.4 }
   },
 ]
 
