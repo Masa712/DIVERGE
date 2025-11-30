@@ -154,19 +154,6 @@ export function useSessionManagement(currentSessionId?: string, currentSession?:
     }
   }, [])
 
-  // Update session list when current session changes (e.g., title update)
-  useEffect(() => {
-    if (currentSession && currentSessionId) {
-      setSessions(prev => 
-        prev.map(session => 
-          session.id === currentSessionId 
-            ? { ...session, name: currentSession.name }
-            : session
-        )
-      )
-    }
-  }, [currentSession?.name, currentSessionId])
-
   return {
     sessions,
     loading,

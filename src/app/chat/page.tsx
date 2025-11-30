@@ -4,14 +4,13 @@ import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
-import { Session, ChatNode, ModelId, AVAILABLE_MODELS, UserProfile as UserProfileType } from '@/types'
+import { Session, ChatNode, ModelId, AVAILABLE_MODELS } from '@/types'
 import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-input'
 import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
-import { LeftSidebar } from '@/components/layout/left-sidebar'
-import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 import { FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
+import { useChatLayout } from '@/contexts/ChatLayoutContext'
 
 interface UserProfile {
   default_model: ModelId | null
@@ -29,6 +28,7 @@ export default function ChatPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const { showError } = useError()
+  const { isLeftSidebarCollapsed, isLeftSidebarMobileOpen } = useChatLayout()
   
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
@@ -39,9 +39,7 @@ export default function ChatPage() {
   const [currentNodeId, setCurrentNodeId] = useState<string | undefined>(undefined)
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400) // Default 400px (min 400px)
-  const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
   const [enableWebSearch, setEnableWebSearch] = useState(true) // Web search toggle
   const [enableReasoning, setEnableReasoning] = useState(false) // Reasoning toggle
 
@@ -152,24 +150,6 @@ export default function ChatPage() {
       clearTimeout(timeout)
     }
   }, [currentSession?.id, currentSession?.name, chatNodes.length])
-
-  const handleSessionSelect = (sessionId: string) => {
-    // Navigate to the specific session page
-    router.push(`/chat/${sessionId}`)
-  }
-
-  const handleNewSession = () => {
-    // Clear current session data when creating new session
-    setCurrentSession(null)
-    setChatNodes([])
-    setCurrentNodeId(undefined)
-    setSelectedNodeForDetail(null)
-    setIsSidebarOpen(false)
-  }
-
-  const handleLeftSidebarAutoCollapse = (collapsed: boolean) => {
-    setIsLeftSidebarCollapsed(collapsed)
-  }
 
   const handleNodeClick = (nodeId: string) => {
     setCurrentNodeId(nodeId)
@@ -509,8 +489,7 @@ export default function ChatPage() {
   if (loading || !user) {
     log.debug('ChatPage showing loading state')
     return (
-      <div className="relative flex min-h-screen items-center justify-center">
-        <AnimatedBackground opacity={0.4} />
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-lg">Loading...</div>
       </div>
     )
@@ -519,21 +498,7 @@ export default function ChatPage() {
   log.debug('ChatPage rendering main content', { currentSessionId: currentSession?.id })
 
   return (
-    <div className="relative flex h-screen">
-      <AnimatedBackground opacity={0.4} />
-      {/* Left Sidebar */}
-      <LeftSidebar
-        currentSessionId={currentSession?.id}
-        currentSession={currentSession}
-        onSessionSelect={handleSessionSelect}
-        onNewSession={handleNewSession}
-        isCollapsed={isLeftSidebarCollapsed}
-        onToggleCollapse={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
-        onMobileOpenChange={setIsLeftSidebarMobileOpen}
-      />
-
-      {/* Main Content */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 overflow-hidden">
         {currentSession ? (
           <>
             <div className="flex flex-col flex-1 overflow-hidden">
@@ -570,28 +535,11 @@ export default function ChatPage() {
               isRightSidebarOpen={isSidebarOpen}
               isLeftSidebarCollapsed={isLeftSidebarCollapsed}
               rightSidebarWidth={rightSidebarWidth}
-              onLeftSidebarAutoCollapse={handleLeftSidebarAutoCollapse}
               isLeftSidebarMobileOpen={isLeftSidebarMobileOpen}
             />
           </>
         ) : (
-          <div 
-            className="flex-1 flex items-center justify-center"
-            style={{
-              marginLeft: (() => {
-                const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1024
-                const isMobile = screenWidth < 768
-                const isTablet = screenWidth >= 768 && screenWidth < 1024
-                
-                if (isMobile || isTablet) {
-                  return '0px'
-                } else {
-                  return isLeftSidebarCollapsed ? '64px' : '350px'
-                }
-              })(),
-              marginRight: isSidebarOpen ? `${rightSidebarWidth}px` : '0px'
-            }}
-          >
+          <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
                 Welcome to Diverge
@@ -602,19 +550,18 @@ export default function ChatPage() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Node Detail Sidebar */}
-      <NodeDetailSidebar
-        node={selectedNodeForDetail}
-        allNodes={chatNodes}
-        isOpen={isSidebarOpen}
-        onClose={handleCloseSidebar}
-        session={currentSession}
-        onWidthChange={setRightSidebarWidth}
-        onRetryNode={handleRetryNode}
-        onDeleteNode={handleDeleteNode}
-      />
+        {/* Node Detail Sidebar */}
+        <NodeDetailSidebar
+          node={selectedNodeForDetail}
+          allNodes={chatNodes}
+          isOpen={isSidebarOpen}
+          onClose={handleCloseSidebar}
+          session={currentSession}
+          onWidthChange={setRightSidebarWidth}
+          onRetryNode={handleRetryNode}
+          onDeleteNode={handleDeleteNode}
+        />
     </div>
   )
 }

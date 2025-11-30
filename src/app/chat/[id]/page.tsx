@@ -10,9 +10,8 @@ import { GlassmorphismChatInput } from '@/components/chat/glassmorphism-chat-inp
 import { log } from '@/lib/utils/logger'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
-import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 import { FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
-import { LeftSidebar } from '@/components/layout/left-sidebar'
+import { useChatLayout } from '@/contexts/ChatLayoutContext'
 
 interface Props {
   params: { id: string }
@@ -22,6 +21,7 @@ export default function ChatSessionPage({ params }: Props) {
   const { user, loading } = useAuth()
   const router = useRouter()
   const { showError } = useError()
+  const { isLeftSidebarCollapsed, isLeftSidebarMobileOpen } = useChatLayout()
   const [session, setSession] = useState<Session | null>(null)
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
   const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
@@ -39,8 +39,6 @@ export default function ChatSessionPage({ params }: Props) {
   const [webSearchQuota, setWebSearchQuota] = useState<{ allowed: boolean; currentUsage: number; limit: number } | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
-  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
-  const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
 
   // Calculate available models based on user's subscription plan
   const availableModels = useMemo(() => {
@@ -225,16 +223,6 @@ export default function ChatSessionPage({ params }: Props) {
         .then(() => log.debug('Copied to clipboard', { nodeReference }))
         .catch(err => log.error('Failed to copy to clipboard', err))
     }
-  }
-
-  const handleSessionSelect = (sessionId: string) => {
-    // Navigate to the selected session
-    router.push(`/chat/${sessionId}`)
-  }
-
-  const handleNewSession = () => {
-    // Navigate to new chat page
-    router.push('/chat')
   }
 
   const handleSendMessage = async (message: string) => {
@@ -456,10 +444,10 @@ export default function ChatSessionPage({ params }: Props) {
                 log.debug('Node was deleted locally, skipping update', { nodeId })
                 return prev // Don't update if node was deleted
               }
-              
+
               // Update only the specific node that was polled, preserving local metadata
-              return prev.map(node => 
-                node.id === nodeId 
+              return prev.map(node =>
+                node.id === nodeId
                   ? {
                       ...updatedNode,
                       metadata: {
@@ -471,6 +459,16 @@ export default function ChatSessionPage({ params }: Props) {
               )
             })
             log.info('Node polling completed', { nodeId, status: updatedNode.status })
+
+            // If this is the first node (depth 0) and it completed successfully,
+            // the session title may have been generated - trigger session list refresh
+            if (updatedNode.depth === 0 && updatedNode.status === 'completed') {
+              log.debug('First node completed, triggering session sync for title update')
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('session-sync-needed'))
+              }
+            }
+
             return // Stop polling
           }
           
@@ -501,21 +499,7 @@ export default function ChatSessionPage({ params }: Props) {
   }
 
   return (
-    <div className="relative flex h-screen">
-      <AnimatedBackground opacity={0.4} />
-      {/* Left Sidebar */}
-      <LeftSidebar
-        currentSessionId={session?.id}
-        currentSession={session}
-        onSessionSelect={handleSessionSelect}
-        onNewSession={handleNewSession}
-        isCollapsed={isLeftSidebarCollapsed}
-        onToggleCollapse={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
-        onMobileOpenChange={setIsLeftSidebarMobileOpen}
-      />
-
-      {/* Main Content */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 overflow-hidden">
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-hidden">
             {error ? (
@@ -557,44 +541,44 @@ export default function ChatSessionPage({ params }: Props) {
             ) : null}
           </div>
         </div>
-      </div>
 
-      {/* Glassmorphism Chat Input - Floating */}
-      <GlassmorphismChatInput
-        onSendMessage={handleSendMessage}
-        availableNodes={chatNodes}
-        onInputMount={(fn) => setInsertTextFunction(() => fn)}
-        selectedModel={selectedModel}
-        onModelChange={setSelectedModel}
-        availableModels={availableModels}
-        modelSelectorDisabled={profileLoading}
-        enableReasoning={enableReasoning}
-        onReasoningToggle={setEnableReasoning}
-        enableWebSearch={enableWebSearch}
-        onWebSearchToggle={handleWebSearchToggle}
-        webSearchQuotaExceeded={webSearchQuota ? !webSearchQuota.allowed : false}
-        currentNodeId={currentNodeId}
-        currentNodePrompt={(() => {
-          const currentNode = chatNodes.find(n => n.id === currentNodeId)
-          return currentNode ? currentNode.prompt : undefined
-        })()}
-        isRightSidebarOpen={isSidebarOpen}
-        isLeftSidebarCollapsed={isLeftSidebarCollapsed}
-        rightSidebarWidth={rightSidebarWidth}
-        isLeftSidebarMobileOpen={isLeftSidebarMobileOpen}
-      />
+        {session && (
+          <GlassmorphismChatInput
+            onSendMessage={handleSendMessage}
+            availableNodes={chatNodes}
+            onInputMount={(fn) => setInsertTextFunction(() => fn)}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+            availableModels={availableModels}
+            modelSelectorDisabled={profileLoading}
+            enableReasoning={enableReasoning}
+            onReasoningToggle={setEnableReasoning}
+            enableWebSearch={enableWebSearch}
+            onWebSearchToggle={handleWebSearchToggle}
+            webSearchQuotaExceeded={webSearchQuota !== null ? !webSearchQuota.allowed : false}
+            currentNodeId={currentNodeId}
+            currentNodePrompt={(() => {
+              const currentNode = chatNodes.find(n => n.id === currentNodeId)
+              return currentNode?.prompt
+            })()}
+            isRightSidebarOpen={isSidebarOpen}
+            isLeftSidebarCollapsed={isLeftSidebarCollapsed}
+            rightSidebarWidth={rightSidebarWidth}
+            isLeftSidebarMobileOpen={isLeftSidebarMobileOpen}
+          />
+        )}
 
-      {/* Node Detail Sidebar */}
-      <NodeDetailSidebar
-        node={selectedNodeForDetail}
-        allNodes={chatNodes}
-        isOpen={isSidebarOpen}
-        onClose={handleCloseSidebar}
-        session={session}
-        onWidthChange={setRightSidebarWidth}
-        onRetryNode={handleRetryNode}
-        onDeleteNode={handleDeleteNode}
-      />
+        {/* Node Detail Sidebar */}
+        <NodeDetailSidebar
+          node={selectedNodeForDetail}
+          allNodes={chatNodes}
+          isOpen={isSidebarOpen}
+          onClose={handleCloseSidebar}
+          session={session}
+          onWidthChange={setRightSidebarWidth}
+          onRetryNode={handleRetryNode}
+          onDeleteNode={handleDeleteNode}
+        />
     </div>
   )
 }
