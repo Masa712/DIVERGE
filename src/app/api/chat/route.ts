@@ -193,9 +193,11 @@ Based on these search results and the conversation context, please provide an in
     
     // High-performance and reasoning models need more time (2-4 minutes typical)
     const timeoutMs = (() => {
-      if (model === 'x-ai/grok-4') return 150000 // 2.5 minutes for Grok-4
+      if (model.startsWith('x-ai/grok-4')) return 150000 // 2.5 minutes for all Grok-4 variants
+      if (model.startsWith('deepseek/')) return 120000 // 2 minutes for DeepSeek models (large 236B params)
       if (model.startsWith('openai/o1') || model.includes('gpt-5')) return 120000 // 2 minutes for GPT-5 models
       if (model.includes('gemini-2.5-pro') || model.includes('gemini-pro-1.5')) return 120000 // 2 minutes for Gemini Pro models
+      if (model.startsWith('x-ai/grok-3')) return 90000 // 1.5 minutes for Grok-3 variants
       return 30000 // 30 seconds for standard models
     })()
     

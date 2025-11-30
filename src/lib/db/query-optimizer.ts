@@ -407,28 +407,35 @@ export async function loadOptimizedSessions(
         )
       }
       
-      // Enhance sessions with last node creation time
+      // Enhance sessions with last node creation time and actual node count
       if (data && data.length > 0) {
-        const sessionsWithLastNodeTime = await Promise.all(
+        const sessionsWithEnhancedData = await Promise.all(
           data.map(async (session: any) => {
-            // Get the most recent node for this session
-            const { data: lastNode } = await supabase
-              .from('chat_nodes')
-              .select('created_at')
-              .eq('session_id', session.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .single()
-            
+            // Get the most recent node for this session and actual node count in parallel
+            const [lastNodeResult, nodeCountResult] = await Promise.all([
+              supabase
+                .from('chat_nodes')
+                .select('created_at')
+                .eq('session_id', session.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single(),
+              supabase
+                .from('chat_nodes')
+                .select('id', { count: 'exact', head: true })
+                .eq('session_id', session.id)
+            ])
+
             return {
               ...session,
-              last_node_created_at: lastNode?.created_at || session.created_at
+              last_node_created_at: lastNodeResult.data?.created_at || session.created_at,
+              node_count: nodeCountResult.count || 0 // Use actual count instead of stored value
             }
           })
         )
-        
+
         // Sort by last node creation time
-        return sessionsWithLastNodeTime.sort((a, b) => 
+        return sessionsWithEnhancedData.sort((a, b) =>
           new Date(b.last_node_created_at).getTime() - new Date(a.last_node_created_at).getTime()
         )
       }
