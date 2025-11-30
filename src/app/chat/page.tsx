@@ -32,7 +32,7 @@ export default function ChatPage() {
   
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
-  const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
+  const [selectedModel, setSelectedModel] = useState<ModelId>(FREE_PLAN_MODELS[0])
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   
@@ -93,9 +93,27 @@ export default function ChatPage() {
             subscription_plan: data.subscription_plan
           })
 
-          // Set selected model to user's default if available
+          // Set selected model to user's default if available and allowed for their plan
           if (data.default_model) {
-            setSelectedModel(data.default_model)
+            const userPlan = data.subscription_plan || 'free'
+            // For free plan, ensure the default model is in the allowed list
+            if (userPlan === 'free') {
+              if (FREE_PLAN_MODELS.includes(data.default_model as ModelId)) {
+                setSelectedModel(data.default_model)
+              } else {
+                // Fallback to first free plan model if default is not allowed
+                setSelectedModel(FREE_PLAN_MODELS[0])
+                log.warn('User default model not allowed for free plan, using fallback', {
+                  defaultModel: data.default_model,
+                  fallbackModel: FREE_PLAN_MODELS[0]
+                })
+              }
+            } else {
+              setSelectedModel(data.default_model)
+            }
+          } else if (data.subscription_plan === 'free') {
+            // No default model set and user is on free plan, use first free plan model
+            setSelectedModel(FREE_PLAN_MODELS[0])
           }
         }
       } catch (error) {
@@ -107,6 +125,8 @@ export default function ChatPage() {
           default_max_tokens: 8000,
           subscription_plan: 'free'
         })
+        // Use first free plan model as fallback
+        setSelectedModel(FREE_PLAN_MODELS[0])
       } finally {
         setProfileLoading(false)
       }

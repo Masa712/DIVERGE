@@ -19,7 +19,7 @@ import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimiz
 import { log } from '@/lib/utils/logger'
 import { tavilyClient } from '@/lib/tavily'
 import { checkUserQuota, trackTokenUsage, canUseAdvancedModels, estimateTokens, canUseWebSearch, trackWebSearchUsage, getUserPlan } from '@/lib/billing/usage-tracker'
-import { isModelAvailableForFreePlan, isAdvancedModel, getModelAccessErrorMessage } from '@/lib/billing/model-restrictions'
+import { isModelAvailableForFreePlan, isAdvancedModel, getModelAccessErrorMessage, FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
 
 // Background processing function for AI responses
 async function processAIResponseInBackground(
@@ -438,7 +438,16 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
 
   // Free plan: Check if model is in the allowed list
   if (userPlan === 'free') {
-    if (!isModelAvailableForFreePlan(model)) {
+    const isAllowed = isModelAvailableForFreePlan(model)
+    log.debug('Free plan model access check', {
+      model,
+      isAllowed,
+      userPlan,
+      freePlanModels: FREE_PLAN_MODELS
+    })
+
+    if (!isAllowed) {
+      log.warn('Model access denied for free plan', { model, userPlan })
       return NextResponse.json(
         { error: getModelAccessErrorMessage('free', model) },
         { status: 403 }

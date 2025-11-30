@@ -26,8 +26,15 @@ import {
 } from '@/lib/openrouter/function-calling'
 import {
   canUseWebSearch,
-  trackWebSearchUsage
+  trackWebSearchUsage,
+  getUserPlan,
+  canUseAdvancedModels
 } from '@/lib/billing/usage-tracker'
+import {
+  isModelAvailableForFreePlan,
+  isAdvancedModel,
+  getModelAccessErrorMessage
+} from '@/lib/billing/model-restrictions'
 
 import { generateUserSystemPrompt } from '@/lib/db/system-prompt-preferences'
 
@@ -619,10 +626,10 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     }
 
     const body = await request.json()
-    let { 
-      messages, 
-      model, 
-      temperature, 
+    let {
+      messages,
+      model,
+      temperature,
       max_tokens,
       sessionId,
       parentNodeId,
@@ -630,6 +637,38 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       enableWebSearch = true,
       reasoning = false
     } = body
+
+    // Check model access based on user's plan
+    const userPlan = await getUserPlan(user.id)
+
+    // Free plan: Check if model is in the allowed list
+    if (userPlan === 'free') {
+      const isAllowed = isModelAvailableForFreePlan(model)
+      log.debug('Free plan model access check (with-tools)', {
+        model,
+        isAllowed,
+        userPlan
+      })
+
+      if (!isAllowed) {
+        log.warn('Model access denied for free plan (with-tools)', { model, userPlan })
+        return NextResponse.json(
+          { error: getModelAccessErrorMessage('free', model) },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Plus/Pro plans: Check for advanced models
+    if (isAdvancedModel(model)) {
+      const hasAdvancedAccess = await canUseAdvancedModels(user.id)
+      if (!hasAdvancedAccess) {
+        return NextResponse.json(
+          { error: getModelAccessErrorMessage(userPlan, model) },
+          { status: 403 }
+        )
+      }
+    }
 
     // Fetch user profile for defaults if not provided
     if (temperature === undefined || max_tokens === undefined) {

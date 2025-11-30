@@ -24,7 +24,7 @@ export default function ChatSessionPage({ params }: Props) {
   const { isLeftSidebarCollapsed, isLeftSidebarMobileOpen } = useChatLayout()
   const [session, setSession] = useState<Session | null>(null)
   const [chatNodes, setChatNodes] = useState<ChatNode[]>([])
-  const [selectedModel, setSelectedModel] = useState<ModelId>('openai/gpt-4o-2024-11-20')
+  const [selectedModel, setSelectedModel] = useState<ModelId>(FREE_PLAN_MODELS[0])
   const [loadingSession, setLoadingSession] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showNotFound, setShowNotFound] = useState(false)
@@ -102,15 +102,37 @@ export default function ChatSessionPage({ params }: Props) {
 
         setUserProfile(data)
 
-        // Set selected model to user's default if available
+        // Set selected model to user's default if available and allowed for their plan
         if (data.default_model) {
-          setSelectedModel(data.default_model)
+          const userPlan = data.subscription_plan || 'free'
+          // For free plan, ensure the default model is in the allowed list
+          if (userPlan === 'free') {
+            if (FREE_PLAN_MODELS.includes(data.default_model as ModelId)) {
+              setSelectedModel(data.default_model)
+            } else {
+              // Fallback to first free plan model if default is not allowed
+              setSelectedModel(FREE_PLAN_MODELS[0])
+              log.warn('User default model not allowed for free plan, using fallback', {
+                defaultModel: data.default_model,
+                fallbackModel: FREE_PLAN_MODELS[0]
+              })
+            }
+          } else {
+            setSelectedModel(data.default_model)
+          }
+        } else if (data.subscription_plan === 'free') {
+          // No default model set and user is on free plan, use first free plan model
+          setSelectedModel(FREE_PLAN_MODELS[0])
         }
       } else {
         log.warn('Failed to fetch user profile', { status: response.status })
+        // Use free plan fallback on error
+        setSelectedModel(FREE_PLAN_MODELS[0])
       }
     } catch (error) {
       log.error('Failed to fetch user profile', error)
+      // Use free plan fallback on error
+      setSelectedModel(FREE_PLAN_MODELS[0])
     } finally {
       setProfileLoading(false)
     }
