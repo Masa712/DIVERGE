@@ -23,7 +23,7 @@ export type ModelId =
   | 'google/gemini-2.5-flash'
   | 'google/gemini-2.5-pro'
   // xAI Latest Models via OpenRouter (Note: x-ai with hyphen, not xai)
-  | 'x-ai/grok-4.1-fast:free'
+  | 'x-ai/grok-4.1-fast'
   | 'x-ai/grok-4'
   | 'x-ai/grok-4-fast'
   | 'x-ai/grok-3'
@@ -192,11 +192,11 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   },
   // xAI Latest Models
   {
-    id: 'x-ai/grok-4.1-fast:free',
+    id: 'x-ai/grok-4.1-fast',
     name: 'Grok 4.1 Fast',
     provider: 'xAI',
     contextLength: 2000000,
-    costPerMillionTokens: { input: 0, output: 0 }
+    costPerMillionTokens: { input: 0.20, output: 0.50 }
   },
   {
     id: 'x-ai/grok-4',
