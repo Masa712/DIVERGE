@@ -8,6 +8,7 @@ import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
 import { DemoChat } from '@/components/demo/demo-chat'
 import { ParallaxSection } from '@/components/landing/ParallaxSection'
 import { AnimatedHeroNode } from '@/components/landing/AnimatedHeroNode'
+import { FAQAccordion } from '@/components/landing/FAQAccordion'
 import Image from 'next/image'
 
 function LandingPageContent() {
@@ -34,36 +35,36 @@ function LandingPageContent() {
       price: "0",
       period: "month",
       features: [
-        "10,000 tokens per month",
-        "5 sessions per month",
-        "Basic AI models",
+        "500,000 tokens per month",
+        "5 basic AI models",
+        "10 web searches per month",
+        "Unlimited sessions",
         "Community support"
       ]
     },
     {
-      name: "Pro",
-      price: "19",
+      name: "Plus",
+      price: "20",
       period: "month",
       features: [
-        "500,000 tokens per month",
+        "4,000,000 tokens per month",
+        "All AI models with smart allocation",
+        "200 web searches per month",
         "Unlimited sessions",
-        "All AI models",
-        "Priority support",
-        "Advanced features"
+        "Priority support"
       ],
       popular: true
     },
     {
-      name: "Enterprise",
-      price: "99",
+      name: "Pro",
+      price: "50",
       period: "month",
       features: [
-        "Unlimited tokens",
+        "15,000,000 tokens per month",
+        "All AI models unlimited",
+        "Unlimited web searches",
         "Unlimited sessions",
-        "All AI models",
-        "Priority support",
-        "Custom integrations",
-        "Team management"
+        "Priority processing & support"
       ]
     }
   ]
@@ -102,12 +103,16 @@ function LandingPageContent() {
 
             {/* Center: Navigation Links */}
             <div className="flex items-center space-x-8 flex-1 justify-center mx-8">
-              <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              <a
+                href="#about"
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })
+                }}
                 className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
               >
-                Home
-              </button>
+                About
+              </a>
               <a
                 href="#features"
                 onClick={(e) => {
@@ -116,27 +121,27 @@ function LandingPageContent() {
                 }}
                 className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
               >
-                Features
+                Feature
+              </a>
+              <a
+                href="#faq"
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+                className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
+              >
+                FAQ
               </a>
               <a
                 href="#pricing"
                 onClick={(e) => {
                   e.preventDefault()
-                  router.push('/pricing')
+                  document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })
                 }}
                 className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
               >
-                Solution
-              </a>
-              <a
-                href="#contact"
-                onClick={(e) => {
-                  e.preventDefault()
-                  document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })
-                }}
-                className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
-              >
-                Contact
+                Price
               </a>
             </div>
 
@@ -175,8 +180,11 @@ function LandingPageContent() {
         <AnimatedHeroNode />
       </section>
 
+      {/* FAQ Section */}
+      <FAQAccordion />
+
       {/* Pricing Section */}
-      <section className="py-20 relative z-10">
+      <section id="pricing" className="py-20 relative z-10 scroll-mt-24">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">Simple, Transparent Pricing</h2>

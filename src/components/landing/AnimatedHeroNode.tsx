@@ -21,6 +21,7 @@ export function AnimatedHeroNode() {
   const [hoveredFeature, setHoveredFeature] = useState<number | null>(null)
   const [typewriterProgress, setTypewriterProgress] = useState(0)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [grandchildAnimationTime, setGrandchildAnimationTime] = useState(0)
 
   useEffect(() => {
     // Start z-axis animation after component mounts
@@ -42,17 +43,41 @@ export function AnimatedHeroNode() {
   // Handle expansion completion after hover
   useEffect(() => {
     if (hoveredFeature !== null) {
-      setIsExpanded(false)
-      // Wait for expansion animation to complete (500ms)
-      const expandTimer = setTimeout(() => {
-        setIsExpanded(true)
-      }, 500)
-
-      return () => clearTimeout(expandTimer)
+      // Immediately set expanded to true to start position transition
+      setIsExpanded(true)
     } else {
       setIsExpanded(false)
     }
   }, [hoveredFeature])
+
+  // Track grandchild animation progress
+  useEffect(() => {
+    if (hoveredFeature !== null && isExpanded) {
+      const startTime = Date.now()
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime
+        setGrandchildAnimationTime(elapsed)
+        if (elapsed > 1200) { // Total animation time: 500ms wait + 300ms edge + 400ms nodes
+          clearInterval(interval)
+        }
+      }, 16) // 60fps
+      return () => clearInterval(interval)
+    } else {
+      setGrandchildAnimationTime(0)
+    }
+  }, [hoveredFeature, isExpanded])
+
+  // Auto-clear hover state when switching sections
+  useEffect(() => {
+    // Calculate progress values from heroProgress
+    const scrollPercent = heroProgress * 100
+    const currentChildNodesProgress = Math.max(0, Math.min(1, (scrollPercent - 68.4) / 11.4))
+
+    // Clear hover when scrolling back before Core Features display period (before 79.8%)
+    if (scrollPercent < 79.8 && currentChildNodesProgress < 1) {
+      setHoveredFeature(null)
+    }
+  }, [heroProgress])
 
   // Typewriter effect for feature details (starts after expansion)
   useEffect(() => {
@@ -64,6 +89,13 @@ export function AnimatedHeroNode() {
         ["GPT-4, Claude, Gemini, and more", "Switch models without losing context", "Compare responses from different AI models", "Optimize for performance, cost, or quality"],
         ["Enhanced Context: Auto-optimize conversation context", "Web Search: Real-time internet information", "Auto-generated titles for organization", "Reference nodes with @mentions"]
       ]
+
+      // Check if hoveredFeature is within bounds
+      if (hoveredFeature >= featureDetails.length) {
+        setTypewriterProgress(0)
+        return
+      }
+
       const totalChars = featureDetails[hoveredFeature].reduce((sum, detail) => sum + detail.length, 0)
       const duration = 800 // Total duration in ms
       const charsPerMs = totalChars / duration
@@ -83,7 +115,7 @@ export function AnimatedHeroNode() {
     } else {
       setTypewriterProgress(0)
     }
-  }, [hoveredFeature, isExpanded])
+  }, [hoveredFeature, isExpanded, heroProgress])
 
   // Track viewport size for SVG line calculations
   useEffect(() => {
@@ -133,30 +165,34 @@ export function AnimatedHeroNode() {
 
   const scrollPercent = heroProgress * 100
 
-  // Phase 1: Chat input appears (0% - 5%) - moved from Phase 2
-  const inputProgress = Math.max(0, Math.min(1, scrollPercent / 5))
+  // Phase 1: Chat input appears (0% - 7.125%)
+  const inputProgress = Math.max(0, Math.min(1, scrollPercent / 7.125))
 
-  // Phase 2: Question text appears in input (5% - 15%)
-  const questionProgress = Math.max(0, Math.min(1, (scrollPercent - 5) / 10))
+  // Phase 2: Question text appears in input (7.125% - 14.25%)
+  const questionProgress = Math.max(0, Math.min(1, (scrollPercent - 7.125) / 7.125))
 
-  // Phase 3: Left & Right sidebars slide in (15% - 25%)
-  const sidebarProgress = Math.max(0, Math.min(1, (scrollPercent - 15) / 10))
+  // Phase 3: Left & Right sidebars slide in (14.25% - 21.375%)
+  const sidebarProgress = Math.max(0, Math.min(1, (scrollPercent - 14.25) / 7.125))
 
-  // Phase 4: AI response appears (25% - 35%)
-  const responseProgress = Math.max(0, Math.min(1, (scrollPercent - 25) / 10))
+  // Phase 4: AI response appears (21.375% - 28.5%)
+  const responseProgress = Math.max(0, Math.min(1, (scrollPercent - 21.375) / 7.125))
 
-  // Blank period (35% - 40%): AI response complete, no new animations
+  // Blank period (28.5% - 35.625%): AI response complete, no new animations
 
-  // Phase 5: New question appears in input (40% - 50%)
-  const newQuestionProgress = Math.max(0, Math.min(1, (scrollPercent - 40) / 10))
+  // Phase 5: New question appears in input (35.625% - 42.75%)
+  const newQuestionProgress = Math.max(0, Math.min(1, (scrollPercent - 35.625) / 7.125))
 
-  // Phase 6: Sidebars and input fade out (50% - 95%) - 45% duration (3x of 15%)
-  const fadeOutProgress = Math.max(0, Math.min(1, (scrollPercent - 50) / 45))
+  // Phase 6: Sidebars and input fade out (42.75% - 78.375%)
+  const fadeOutProgress = Math.max(0, Math.min(1, (scrollPercent - 42.75) / 35.625))
 
-  // Phase 7a (60% - 70%): Edges extend from parent to children (starts after chat input fades)
-  const edgeProgress = Math.max(0, Math.min(1, (scrollPercent - 60) / 10))
-  // Phase 7b (70% - 80%): Child nodes appear
-  const childNodesProgress = Math.max(0, Math.min(1, (scrollPercent - 70) / 10))
+  // Phase 7a (57% - 68.4%): Edges extend from parent to children
+  const edgeProgress = Math.max(0, Math.min(1, (scrollPercent - 57) / 11.4))
+  // Phase 7b (68.4% - 79.8%): Core Features child nodes appear
+  const childNodesProgress = Math.max(0, Math.min(1, (scrollPercent - 68.4) / 11.4))
+
+  // Phase 7c (79.8% - 100%): Core Features DISPLAY PERIOD
+  // This is when users can interact and hover over Core Features
+  // Core Features remain displayed until the end (no collapse)
 
   // Question and answer text
   const questionText = "What is node-based AI chatting?"
@@ -181,7 +217,7 @@ export function AnimatedHeroNode() {
     ? newQuestionText.substring(0, visibleNewQuestionLength)
     : ''
 
-  // Three child nodes content
+  // Three child nodes content - Core Features
   const childNodes: FeatureNode[] = [
     {
       title: "Node-Based Conversation",
@@ -224,7 +260,7 @@ export function AnimatedHeroNode() {
   // Calculate child node positions (horizontal layout like actual app)
   const nodeWidth = 350 // Match parent node width
   const horizontalSpacing = Math.min(220, Math.max(120, viewportSize.width * 0.12))
-  const verticalSpacing = Math.min(380, Math.max(260, viewportSize.height * 0.45))
+  const verticalSpacing = Math.min(340, Math.max(260, viewportSize.height * 0.45))
   const totalChildrenWidth = nodeWidth * 3 + horizontalSpacing * 2
   const startX = -totalChildrenWidth / 2
 
@@ -233,28 +269,23 @@ export function AnimatedHeroNode() {
 
   const showSidebars = viewportSize.width >= 1200
 
+  // Calculate grandchild animation progress
+  // Wait 500ms for movement to complete, then animate edges (300ms), then nodes (400ms)
+  // Apply ease-out cubic easing for smoother animation
+  const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
+
+  const edgeProgressLinear = Math.max(0, Math.min(1, (grandchildAnimationTime - 500) / 300))
+  const nodeProgressLinear = Math.max(0, Math.min(1, (grandchildAnimationTime - 800) / 400))
+
+  const grandchildEdgeProgress = easeOutCubic(edgeProgressLinear)
+  const grandchildNodeProgress = easeOutCubic(nodeProgressLinear)
+
   // Dynamic parent node content based on animation progress and hover state
   const getParentNodeContent = () => {
-    // If hovering on a child node and Phase 8 is complete
-    if (hoveredFeature !== null && childNodesProgress === 1) {
-      const feature = childNodes[hoveredFeature]
-      // Show feature details only after expansion is complete
-      if (isExpanded) {
-        return {
-          type: 'details' as const,
-          title: feature.title,
-          details: feature.details
-        }
-      } else {
-        // During expansion, show feature title
-        return { type: 'text' as const, value: feature.title, lineBreak: false }
-      }
-    }
-
-    // Otherwise show text based on progress
+    // Show "Core Feature" during Core Features section (after fade out starts)
     if (fadeOutProgress > 0) {
       return { type: 'text' as const, value: 'Core Feature', lineBreak: true }
-    } else if (questionProgress === 1) {
+    } else if (questionProgress === 1 && scrollPercent < 42.75) {
       return { type: 'text' as const, value: 'What is node-based AI chatting?', lineBreak: false }
     } else {
       return { type: 'text' as const, value: 'Diverge', lineBreak: false }
@@ -271,14 +302,23 @@ export function AnimatedHeroNode() {
   }
 
   return (
-    <div ref={heroRef} className="relative z-10" style={{ minHeight: '600vh' }}>
-      {/* Sticky Container - remains fixed in center until all child nodes appear */}
+    <div ref={heroRef} className="relative z-10" style={{ minHeight: '491vh' }}>
+      {/* Anchor for Welcome section - positioned at start */}
+      <div id="welcome" style={{ position: 'absolute', top: '0' }} />
+
+      {/* Anchor for About section - positioned at blank period start where AI response is complete (28.5% of 491vh = ~140vh) */}
+      <div id="about" style={{ position: 'absolute', top: '140vh' }} />
+
+      {/* Anchor for Features section - positioned at Core Features display point */}
+      <div id="features" style={{ position: 'absolute', top: '392vh' }} />
+
+      {/* Sticky Container - remains fixed in center until all sections complete */}
       <div
         className="top-20 h-[calc(100vh-5rem)] flex items-center justify-center"
         style={{
-          position: scrollPercent < 80 ? 'fixed' : 'sticky',
-          left: scrollPercent < 80 ? 0 : undefined,
-          right: scrollPercent < 80 ? 0 : undefined,
+          position: scrollPercent < 100 ? 'fixed' : 'sticky',
+          left: scrollPercent < 100 ? 0 : undefined,
+          right: scrollPercent < 100 ? 0 : undefined,
           transform: `translateY(${centerOffsetY}px)`,
         }}
       >
@@ -290,24 +330,40 @@ export function AnimatedHeroNode() {
           `}
           style={{
             perspective: '1000px',
-            transform: isAnimated
-              ? 'translateZ(0px) scale(1) translateY(-30px)'
-              : 'translateZ(300px) scale(1.5) translateY(-30px)',
-            transition: 'transform 1s ease-out, opacity 1s ease-out',
+            transform: (() => {
+              let baseTransform = isAnimated
+                ? 'translateZ(0px) scale(1) translateY(-30px)'
+                : 'translateZ(300px) scale(1.5) translateY(-30px)'
+
+              // Add offset when hovering for Core Features
+              if (hoveredFeature !== null && childNodesProgress > 0) {
+                const hoveredChildX = startX + nodeWidth / 2 + hoveredFeature * (nodeWidth + horizontalSpacing) + viewportSize.width / 2
+                const hoveredChildY = viewportSize.height / 2 + verticalSpacing - 50
+                const parentCenterX = viewportSize.width / 2
+                const parentCenterY = viewportSize.height / 2 - 30
+                const offsetX = parentCenterX - hoveredChildX
+                const offsetY = parentCenterY - hoveredChildY
+                baseTransform += ` translate(${offsetX}px, ${offsetY}px)`
+              }
+
+              return baseTransform
+            })(),
+            transition: 'transform 0.5s cubic-bezier(0.33, 1, 0.68, 1), opacity 1s ease-out',
             zIndex: 20,
+            opacity: isAnimated ? 1 : 0,
           }}
         >
           {/* Chat Node Style - Gradient Border */}
           <div
             className="rounded-lg p-0.5 shadow-lg bg-gradient-to-br from-yellow-400 via-emerald-500 to-sky-500 transition-all duration-500"
             style={{
-              width: hoveredFeature !== null ? '525px' : '350px', // 1.5x when hovered
+              width: '350px',
             }}
           >
             {/* Inner Content with Background */}
             <div
               className="rounded-md p-8 bg-gradient-to-br from-green-50 to-emerald-50 overflow-hidden transition-all duration-500"
-              style={{ height: hoveredFeature !== null ? '312px' : '240px' }} // 1.3x when hovered
+              style={{ height: '240px' }}
             >
               {/* Model Badge */}
               <div className="mb-4 flex items-center justify-between">
@@ -321,7 +377,7 @@ export function AnimatedHeroNode() {
                       if (content.value === 'What is node-based AI chatting?') {
                         return '#about'
                       } else if (content.value === 'Core Feature') {
-                        return '#feature'
+                        return '#features'
                       }
                     }
                     return '#welcome'
@@ -338,61 +394,29 @@ export function AnimatedHeroNode() {
                   ease-out
                   py-4
                   flex
-                  ${(() => {
-                    const content = getParentNodeContent()
-                    return content.type === 'details' ? 'items-start' : 'items-center'
-                  })()}
+                  items-center
                   justify-center
                   ${showText ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}
                 `}
-                style={{ height: hoveredFeature !== null ? '180px' : '120px', overflow: 'auto' }}
+                style={{ height: '120px', overflow: 'auto' }}
               >
                 {(() => {
                   const content = getParentNodeContent()
-                  if (content.type === 'details') {
-                    // Calculate typewriter effect
-                    let charCount = 0
-                    const visibleDetails = content.details.map(detail => {
-                      const detailStart = charCount
-                      charCount += detail.length
-                      const visibleLength = Math.max(0, Math.min(detail.length, typewriterProgress - detailStart))
-                      return detail.substring(0, visibleLength)
-                    })
-
-                    return (
-                      <div className="w-full px-2">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-3">{content.title}</h2>
-                        <ul className="text-left text-sm space-y-2">
-                          {visibleDetails.map((detail, idx) => (
-                            detail.length > 0 && (
-                              <li key={idx} className="text-gray-700 leading-relaxed">
-                                • {detail}
-                                {idx === visibleDetails.findIndex(d => d.length < content.details[idx].length) && (
-                                  <span className="animate-pulse">|</span>
-                                )}
-                              </li>
-                            )
-                          ))}
-                        </ul>
-                      </div>
-                    )
-                  } else {
-                    // Handle line break for "Core Feature"
-                    const textParts = content.lineBreak ? content.value.split(' ') : [content.value]
-                    return (
-                      <h1 className={`${getParentNodeFontSize(content.value)} text-gray-800 font-medium`}>
-                        {content.lineBreak ? (
-                          <>
-                            {textParts[0]}
-                            <br />
-                            {textParts.slice(1).join(' ')}
-                          </>
-                        ) : (
-                          content.value
-                        )}
-                      </h1>
-                    )
-                  }
+                  // Handle line break for "Core Feature" and "Use Cases"
+                  const textParts = content.lineBreak ? content.value.split(' ') : [content.value]
+                  return (
+                    <h1 className={`${getParentNodeFontSize(content.value)} text-gray-800 font-medium`}>
+                      {content.lineBreak ? (
+                        <>
+                          {textParts[0]}
+                          <br />
+                          {textParts.slice(1).join(' ')}
+                        </>
+                      ) : (
+                        content.value
+                      )}
+                    </h1>
+                  )
                 })()}
               </div>
 
@@ -401,10 +425,11 @@ export function AnimatedHeroNode() {
         </div>
 
         {/* Phase 2-3: Chat Input */}
+        {fadeOutProgress < 1 && (
         <div
           className="fixed bottom-8 left-1/2 w-full max-w-2xl px-6"
           style={{
-            opacity: inputProgress,
+            opacity: inputProgress * (1 - fadeOutProgress),
             transform: `translateX(-50%) translateY(${(1 - inputProgress) * 30 + fadeOutProgress * 150}vh)`,
             pointerEvents: inputProgress > 0 && fadeOutProgress < 1 ? 'auto' : 'none',
           }}
@@ -471,6 +496,7 @@ export function AnimatedHeroNode() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Phase 4-5: Left Sidebar */}
         {showSidebars && (
@@ -660,16 +686,33 @@ export function AnimatedHeroNode() {
         </div>
         )}
 
-        {/* Phase 8: Connection Lines (SVG) */}
-        {edgeProgress > 0 && (
-          <svg
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              width: '100%',
-              height: '100%',
-            }}
-          >
-            {childNodes.map((_, index) => {
+        {/* Phase 8: Connection Lines (SVG) - Core Features */}
+        {edgeProgress > 0 && (() => {
+          // Calculate offset when hovering: same as child nodes
+          let offsetX = 0
+          let offsetY = 0
+
+          if (hoveredFeature !== null) {
+            const hoveredChildX = startX + nodeWidth / 2 + hoveredFeature * (nodeWidth + horizontalSpacing) + viewportSize.width / 2
+            const hoveredChildY = viewportSize.height / 2 + verticalSpacing - 50
+            const parentCenterX = viewportSize.width / 2
+            const parentCenterY = viewportSize.height / 2 - 30
+
+            offsetX = parentCenterX - hoveredChildX
+            offsetY = parentCenterY - hoveredChildY
+          }
+
+          return (
+            <svg
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                width: '100%',
+                height: '100%',
+                transform: `translate(${offsetX}px, ${offsetY}px)`,
+                transition: 'transform 0.5s cubic-bezier(0.33, 1, 0.68, 1)',
+              }}
+            >
+              {childNodes.map((_, index) => {
               // Parent node dimensions and position
               const parentNodeHeight = 164 // Adjusted to match actual visible height (p-8 = 32px * 2 = 64px + content)
               const parentCenterX = viewportSize.width / 2
@@ -698,12 +741,13 @@ export function AnimatedHeroNode() {
               const verticalSegment2 = Math.abs(childTopY - midY)
               const totalLength = verticalSegment1 + horizontalSegment + verticalSegment2
 
-              // Animate path drawing (no stagger - all edges appear simultaneously)
-              const dashOffset = totalLength * (1 - edgeProgress)
+              // Animate path drawing (no collapsing)
+              const expandOffset = totalLength * (1 - edgeProgress)
+              const dashOffset = expandOffset
 
               return (
                 <path
-                  key={`line-${index}`}
+                  key={`core-line-${index}`}
                   d={path}
                   stroke="#3b82f6"
                   strokeWidth="2"
@@ -712,45 +756,103 @@ export function AnimatedHeroNode() {
                   strokeDashoffset={dashOffset}
                 />
               )
-            })}
-          </svg>
-        )}
+              })}
+            </svg>
+          )
+        })()}
 
-        {/* Phase 8b: Three Child Nodes (appear after edges complete) */}
-        {childNodesProgress > 0 && childNodes.map((child, index) => {
-          // Calculate position using the same logic as edges for perfect alignment
-          const staggerOffset = index * 0.12
-          const effectiveProgress = Math.max(0, Math.min(1, (childNodesProgress - staggerOffset) / (1 - staggerOffset)))
+        {/* Hover Area for Core Features - covers child node and grandchildren when expanded */}
+        {hoveredFeature !== null && childNodesProgress === 1 && grandchildNodeProgress > 0 && (() => {
+          const parentCenterX = viewportSize.width / 2
+          const parentCenterY = viewportSize.height / 2 - 30
+          const grandchildY = parentCenterY + verticalSpacing * 0.7
 
-          // Match edge calculation exactly
-          const childX = startX + nodeWidth / 2 + index * (nodeWidth + horizontalSpacing) + viewportSize.width / 2
-          const childY = viewportSize.height / 2 + verticalSpacing - 50 // Move 50px closer to parent
+          // Create a bounding box that covers the moved child node and all grandchildren
+          const grandchildNodeWidth = 300
+          const grandchildSpacing = 80
+          const totalGrandchildWidth = grandchildNodeWidth * 4 + grandchildSpacing * 3
 
-          // Add upward floating animation (20px from bottom)
-          const floatOffset = (1 - effectiveProgress) * 20
+          const areaLeft = parentCenterX - Math.max(nodeWidth / 2, totalGrandchildWidth / 2) - 50
+          const areaTop = parentCenterY - 120 - 50
+          const areaWidth = Math.max(nodeWidth, totalGrandchildWidth) + 100
+          const areaHeight = grandchildY - parentCenterY + 100 + 100
 
           return (
             <div
-              key={index}
+              key="core-hover-area"
               className="absolute"
               style={{
-                opacity: effectiveProgress,
-                left: `${childX}px`,
-                top: `${childY + floatOffset}px`,
-                transform: 'translate(-50%, -50%)', // Center the node on the calculated position
-                pointerEvents: childNodesProgress === 1 ? 'auto' : 'none', // Enable hover only when fully visible
-              }}
-              onMouseEnter={() => {
-                if (childNodesProgress === 1) {
-                  setHoveredFeature(index)
-                }
+                left: `${areaLeft}px`,
+                top: `${areaTop}px`,
+                width: `${areaWidth}px`,
+                height: `${areaHeight}px`,
+                zIndex: 25,
+                pointerEvents: 'auto',
               }}
               onMouseLeave={() => {
                 if (childNodesProgress === 1) {
                   setHoveredFeature(null)
                 }
               }}
-            >
+            />
+          )
+        })()}
+
+        {/* Phase 8b: Three Child Nodes - Core Features */}
+        {childNodesProgress > 0 && (() => {
+          // Calculate offset when hovering: move all nodes together
+          let offsetX = 0
+          let offsetY = 0
+
+          if (hoveredFeature !== null) {
+            const hoveredChildX = startX + nodeWidth / 2 + hoveredFeature * (nodeWidth + horizontalSpacing) + viewportSize.width / 2
+            const hoveredChildY = viewportSize.height / 2 + verticalSpacing - 50
+            const parentCenterX = viewportSize.width / 2
+            const parentCenterY = viewportSize.height / 2 - 30
+
+            offsetX = parentCenterX - hoveredChildX
+            offsetY = parentCenterY - hoveredChildY
+          }
+
+          return childNodes.map((child, index) => {
+            // Calculate position using the same logic as edges for perfect alignment
+            const staggerOffset = index * 0.12
+            const effectiveProgress = Math.max(0, Math.min(1, (childNodesProgress - staggerOffset) / (1 - staggerOffset)))
+
+            // Match edge calculation exactly
+            const childX = startX + nodeWidth / 2 + index * (nodeWidth + horizontalSpacing) + viewportSize.width / 2
+            const childY = viewportSize.height / 2 + verticalSpacing - 50 // Move 50px closer to parent
+
+            // Add upward floating animation (20px from bottom)
+            const floatOffset = (1 - effectiveProgress) * 20
+
+            // Node opacity (no fade out)
+            const nodeOpacity = effectiveProgress
+
+            // When hovering: move all nodes together
+            const isHovered = hoveredFeature === index
+            const targetX = childX + offsetX
+            const targetY = childY + floatOffset + offsetY
+
+            return (
+              <div
+                key={`core-${index}`}
+                className="absolute"
+                style={{
+                  opacity: nodeOpacity,
+                  left: `${targetX}px`,
+                  top: `${targetY}px`,
+                  transform: 'translate(-50%, -50%)', // Center the node on the calculated position
+                  pointerEvents: childNodesProgress === 1 ? 'auto' : 'none', // Enable hover only when fully visible
+                  transition: 'all 0.5s cubic-bezier(0.33, 1, 0.68, 1)',
+                  zIndex: isHovered && hoveredFeature !== null ? 30 : 10,
+                }}
+                onMouseEnter={() => {
+                  if (childNodesProgress === 1) {
+                    setHoveredFeature(index)
+                  }
+                }}
+              >
               <div
                 className={`rounded-lg p-0.5 shadow-lg bg-gradient-to-br from-blue-400 to-purple-500 transition-transform duration-300 ${
                   hoveredFeature === index ? 'scale-105' : 'scale-100'
@@ -785,7 +887,122 @@ export function AnimatedHeroNode() {
               </div>
             </div>
           )
-        })}
+        })
+        })()}
+
+        {/* Grandchild Nodes Edges - Core Features Details (shown on hover) */}
+        {hoveredFeature !== null && childNodesProgress === 1 && grandchildEdgeProgress > 0 && (
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              width: '100%',
+              height: '100%',
+            }}
+          >
+            {(() => {
+              const feature = childNodes[hoveredFeature]
+              // Hovered child node is now at parent position
+              const parentCenterX = viewportSize.width / 2
+              const parentCenterY = viewportSize.height / 2 - 30
+              const childNodeHeight = 220
+              const parentChildBottomY = parentCenterY + (childNodeHeight / 2)
+
+              // Grandchild nodes layout (horizontal, 4 nodes)
+              const grandchildNodeWidth = 300
+              const grandchildSpacing = 80
+              const totalGrandchildWidth = grandchildNodeWidth * 4 + grandchildSpacing * 3
+              const grandchildStartX = parentCenterX - totalGrandchildWidth / 2
+              const grandchildY = parentCenterY + verticalSpacing * 0.7
+
+              return feature.details.map((_, detailIndex) => {
+                const grandchildX = grandchildStartX + grandchildNodeWidth / 2 + detailIndex * (grandchildNodeWidth + grandchildSpacing)
+                const grandchildNodeHeight = 80
+                const grandchildTopY = grandchildY - (grandchildNodeHeight / 2)
+
+                const midY = (parentChildBottomY + grandchildTopY) / 2
+                const path = `M ${parentCenterX} ${parentChildBottomY} L ${parentCenterX} ${midY} L ${grandchildX} ${midY} L ${grandchildX} ${grandchildTopY}`
+
+                // Calculate path length for animation
+                const verticalSegment1 = Math.abs(midY - parentChildBottomY)
+                const horizontalSegment = Math.abs(grandchildX - parentCenterX)
+                const verticalSegment2 = Math.abs(grandchildTopY - midY)
+                const totalLength = verticalSegment1 + horizontalSegment + verticalSegment2
+
+                // Animate path drawing
+                const dashOffset = totalLength * (1 - grandchildEdgeProgress)
+
+                return (
+                  <path
+                    key={`grandchild-edge-${detailIndex}`}
+                    d={path}
+                    stroke="#10b981"
+                    strokeWidth="1.5"
+                    fill="none"
+                    strokeDasharray={totalLength}
+                    strokeDashoffset={dashOffset}
+                    opacity="0.7"
+                  />
+                )
+              })
+            })()}
+          </svg>
+        )}
+
+        {/* Grandchild Nodes - Core Features Details (shown on hover) */}
+        {hoveredFeature !== null && childNodesProgress === 1 && grandchildNodeProgress > 0 && (() => {
+          const feature = childNodes[hoveredFeature]
+          // Hovered child node is now at parent position
+          const parentCenterX = viewportSize.width / 2
+          const parentCenterY = viewportSize.height / 2 - 30
+
+          // Grandchild nodes layout
+          const grandchildNodeWidth = 300
+          const grandchildSpacing = 80
+          const totalGrandchildWidth = grandchildNodeWidth * 4 + grandchildSpacing * 3
+          const grandchildStartX = parentCenterX - totalGrandchildWidth / 2
+          const grandchildY = parentCenterY + verticalSpacing * 0.7
+
+          return feature.details.map((detail, detailIndex) => {
+            const grandchildX = grandchildStartX + grandchildNodeWidth / 2 + detailIndex * (grandchildNodeWidth + grandchildSpacing)
+
+            return (
+              <div
+                key={`grandchild-${detailIndex}`}
+                className="absolute"
+                style={{
+                  left: `${grandchildX}px`,
+                  top: `${grandchildY}px`,
+                  transform: 'translate(-50%, -50%)',
+                  opacity: grandchildNodeProgress,
+                  transition: 'opacity 0.4s ease-out',
+                }}
+              >
+                <div
+                  className="rounded-lg p-0.5 shadow-md bg-gradient-to-br from-emerald-400 to-green-500"
+                  style={{
+                    minWidth: `${grandchildNodeWidth}px`,
+                    maxWidth: `${grandchildNodeWidth}px`,
+                  }}
+                >
+                  <div className="rounded-md p-3 bg-gradient-to-br from-white to-green-50">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                        detail
+                      </span>
+                      <span className="text-xs font-mono bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
+                        #{detailIndex + 1}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-700 leading-relaxed">
+                      {detail}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        })()}
+
       </div>
     </div>
   )

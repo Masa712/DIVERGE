@@ -12,7 +12,6 @@ export interface SubscriptionPlan {
     advancedModels: boolean
     prioritySupport: boolean
     webSearchLimit: number // -1 for unlimited, 0 for none
-    historyDays: number // -1 for unlimited
     customPromptsLimit: number
     exportFeatures: boolean
     apiAccess: boolean
@@ -61,8 +60,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       '500,000 tokens per month',
       '5 basic AI models (DeepSeek V3.1, Gemini Flash, GPT-5 Nano, etc.)',
       '10 web searches per month',
-      'Unlimited sessions saved',
-      '7 days history',
+      'Unlimited sessions',
       'Community support'
     ],
     limits: {
@@ -71,7 +69,6 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       advancedModels: false,
       prioritySupport: false,
       webSearchLimit: 10,
-      historyDays: 7,
       customPromptsLimit: 0,
       exportFeatures: false,
       apiAccess: false,
@@ -91,9 +88,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'All AI models with smart allocation',
       '200 web searches per month',
       'Unlimited sessions',
-      '90 days history',
       '1 custom system prompt',
-      'Markdown export',
       'Smart mode (cost optimization)',
       'Priority support'
     ],
@@ -103,9 +98,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       advancedModels: true,
       prioritySupport: true,
       webSearchLimit: 200,
-      historyDays: 90,
       customPromptsLimit: 1,
-      exportFeatures: true,
+      exportFeatures: false,
       apiAccess: false,
       priorityProcessing: false
     },
@@ -124,10 +118,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'All AI models unlimited',
       'Unlimited web searches',
       'Unlimited sessions',
-      'Unlimited history',
       '5 custom system prompts',
-      'All export formats (MD/JSON/HTML/PDF)',
-      '10,000 API calls per month',
       'Priority processing',
       'Session sharing with edit access',
       'Priority support'
@@ -138,10 +129,9 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       advancedModels: true,
       prioritySupport: true,
       webSearchLimit: -1, // unlimited
-      historyDays: -1, // unlimited
       customPromptsLimit: 5,
-      exportFeatures: true,
-      apiAccess: true,
+      exportFeatures: false,
+      apiAccess: false,
       priorityProcessing: true
     },
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY || 'price_pro_monthly'
