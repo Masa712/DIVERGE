@@ -15,10 +15,10 @@ export const FREE_PLAN_MODELS: ModelId[] = [
   'deepseek/deepseek-chat-v3.1', // DeepSeek V3.1 (164K context, $0.27 input)
   'google/gemini-2.5-flash', // Gemini Flash (1M context, $0.25 input)
   'openai/gpt-5-nano', // GPT-5 Nano (400K context, $0.05 input)
+  'x-ai/grok-4.1-fast', // Grok 4.1 Fast (2M context, $0.20 input, $0.50 output)
 
   // Low-cost models ($1-10/M tokens)
   'openai/gpt-oss-120b', // GPT OSS 120B (128K context, $5 input)
-  'x-ai/grok-4.1-fast', // Grok 4.1 Fast (2M context, $0.20 input)
 
   // Medium-cost with large context
   'x-ai/grok-4-fast', // Grok 4 Fast (2M context, $10 input)
