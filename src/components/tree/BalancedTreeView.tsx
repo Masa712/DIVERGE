@@ -341,34 +341,47 @@ function CompactTreeViewInner({
         })
       })
 
-      // Create edges
-      const reactFlowEdges: Edge[] = []
+      // Create edges - separate into normal and highlighted to ensure proper z-index
+      const normalEdges: Edge[] = []
+      const highlightedEdges: Edge[] = []
+
       chatNodes.forEach(node => {
         if (node.parentId) {
           const parentPos = positions.get(node.parentId)
           const childPos = positions.get(node.id)
-          
+
           if (parentPos && childPos) {
-            reactFlowEdges.push({
+            const isHighlighted = isCurrentPath(node.id, currentNodeId, chatNodes)
+            const edge: Edge = {
               id: `${node.parentId}-${node.id}`,
               source: node.parentId,
               target: node.id,
               type: 'smoothstep',
               animated: false,
-              style: { 
-                stroke: isCurrentPath(node.id, currentNodeId, chatNodes) ? '#3b82f6' : '#e5e7eb',
-                strokeWidth: isCurrentPath(node.id, currentNodeId, chatNodes) ? 3 : 2,
+              style: {
+                stroke: isHighlighted ? '#3b82f6' : '#e5e7eb',
+                strokeWidth: isHighlighted ? 3 : 2,
               },
               markerEnd: {
                 type: MarkerType.ArrowClosed,
                 width: 20,
                 height: 20,
-                color: isCurrentPath(node.id, currentNodeId, chatNodes) ? '#3b82f6' : '#e5e7eb',
+                color: isHighlighted ? '#3b82f6' : '#e5e7eb',
               },
-            })
+            }
+
+            // Add to appropriate array - highlighted edges go last for proper z-index
+            if (isHighlighted) {
+              highlightedEdges.push(edge)
+            } else {
+              normalEdges.push(edge)
+            }
           }
         }
       })
+
+      // Combine edges: normal edges first, then highlighted edges (so highlighted appear on top)
+      const reactFlowEdges: Edge[] = [...normalEdges, ...highlightedEdges]
 
       setNodes(reactFlowNodes)
       setEdges(reactFlowEdges)
