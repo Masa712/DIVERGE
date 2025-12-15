@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw } from 'lucide-react'
 import { MagnifyingGlassIcon, BoltIcon } from '@heroicons/react/24/outline'
 import { ChatNode } from '@/types'
@@ -35,6 +35,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   const { user } = useAuth()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [nodeToDelete, setNodeToDelete] = useState<string | null>(null)
+  const previousNodeIdRef = useRef<string | null>(null)
   
   // Use custom hooks for better separation of concerns
   const { currentDisplayNode, nodeChain, currentNodeIndex, canNavigate, navigate } = useNodeChain(node, allNodes)
@@ -74,14 +75,12 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   })
 
   // Reset comment when node changes
-  const resetComment = useCallback(() => {
-    setComment('')
-  }, [])
-  
-  // Reset comment when switching nodes
-  if (currentDisplayNode && comment) {
-    resetComment()
-  }
+  useEffect(() => {
+    if (currentDisplayNode?.id !== previousNodeIdRef.current) {
+      setComment('')
+      previousNodeIdRef.current = currentDisplayNode?.id || null
+    }
+  }, [currentDisplayNode?.id])
 
   // Notify parent of width changes
   useEffect(() => {
@@ -439,7 +438,10 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                           <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center">
                             <User className="w-3 h-3 text-blue-600" />
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <span className="text-xs font-medium text-gray-700">
+                            {userProfile?.display_name || user?.email || 'User'}
+                          </span>
+                          <div className="flex items-center gap-1 text-xs text-gray-500">
                             <Clock className="w-3 h-3" />
                             <span>{new Date(comment.created_at).toLocaleString('ja-JP', {
                               month: 'short',
