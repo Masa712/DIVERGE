@@ -274,9 +274,9 @@ function LandingPageContent() {
               <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Diverge</span>
             </div>
             <div className="flex space-x-6 text-gray-600">
-              <a href="#" className="hover:text-gray-900 transition-colors font-medium">Privacy Policy</a>
-              <a href="#" className="hover:text-gray-900 transition-colors font-medium">Terms of Service</a>
-              <a href="#" className="hover:text-gray-900 transition-colors font-medium">Support</a>
+              <a href="/privacy" className="hover:text-gray-900 transition-colors font-medium">Privacy Policy</a>
+              <a href="/terms" className="hover:text-gray-900 transition-colors font-medium">Terms of Service</a>
+              <a href="https://x.com/diverge_ai" target="_blank" rel="noopener noreferrer" className="hover:text-gray-900 transition-colors font-medium">Support</a>
             </div>
           </div>
         </div>

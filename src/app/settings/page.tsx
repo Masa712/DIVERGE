@@ -102,7 +102,7 @@ function BillingFeedback({
   setActiveTab,
   setMessage
 }: {
-  setActiveTab: (tab: 'profile' | 'password' | 'model' | 'prompt') => void
+  setActiveTab: (tab: 'profile' | 'password' | 'model' | 'prompt' | 'legal') => void
   setMessage: (msg: { type: 'success' | 'error', text: string } | null) => void
 }) {
   const router = useRouter()
@@ -158,7 +158,7 @@ function SettingsContent() {
   })
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'model' | 'prompt'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'model' | 'prompt' | 'legal'>('profile')
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [accountDeleted, setAccountDeleted] = useState(false)
@@ -518,10 +518,20 @@ function SettingsContent() {
             <ChatBubbleLeftRightIcon className="w-5 h-5 inline mr-2" />
             AI Behavior
           </button>
+          <button
+            onClick={() => setActiveTab('legal')}
+            className={`px-4 py-2 rounded-lg transition-all ${
+              activeTab === 'legal'
+                ? 'bg-white/80 shadow-lg border border-white/20'
+                : 'bg-white/40 hover:bg-white/60 border border-white/10'
+            }`}
+          >
+            Legal & Support
+          </button>
         </div>
 
         {/* Tab Content */}
-        <div className="glass-test glass-blur border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-2xl p-8">
+        <div>
           {/* Profile Tab */}
           {activeTab === 'profile' && (
             <div className="space-y-6">
@@ -875,6 +885,69 @@ function SettingsContent() {
           {activeTab === 'prompt' && (
             <div>
               <SystemPromptSettings />
+            </div>
+          )}
+
+          {/* Legal & Support Tab */}
+          {activeTab === 'legal' && (
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Legal & Support</h2>
+
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Privacy & Terms</h3>
+                  <div className="space-y-3">
+                    <a
+                      href="/privacy"
+                      className="block p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Privacy Policy</h4>
+                          <p className="text-sm text-gray-600 mt-1">Learn how we collect, use, and protect your data</p>
+                        </div>
+                        <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </a>
+                    <a
+                      href="/terms"
+                      className="block p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Terms of Service</h4>
+                          <p className="text-sm text-gray-600 mt-1">Review our terms and conditions for using Diverge</p>
+                        </div>
+                        <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </a>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Get Support</h3>
+                  <a
+                    href="https://x.com/diverge_ai"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 transition-all group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Contact us on X (Twitter)</h4>
+                        <p className="text-sm text-gray-600 mt-1">Follow @diverge_ai for updates and support</p>
+                      </div>
+                      <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </div>
+                  </a>
+                </div>
+              </div>
             </div>
           )}
         </div>
