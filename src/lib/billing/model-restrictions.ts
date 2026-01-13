@@ -5,14 +5,15 @@
 import { ModelId } from '@/types'
 
 /**
- * Free plan: 7 basic ultra-low-cost models
+ * Free plan: 8 basic ultra-low-cost models
  * Based on the revenue plan specification and available ModelId types
  * Focused on the most cost-effective models for free tier
  */
 export const FREE_PLAN_MODELS: ModelId[] = [
   // Ultra low-cost models (< $1/M tokens)
-  'deepseek/deepseek-v3.2-exp', // DeepSeek V3.2 (163K context, $0.216 input)
+  'deepseek/deepseek-v3.2', // DeepSeek V3.2 (163K context, $0.25 input)
   'deepseek/deepseek-chat-v3.1', // DeepSeek V3.1 (164K context, $0.27 input)
+  'google/gemini-3-flash-preview', // Gemini 3 Flash (1M context, $0.50 input)
   'google/gemini-2.5-flash', // Gemini Flash (1M context, $0.25 input)
   'openai/gpt-5-nano', // GPT-5 Nano (400K context, $0.05 input)
   'x-ai/grok-4.1-fast', // Grok 4.1 Fast (2M context, $0.20 input, $0.50 output)
@@ -29,6 +30,7 @@ export const FREE_PLAN_MODELS: ModelId[] = [
  * These are the premium models with higher costs
  */
 export const ADVANCED_MODELS: ModelId[] = [
+  'openai/gpt-5.2-pro', // GPT-5.2 Pro
   'openai/gpt-5', // GPT-5
   'openai/gpt-5-pro', // GPT-5 Pro
   'anthropic/claude-opus-4.5', // Claude Opus 4.5
@@ -46,6 +48,7 @@ export const MODEL_TIERS = {
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5', // $5/$25
+    'openai/gpt-5.2-pro', // $21/$168
     'openai/gpt-5', // $20/$60
     'openai/gpt-5-pro', // $15/$120
   ] as ModelId[],
@@ -67,6 +70,7 @@ export const MODEL_TIERS = {
   low: [
     ...FREE_PLAN_MODELS,
     'anthropic/claude-haiku-4.5', // $1/$5
+    'openai/gpt-5.2', // $1.75/$14
     'openai/gpt-5.1', // $1.25/$10
     'openai/gpt-5-mini', // $8/$24
     'x-ai/grok-3-mini',

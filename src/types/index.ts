@@ -2,6 +2,8 @@ export type ModelProvider = 'OpenAI' | 'Anthropic' | 'Google' | 'xAI' | 'DeepSee
 
 export type ModelId =
   // OpenAI Latest Models via OpenRouter
+  | 'openai/gpt-5.2'
+  | 'openai/gpt-5.2-pro'
   | 'openai/gpt-5.1'
   | 'openai/gpt-5-pro'
   | 'openai/gpt-5'
@@ -20,6 +22,7 @@ export type ModelId =
   | 'anthropic/claude-sonnet-4'
   // Google Latest Models via OpenRouter
   | 'google/gemini-3-pro-preview'
+  | 'google/gemini-3-flash-preview'
   | 'google/gemini-2.5-flash'
   | 'google/gemini-2.5-pro'
   // xAI Latest Models via OpenRouter (Note: x-ai with hyphen, not xai)
@@ -29,7 +32,7 @@ export type ModelId =
   | 'x-ai/grok-3'
   | 'x-ai/grok-3-mini'
   // DeepSeek Latest Models via OpenRouter
-  | 'deepseek/deepseek-v3.2-exp'
+  | 'deepseek/deepseek-v3.2'
   | 'deepseek/deepseek-chat-v3.1'
 
 // Model configuration with OpenRouter
@@ -91,11 +94,11 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   },
   // DeepSeek Latest Models
   {
-    id: 'deepseek/deepseek-v3.2-exp',
+    id: 'deepseek/deepseek-v3.2',
     name: 'DeepSeek V3.2',
     provider: 'DeepSeek',
     contextLength: 163840,
-    costPerMillionTokens: { input: 0.216, output: 0.328 }
+    costPerMillionTokens: { input: 0.25, output: 0.38 }
   },
   {
     id: 'deepseek/deepseek-chat-v3.1',
@@ -113,6 +116,13 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     costPerMillionTokens: { input: 2, output: 12 }
   },
   {
+    id: 'google/gemini-3-flash-preview',
+    name: 'Gemini 3 Flash',
+    provider: 'Google',
+    contextLength: 1048576,
+    costPerMillionTokens: { input: 0.50, output: 3.00 }
+  },
+  {
     id: 'google/gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
     provider: 'Google',
@@ -127,6 +137,20 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     costPerMillionTokens: { input: 0.25, output: 0.75 }
   },
   // OpenAI Latest Models
+  {
+    id: 'openai/gpt-5.2',
+    name: 'GPT 5.2',
+    provider: 'OpenAI',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 1.75, output: 14 }
+  },
+  {
+    id: 'openai/gpt-5.2-pro',
+    name: 'GPT 5.2 Pro',
+    provider: 'OpenAI',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 21, output: 168 }
+  },
   {
     id: 'openai/gpt-5.1',
     name: 'GPT 5.1',
