@@ -8,6 +8,7 @@ import { PaperAirplaneIcon, PlusIcon, MagnifyingGlassIcon, BoltIcon } from '@her
 import { ModelSelector } from './model-selector'
 import { AVAILABLE_MODELS, ModelId, ModelConfig } from '@/types'
 import { supportsReasoning } from '@/lib/openrouter/client'
+import { MarkdownToolbar } from './markdown-toolbar'
 
 interface Props {
   onSendMessage: (message: string) => Promise<void>
@@ -30,6 +31,10 @@ interface Props {
   // Reasoning props
   enableReasoning?: boolean
   onReasoningToggle?: (enabled: boolean) => void
+
+  // User Note Mode props
+  enableUserNoteMode?: boolean
+  onUserNoteModeToggle?: (enabled: boolean) => void
 
   // Context info props
   currentNodeId?: string
@@ -58,6 +63,8 @@ export function GlassmorphismChatInput({
   webSearchQuotaExceeded = false,
   enableReasoning = false,
   onReasoningToggle,
+  enableUserNoteMode = false,
+  onUserNoteModeToggle,
   currentNodeId,
   currentNodePrompt,
   isRightSidebarOpen = false,
@@ -75,9 +82,6 @@ export function GlassmorphismChatInput({
 
   // Detect node references in current message
   const detectedReferences = extractNodeReferences(message)
-  const hasValidReferences = detectedReferences.some(ref => 
-    availableNodes.some(node => node.id.includes(ref))
-  )
 
   const handleSubmit = async () => {
     if (!message.trim() || sending || disabled) return
@@ -110,11 +114,62 @@ export function GlassmorphismChatInput({
   }
 
   const adjustTextareaHeight = () => {
-    const textarea = textareaRef.current
-    if (textarea) {
-      textarea.style.height = 'auto'
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`
+    // Find the visible textarea (there are multiple textareas for responsive layouts)
+    const allTextareas = Array.from(document.querySelectorAll<HTMLTextAreaElement>('[data-chat-textarea="true"]'))
+    let visibleTextarea: HTMLTextAreaElement | null = null
+
+    for (const textarea of allTextareas) {
+      // Check if this textarea or any parent is hidden
+      let element: HTMLElement | null = textarea
+      let isVisible = true
+
+      while (element) {
+        const style = window.getComputedStyle(element)
+        if (style.display === 'none') {
+          isVisible = false
+          break
+        }
+        element = element.parentElement
+      }
+
+      if (isVisible) {
+        visibleTextarea = textarea
+        break
+      }
     }
+
+    if (!visibleTextarea) {
+      console.log('⚠️ No visible textarea found')
+      return
+    }
+
+    const textarea = visibleTextarea
+
+    // Wait for browser to complete layout (double RAF for more reliability)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!textarea) return
+
+        const beforeHeight = textarea.offsetHeight
+
+        // If textarea still has no height, something is wrong
+        if (beforeHeight === 0) {
+          return
+        }
+
+        // Temporarily remove constraints
+        textarea.style.overflow = 'visible'
+        textarea.style.height = 'auto'
+
+        // Get scrollHeight
+        const scrollHeight = textarea.scrollHeight
+
+        // Calculate new height (min 44px, max 300px)
+        const newHeight = Math.max(44, Math.min(scrollHeight, 300))
+        textarea.style.height = `${newHeight}px`
+        textarea.style.overflow = 'hidden'
+      })
+    })
   }
 
   // Function to insert text at cursor position
@@ -149,6 +204,10 @@ export function GlassmorphismChatInput({
 
   // Auto-adjust height on mount and message change
   useEffect(() => {
+    console.log('📝 Message changed, adjusting height', {
+      messageLength: message.length,
+      messagePreview: message.substring(0, 50),
+    })
     adjustTextareaHeight()
   }, [message])
 
@@ -194,24 +253,55 @@ export function GlassmorphismChatInput({
   }, [isRightSidebarOpen, isLeftSidebarCollapsed, onLeftSidebarAutoCollapse])
 
   // Dynamic placeholder based on context
-  const placeholder = "Type your message... Use @node_abc123 or #abc123 to reference previous topics"
+  const placeholder = enableUserNoteMode
+    ? "Enter your note..."
+    : "Type your message... Use @node_abc123 or #abc123 to reference previous topics"
   
   // Render input content (DRY approach)
   const renderInputContent = () => (
     <>
-      {/* Reference Detection */}
-      {detectedReferences.length > 0 && (
+      {/* Top Bar - Mode Toggle */}
+      <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-white/10">
+        {/* Mode Toggle Switch */}
+        {onUserNoteModeToggle && (
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => onUserNoteModeToggle(false)}
+              className={`px-3 py-1 text-sm rounded-lg transition-all duration-200 ${
+                !enableUserNoteMode
+                  ? 'bg-blue-100 text-blue-700 font-medium'
+                  : 'text-gray-600 hover:bg-white/10'
+              }`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => onUserNoteModeToggle(true)}
+              className={`px-3 py-1 text-sm rounded-lg transition-all duration-200 ${
+                enableUserNoteMode
+                  ? 'bg-green-100 text-green-700 font-medium'
+                  : 'text-gray-600 hover:bg-white/10'
+              }`}
+            >
+              Note
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Reference Detection - Only in Chat Mode */}
+      {!enableUserNoteMode && detectedReferences.length > 0 && (
         <div className="px-6 py-2 border-b border-white/10">
           <div className="text-xs text-gray-600">
             <span className="font-medium">References detected:</span>{' '}
             {detectedReferences.map((ref, index) => {
               const isValid = availableNodes.some(node => node.id.includes(ref))
               return (
-                <span 
+                <span
                   key={index}
                   className={`inline-block px-2 py-1 rounded-full mr-2 ${
-                    isValid 
-                      ? 'bg-green-100 text-green-800' 
+                    isValid
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-red-100 text-red-800'
                   }`}
                 >
@@ -225,18 +315,28 @@ export function GlassmorphismChatInput({
 
       {/* Main Input Area */}
       <div className="p-4">
-        {/* Continuing from text - smaller font */}
-        {currentNodeId && currentNodePrompt && !message && (
+        {/* Continuing from text - smaller font - Only in Chat Mode */}
+        {!enableUserNoteMode && currentNodeId && currentNodePrompt && !message && (
           <div className="text-[10px] text-gray-500 mb-2 px-3">
             Continuing from: {currentNodePrompt.length > 60 ? currentNodePrompt.substring(0, 60) + '...' : currentNodePrompt}
           </div>
         )}
-        
+
+        {/* Markdown Toolbar - shown when user note mode is enabled */}
+        {enableUserNoteMode && (
+          <MarkdownToolbar onInsert={insertAtCursor} />
+        )}
+
         {/* Text Input */}
         <textarea
           ref={textareaRef}
+          data-chat-textarea="true"
           value={message}
           onChange={(e) => {
+            console.log('⌨️ onChange triggered', {
+              newValue: e.target.value,
+              valueLength: e.target.value.length,
+            })
             setMessage(e.target.value)
             adjustTextareaHeight()
           }}
@@ -258,70 +358,77 @@ export function GlassmorphismChatInput({
           }}
           placeholder={placeholder}
           disabled={sending || disabled}
-          className="w-full resize-none bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:bg-white/15 focus:border-white/30 focus:outline-none transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ minHeight: '44px', maxHeight: '120px' }}
+          className="block w-full resize-none bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:bg-white/15 focus:border-white/30 focus:outline-none transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ minHeight: '44px', maxHeight: '300px', overflow: 'hidden' }}
           rows={1}
         />
-        
-        {/* Bottom Controls - Outside Input */}
-        <div className="flex items-center justify-between mt-1">
-          {/* Left - Plus Button and Function Controls */}
-          <div className="flex items-center space-x-2">
-            <button className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 transition-all duration-200 flex items-center justify-center group">
-              <PlusIcon className="w-4 h-4 text-gray-700 group-hover:text-gray-900" />
-            </button>
 
-            {/* Web Search Toggle */}
-            <button
-              onClick={() => onWebSearchToggle?.(!enableWebSearch)}
-              disabled={webSearchQuotaExceeded}
-              className={`w-8 h-8 rounded-full transition-all duration-200 flex items-center justify-center ${
-                webSearchQuotaExceeded
-                  ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                  : (enableWebSearch
-                      ? 'bg-blue-100 hover:bg-blue-200 text-blue-600'
-                      : 'bg-white/10 hover:bg-white/20 text-gray-500')
-              }`}
-              title={
-                webSearchQuotaExceeded
-                  ? 'Web search quota exceeded - upgrade your plan'
-                  : (enableWebSearch ? 'Web search enabled' : 'Web search disabled')
-              }
-            >
-              <MagnifyingGlassIcon className="w-4 h-4" />
-            </button>
+        {/* Bottom Controls */}
+        <div className="flex items-center justify-between mt-3">
+          {/* Left - Function Controls (Only in Chat Mode) */}
+          {!enableUserNoteMode ? (
+            <div className="flex items-center space-x-2">
+              <button className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 transition-all duration-200 flex items-center justify-center group">
+                <PlusIcon className="w-4 h-4 text-gray-700 group-hover:text-gray-900" />
+              </button>
 
-            {/* Reasoning Toggle */}
-            <button
-              onClick={() => onReasoningToggle?.(!enableReasoning)}
-              disabled={!supportsReasoning(selectedModel)}
-              className={`w-8 h-8 rounded-full transition-all duration-200 flex items-center justify-center ${
-                supportsReasoning(selectedModel)
-                  ? (enableReasoning 
-                      ? 'bg-purple-100 hover:bg-purple-200 text-purple-600' 
-                      : 'bg-white/10 hover:bg-white/20 text-gray-500')
-                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-              }`}
-              title={
-                !supportsReasoning(selectedModel) 
-                  ? 'Reasoning not supported by this model'
-                  : (enableReasoning ? 'Deep reasoning enabled' : 'Deep reasoning disabled')
-              }
-            >
-              <BoltIcon className="w-4 h-4" />
-            </button>
-          </div>
-          
+              {/* Web Search Toggle */}
+              <button
+                onClick={() => onWebSearchToggle?.(!enableWebSearch)}
+                disabled={webSearchQuotaExceeded}
+                className={`w-8 h-8 rounded-full transition-all duration-200 flex items-center justify-center ${
+                  webSearchQuotaExceeded
+                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                    : (enableWebSearch
+                        ? 'bg-blue-100 hover:bg-blue-200 text-blue-600'
+                        : 'bg-white/10 hover:bg-white/20 text-gray-500')
+                }`}
+                title={
+                  webSearchQuotaExceeded
+                    ? 'Web search quota exceeded - upgrade your plan'
+                    : (enableWebSearch ? 'Web search enabled' : 'Web search disabled')
+                }
+              >
+                <MagnifyingGlassIcon className="w-4 h-4" />
+              </button>
+
+              {/* Reasoning Toggle */}
+              <button
+                onClick={() => onReasoningToggle?.(!enableReasoning)}
+                disabled={!supportsReasoning(selectedModel)}
+                className={`w-8 h-8 rounded-full transition-all duration-200 flex items-center justify-center ${
+                  supportsReasoning(selectedModel)
+                    ? (enableReasoning
+                        ? 'bg-purple-100 hover:bg-purple-200 text-purple-600'
+                        : 'bg-white/10 hover:bg-white/20 text-gray-500')
+                    : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                }`}
+                title={
+                  !supportsReasoning(selectedModel)
+                    ? 'Reasoning not supported by this model'
+                    : (enableReasoning ? 'Deep reasoning enabled' : 'Deep reasoning disabled')
+                }
+              >
+                <BoltIcon className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div />
+          )}
+
           {/* Right - Model Selector and Send */}
           <div className="flex items-center space-x-2">
-            <ModelSelector
-              selectedModel={selectedModel}
-              onModelChange={onModelChange}
-              availableModels={availableModels}
-              compact={true}
-              disabled={modelSelectorDisabled}
-            />
-            
+            {/* Model Selector - Only in Chat Mode */}
+            {!enableUserNoteMode && (
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
+                availableModels={availableModels}
+                compact={true}
+                disabled={modelSelectorDisabled}
+              />
+            )}
+
             {/* Send Button */}
             <button
               onClick={handleSubmit}

@@ -34,6 +34,8 @@ export type ModelId =
   // DeepSeek Latest Models via OpenRouter
   | 'deepseek/deepseek-v3.2'
   | 'deepseek/deepseek-chat-v3.1'
+  // System Models (Internal Use)
+  | 'system/user-note'
 
 // Model configuration with OpenRouter
 export interface ModelConfig {
@@ -250,9 +252,37 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     contextLength: 131000,
     costPerMillionTokens: { input: 0.3, output: 0.5 }
   },
+  // System Models (Hidden from UI)
+  {
+    id: 'system/user-note',
+    name: 'User Note',
+    provider: 'System',
+    contextLength: 0,
+    costPerMillionTokens: { input: 0, output: 0 }
+  },
 ]
 
 export type NodeStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'cancelled'
+
+/**
+ * ノードタイプ - AIチャットかユーザーノートかを識別
+ */
+export type NodeType = 'ai_chat' | 'user_note'
+
+/**
+ * ChatNode の metadata フィールドの型定義を拡張
+ */
+export interface ChatNodeMetadata {
+  // ノードタイプ
+  nodeType?: NodeType
+
+  // ユーザーノート関連
+  noteTitle?: string
+  noteTags?: string[]
+
+  // 既存の拡張フィールド（将来の機能用）
+  [key: string]: any
+}
 
 export interface ChatNode {
   id: string
@@ -271,7 +301,7 @@ export interface ChatNode {
   temperature: number | null
   maxTokens: number | null
   topP: number | null
-  metadata: Record<string, any>
+  metadata: ChatNodeMetadata
   createdAt: Date
   updatedAt: Date
 }
@@ -366,4 +396,28 @@ export interface UserProfile {
   preferences?: Record<string, any>
   created_at?: Date
   updated_at?: Date
+}
+
+// ============================================
+// User Notes Types
+// ============================================
+
+/**
+ * ユーザーノート作成用の入力型
+ */
+export interface CreateUserNoteInput {
+  sessionId: string
+  parentId?: string
+  title?: string
+  content: string
+  tags?: string[]
+}
+
+/**
+ * ユーザーノート更新用の入力型
+ */
+export interface UpdateUserNoteInput {
+  title?: string
+  content?: string
+  tags?: string[]
 }

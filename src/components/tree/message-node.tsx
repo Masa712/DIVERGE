@@ -4,6 +4,7 @@ import { memo } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { ChatNode } from '@/types'
 import { StreamingAnimation } from '@/components/ui/streaming-animation'
+import { ChatBubbleLeftIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
 
 interface MessageNodeData {
   node: ChatNode
@@ -14,8 +15,20 @@ interface MessageNodeData {
 
 export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
   const { node, isCurrentNode, onNodeClick, onNodeIdClick } = data
-  
+
+  // Check if this is a user note
+  const isUserNote = node.metadata?.nodeType === 'user_note'
+  const noteTitle = node.metadata?.noteTitle
+
   const getStatusColor = () => {
+    // User notes have a distinct green appearance
+    if (isUserNote) {
+      return {
+        border: 'bg-gradient-to-br from-green-400 via-emerald-500 to-teal-500',
+        background: 'bg-gradient-to-br from-green-50 to-teal-50'
+      }
+    }
+
     switch (node.status) {
       case 'completed':
         return {
@@ -71,23 +84,30 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
 
       <div className={`rounded-md p-3 h-full ${statusColors.background}`}>
 
-      {/* Model Badge and Node ID */}
+      {/* Type Icon, Model Badge and Node ID */}
       <div className="mb-2 flex items-center justify-between">
-        <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium">
-          {(() => {
-            // Extract model name from format like "openai/gpt-4o-2024-11-20"
-            const modelParts = node.model.split('/')
-            const modelName = modelParts[1] || node.model
-            
-            // If it's a GPT-4o variant, show only "gpt-4o"
-            if (modelName.startsWith('gpt-4o')) {
-              return 'gpt-4o'
-            }
-            
-            // For other models, return as is (e.g., "claude-3.5-sonnet", "gemini-pro")
-            return modelName
-          })()}
-        </span>
+        <div className="flex items-center gap-2">
+          {isUserNote ? (
+            <DocumentTextIcon className="w-4 h-4 text-green-600" title="User Note" />
+          ) : (
+            <ChatBubbleLeftIcon className="w-4 h-4 text-blue-600" title="AI Chat" />
+          )}
+          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium">
+            {isUserNote ? 'Note' : (() => {
+              // Extract model name from format like "openai/gpt-4o-2024-11-20"
+              const modelParts = node.model.split('/')
+              const modelName = modelParts[1] || node.model
+
+              // If it's a GPT-4o variant, show only "gpt-4o"
+              if (modelName.startsWith('gpt-4o')) {
+                return 'gpt-4o'
+              }
+
+              // For other models, return as is (e.g., "claude-3.5-sonnet", "gemini-pro")
+              return modelName
+            })()}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <span
             className="text-xs font-mono bg-blue-100 text-blue-800 px-1 py-0.5 rounded cursor-pointer hover:bg-blue-200 transition-colors"
@@ -125,34 +145,55 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
         </div>
       </div>
 
-      {/* User Prompt */}
-      <div className="mb-2">
-        <p className="text-xs font-medium text-gray-600 mb-1">User:</p>
-        <p className="text-sm">{truncateText(node.prompt, 80)}</p>
-      </div>
-
-      {/* Assistant Response */}
-      <div className="mb-2">
-        <p className="text-xs font-medium text-gray-600 mb-1">Assistant:</p>
-        {node.status === 'streaming' ? (
-          <div className="py-2">
-            <StreamingAnimation />
+      {/* Content Display - Different for User Notes vs AI Chat */}
+      {isUserNote ? (
+        <>
+          {/* User Note: Title and Content Preview */}
+          {noteTitle && (
+            <div className="mb-2">
+              <p className="text-xs font-medium text-green-700 mb-1">Title:</p>
+              <p className="text-sm font-semibold">{truncateText(noteTitle, 80)}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1">Content:</p>
+            <p className="text-sm text-gray-700">{truncateText(node.prompt, 100)}</p>
           </div>
-        ) : node.response ? (
-          <p className="text-sm text-gray-700">{truncateText(node.response, 80)}</p>
-        ) : (
-          <p className="text-sm text-gray-400 italic">Waiting for response...</p>
-        )}
-      </div>
+        </>
+      ) : (
+        <>
+          {/* AI Chat: User Prompt */}
+          <div className="mb-2">
+            <p className="text-xs font-medium text-gray-600 mb-1">User:</p>
+            <p className="text-sm">{truncateText(node.prompt, 80)}</p>
+          </div>
 
-      {/* Status */}
-      <div className="flex items-center justify-between text-xs">
-        <span className={`font-medium ${
-          node.status === 'failed' ? 'text-red-600' : 'text-gray-600'
-        }`}>
-          {node.status}
-        </span>
-      </div>
+          {/* AI Chat: Assistant Response */}
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1">Assistant:</p>
+            {node.status === 'streaming' ? (
+              <div className="py-2">
+                <StreamingAnimation />
+              </div>
+            ) : node.response ? (
+              <p className="text-sm text-gray-700">{truncateText(node.response, 80)}</p>
+            ) : (
+              <p className="text-sm text-gray-400 italic">Waiting for response...</p>
+            )}
+          </div>
+
+          {/* Status - Only show for non-completed states */}
+          {node.status !== 'completed' && (
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className={`font-medium ${
+                node.status === 'failed' ? 'text-red-600' : 'text-gray-600'
+              }`}>
+                {node.status}
+              </span>
+            </div>
+          )}
+        </>
+      )}
       </div>
 
 

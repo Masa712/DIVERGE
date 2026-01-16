@@ -247,26 +247,32 @@ export async function buildEnhancedContext(
   
   // 2. Build base context from ancestors with accurate token counting
   for (const node of ancestors) {
+    const isUserNote = node.metadata?.nodeType === 'user_note'
+
     // System prompt for root node
     if (node.systemPrompt && node.depth === 0) {
       const systemMsg = { role: 'system', content: node.systemPrompt }
       messages.push(systemMsg)
       estimatedTokens += estimateTokens(node.systemPrompt, actualModel)
     }
-    
-    // User prompt
-    const userMsg = { role: 'user', content: node.prompt }
+
+    // User prompt (ユーザーノートの場合はタイトルを追加)
+    const promptContent = isUserNote && node.metadata?.noteTitle
+      ? `[Note: ${node.metadata.noteTitle}]\n${node.prompt}`
+      : node.prompt
+
+    const userMsg = { role: 'user', content: promptContent }
     messages.push(userMsg)
-    estimatedTokens += estimateTokens(node.prompt, actualModel)
+    estimatedTokens += estimateTokens(promptContent, actualModel)
     includedNodes.push(node.id)
-    
-    // Assistant response
-    if (node.response) {
+
+    // Assistant response (ユーザーノートにはresponseがないのでスキップ)
+    if (node.response && !isUserNote) {
       const assistantMsg = { role: 'assistant', content: node.response }
       messages.push(assistantMsg)
       estimatedTokens += estimateTokens(node.response, actualModel)
     }
-    
+
     // Smart token limit checking with accurate counting
     if (estimatedTokens > maxTokens * 0.9) { // Increased threshold since no siblings
       console.log(`⚠️ Approaching token limit (${estimatedTokens}/${maxTokens}), stopping ancestor processing`)
@@ -337,16 +343,18 @@ export async function buildEnhancedContext(
     
     for (const { refId, node: refNode } of resolvedRefs) {
       if (!refNode || estimatedTokens >= maxTokens * 0.95) break
-      
-      console.log(`📎 Processing reference: ${refNode.id.slice(-8)} (${refId})`)
-      
-      // Create detailed context for the referenced node
-      const referenceContext = `
-REFERENCED CONVERSATION [${refId}]:
-User: "${refNode.prompt}"
-Assistant: "${refNode.response || 'No response yet'}"
----`
-      
+
+      // ノードタイプを確認
+      const isUserNote = refNode.metadata?.nodeType === 'user_note'
+      const nodeTypeLabel = isUserNote ? 'note' : 'conversation'
+
+      console.log(`📎 Processing reference: ${refNode.id.slice(-8)} (${refId}) [${nodeTypeLabel}]`)
+
+      // ノードタイプに応じてフォーマットを変更
+      const referenceContext = isUserNote
+        ? formatUserNoteReference(refId, refNode)
+        : formatConversationReference(refId, refNode)
+
       const refTokens = estimateTokens(referenceContext, actualModel)
       
       if (estimatedTokens + refTokens < maxTokens) {
@@ -356,7 +364,7 @@ Assistant: "${refNode.response || 'No response yet'}"
         })
         estimatedTokens += refTokens
         includedNodes.push(refNode.id)
-        console.log(`✅ Added reference ${refId}: ${refTokens} tokens`)
+        console.log(`✅ Added reference ${refId} [${nodeTypeLabel}]: ${refTokens} tokens`)
       } else {
         // Smart truncation for references if they would exceed limit
         const available = maxTokens - estimatedTokens - 50 // Safety buffer
@@ -369,7 +377,7 @@ Assistant: "${refNode.response || 'No response yet'}"
           })
           estimatedTokens += truncated.tokenCount
           includedNodes.push(refNode.id)
-          console.log(`✂️ Added truncated reference ${refId}: ${truncated.tokenCount} tokens`)
+          console.log(`✂️ Added truncated reference ${refId} [${nodeTypeLabel}]: ${truncated.tokenCount} tokens`)
         } else {
           console.log(`⚠️ Skipping reference ${refId}: insufficient space (${available} tokens available)`)
         }
@@ -476,6 +484,39 @@ export async function buildContextWithStrategy(
     // Fallback to original method
     return buildEnhancedContext(nodeId, options)
   }
+}
+
+/**
+ * Format user note reference for context
+ */
+function formatUserNoteReference(refId: string, node: ChatNode): string {
+  const title = node.metadata?.noteTitle
+  const tags = node.metadata?.noteTags
+
+  let context = `REFERENCED NOTE [${refId}]:`
+
+  if (title) {
+    context += `\nTitle: "${title}"`
+  }
+
+  if (tags && tags.length > 0) {
+    context += `\nTags: ${tags.join(', ')}`
+  }
+
+  context += `\n${node.prompt}\n---`
+
+  return context
+}
+
+/**
+ * Format conversation reference for context (existing logic)
+ */
+function formatConversationReference(refId: string, node: ChatNode): string {
+  return `
+REFERENCED CONVERSATION [${refId}]:
+User: "${node.prompt}"
+Assistant: "${node.response || 'No response yet'}"
+---`
 }
 
 // Re-export from utils for backward compatibility

@@ -70,10 +70,10 @@ const CENTERING_CONSTANTS = {
 } as const
 
 // Inner component that uses ReactFlow hooks
-function CompactTreeViewInner({ 
-  nodes: chatNodes, 
-  currentNodeId, 
-  onNodeClick, 
+function CompactTreeViewInner({
+  nodes: chatNodes,
+  currentNodeId,
+  onNodeClick,
   onNodeIdClick,
   onBackgroundClick,
   isLeftSidebarCollapsed = false,

@@ -12,6 +12,8 @@ import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
 import { useChatLayout } from '@/contexts/ChatLayoutContext'
+import { useUserNotes } from '@/hooks/useUserNotes'
+import { UserNoteEditorModal } from '@/components/chat/user-note-editor-modal'
 
 interface Props {
   params: { id: string }
@@ -39,6 +41,11 @@ export default function ChatSessionPage({ params }: Props) {
   const [webSearchQuota, setWebSearchQuota] = useState<{ allowed: boolean; currentUsage: number; limit: number } | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
+
+  // User notes feature
+  const [enableUserNoteMode, setEnableUserNoteMode] = useState(false)
+  const [editingNote, setEditingNote] = useState<ChatNode | null>(null)
+  const { createNote, updateNote } = useUserNotes()
 
   // Calculate available models based on user's subscription plan
   const availableModels = useMemo(() => {
@@ -257,12 +264,31 @@ export default function ChatSessionPage({ params }: Props) {
         parentNode = chatNodes.find(node => node.id === currentNodeId)
       } else if (chatNodes && chatNodes.length > 0) {
         // Find the most recently created node as default parent
-        parentNode = chatNodes.reduce((latest, node) => 
+        parentNode = chatNodes.reduce((latest, node) =>
           new Date(node.createdAt) > new Date(latest.createdAt) ? node : latest
         )
       }
 
-      log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId })
+      log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId, enableUserNoteMode })
+
+      // If user note mode is enabled, create a user note instead of sending an AI chat
+      if (enableUserNoteMode) {
+        const newNote = await createNote({
+          sessionId: session.id,
+          parentId: parentNode?.id,
+          content: message,
+        })
+
+        // Add the new note to the UI
+        setChatNodes(prev => [...prev, newNote])
+        setCurrentNodeId(newNote.id)
+
+        // Automatically disable note mode after creating a note
+        setEnableUserNoteMode(false)
+
+        log.info('User note created', { noteId: newNote.id })
+        return
+      }
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -400,23 +426,23 @@ export default function ChatSessionPage({ params }: Props) {
       }
 
       log.info('Deleting node', { nodeId })
-      
+
       const response = await fetch(`/api/nodes/${nodeId}`, {
         method: 'DELETE',
       })
-      
+
       log.debug('Delete response status', { status: response.status })
 
       if (response.ok) {
         // Remove node from UI
         setChatNodes(prev => prev.filter(node => node.id !== nodeId))
-        
+
         // Close sidebar if deleted node was being displayed
         if (selectedNodeForDetail?.id === nodeId) {
           setIsSidebarOpen(false)
           setSelectedNodeForDetail(null)
         }
-        
+
         // Reset current node if it was the deleted one
         if (currentNodeId === nodeId) {
           const remainingNodes = chatNodes.filter(node => node.id !== nodeId)
@@ -426,7 +452,7 @@ export default function ChatSessionPage({ params }: Props) {
             setCurrentNodeId(undefined)
           }
         }
-        
+
         log.info('Successfully deleted node', { nodeId })
       } else {
         const errorData = await response.json().catch(() => ({}))
@@ -436,6 +462,39 @@ export default function ChatSessionPage({ params }: Props) {
     } catch (error) {
       log.error('Error deleting node', error)
       showError('Network error. Please check your connection.')
+    }
+  }
+
+  const handleEditNote = (note: ChatNode) => {
+    setEditingNote(note)
+  }
+
+  const handleSaveNote = async (nodeId: string, updates: { title?: string; content: string; tags?: string[] }) => {
+    try {
+      await updateNote(nodeId, updates)
+
+      // Update the note in the UI
+      setChatNodes(prev =>
+        prev.map(node =>
+          node.id === nodeId
+            ? {
+                ...node,
+                prompt: updates.content,
+                metadata: {
+                  ...node.metadata,
+                  noteTitle: updates.title,
+                  noteTags: updates.tags,
+                },
+              }
+            : node
+        )
+      )
+
+      setEditingNote(null)
+      log.info('User note updated', { nodeId })
+    } catch (error) {
+      log.error('Error updating note', error)
+      showError('Failed to update note. Please try again.')
     }
   }
 
@@ -578,6 +637,8 @@ export default function ChatSessionPage({ params }: Props) {
             enableWebSearch={enableWebSearch}
             onWebSearchToggle={handleWebSearchToggle}
             webSearchQuotaExceeded={webSearchQuota !== null ? !webSearchQuota.allowed : false}
+            enableUserNoteMode={enableUserNoteMode}
+            onUserNoteModeToggle={setEnableUserNoteMode}
             currentNodeId={currentNodeId}
             currentNodePrompt={(() => {
               const currentNode = chatNodes.find(n => n.id === currentNodeId)
@@ -601,6 +662,16 @@ export default function ChatSessionPage({ params }: Props) {
           onRetryNode={handleRetryNode}
           onDeleteNode={handleDeleteNode}
         />
+
+        {/* User Note Editor Modal */}
+        {editingNote && (
+          <UserNoteEditorModal
+            isOpen={!!editingNote}
+            onClose={() => setEditingNote(null)}
+            onSave={handleSaveNote}
+            node={editingNote}
+          />
+        )}
     </div>
   )
 }

@@ -14,10 +14,10 @@ interface Props {
   rightSidebarWidth?: number
 }
 
-export function ChatTreeView({ 
-  nodes: chatNodes, 
-  currentNodeId, 
-  onNodeClick, 
+export function ChatTreeView({
+  nodes: chatNodes,
+  currentNodeId,
+  onNodeClick,
   onNodeIdClick,
   onBackgroundClick,
   isLeftSidebarCollapsed,
