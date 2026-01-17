@@ -261,7 +261,7 @@ export function GlassmorphismChatInput({
   const renderInputContent = () => (
     <>
       {/* Top Bar - Mode Toggle */}
-      <div className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-white/10">
+      <div className="px-4 pt-3 pb-1 flex items-center justify-between border-b border-white/10">
         {/* Mode Toggle Switch */}
         {onUserNoteModeToggle && (
           <div className="flex items-center space-x-2">
@@ -314,7 +314,7 @@ export function GlassmorphismChatInput({
       )}
 
       {/* Main Input Area */}
-      <div className="p-4">
+      <div className="px-4 pb-4 pt-2">
         {/* Continuing from text - smaller font - Only in Chat Mode */}
         {!enableUserNoteMode && currentNodeId && currentNodePrompt && !message && (
           <div className="text-[10px] text-gray-500 mb-2 px-3">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw, FileText } from 'lucide-react'
+import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw, FileText, AlertTriangle } from 'lucide-react'
 import { MagnifyingGlassIcon, BoltIcon } from '@heroicons/react/24/outline'
 import { ChatNode } from '@/types'
 import { log } from '@/lib/utils/logger'
@@ -44,7 +44,7 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
 
   // Parent snapshot viewing state
   const [showParentSnapshot, setShowParentSnapshot] = useState(false)
-  
+
   // Use custom hooks for better separation of concerns
   const { currentDisplayNode, nodeChain, currentNodeIndex, canNavigate, navigate } = useNodeChain(node, allNodes)
   const { width, isResizing, sidebarRef, handleMouseDown } = useSidebarResize({ onWidthChange })
@@ -409,36 +409,30 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
             {/* Parent Note Edited Warning - Show when parent note was edited after this node was created */}
             {isParentNoteEdited() && (
               <div className="space-y-2">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
-                  <div className="text-yellow-600 mt-0.5">⚠️</div>
+                {/* Warning Header with Toggle */}
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-yellow-800">Parent note has been edited</p>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      The parent note was modified after this response was generated. The content may no longer reflect the current note.
-                    </p>
                     {currentDisplayNode?.metadata?.parentSnapshot && (
                       <button
                         onClick={() => setShowParentSnapshot(!showParentSnapshot)}
-                        className="mt-2 flex items-center gap-1 text-xs font-medium text-yellow-800 hover:text-yellow-900 transition-colors"
+                        className="mt-2 flex items-center gap-1 text-xs font-medium text-blue-700 hover:text-blue-900 transition-colors"
                       >
                         <FileText className="w-3 h-3" />
-                        {showParentSnapshot ? 'Hide' : 'View'} original parent content
+                        {showParentSnapshot ? 'Hide' : 'View'} original note
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Parent Snapshot Display */}
+                {/* Original Note - Collapsed/Expanded */}
                 {showParentSnapshot && currentDisplayNode?.metadata?.parentSnapshot && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="w-4 h-4 text-blue-600" />
-                      <h4 className="text-sm font-semibold text-blue-900">Original Parent Note Content</h4>
-                    </div>
-                    <p className="text-xs text-blue-700 mb-3">
+                  <div className="ml-6 space-y-2">
+                    <p className="text-xs text-blue-700">
                       Captured at: {new Date(currentDisplayNode.metadata.parentSnapshot.capturedAt).toLocaleString()}
                     </p>
-                    <div className="bg-white/50 rounded-lg p-3 border border-blue-200">
+                    <div className="bg-white/10 backdrop-blur rounded-lg p-3 border border-white/20">
                       <MarkdownRenderer
                         content={currentDisplayNode.metadata.parentSnapshot.content}
                         className="text-sm leading-relaxed text-gray-800"

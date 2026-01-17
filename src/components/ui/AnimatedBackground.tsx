@@ -82,7 +82,7 @@ export function AnimatedBackground({
             <feGaussianBlur in="contrasted" stdDeviation="0.5" result="blurred" />
 
             {/* 強い影（手前なので濃い影） */}
-            <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000000" flood-opacity="0.2" result="withShadow" />
+            <feDropShadow dx="0" dy="6" stdDeviation="12" floodColor="#000000" floodOpacity="0.2" result="withShadow" />
           </filter>
 
           {/* グラスモーフィズムフィルター - 中間 */}
@@ -111,7 +111,7 @@ export function AnimatedBackground({
             <feGaussianBlur in="lightened" stdDeviation="2" result="blurred" />
 
             {/* 中程度の影 */}
-            <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.15" result="withShadow" />
+            <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor="#000000" floodOpacity="0.15" result="withShadow" />
           </filter>
 
           {/* グラスモーフィズムフィルター - 奥（ぼかし多い） */}
@@ -140,7 +140,7 @@ export function AnimatedBackground({
             <feGaussianBlur in="lightened" stdDeviation="4" result="blurred" />
 
             {/* 軽い影（奥なので薄い影） */}
-            <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000000" flood-opacity="0.1" result="withShadow" />
+            <feDropShadow dx="0" dy="2" stdDeviation="6" floodColor="#000000" floodOpacity="0.1" result="withShadow" />
           </filter>
 
           {/* 四隅のラジアルグラデーション */}
