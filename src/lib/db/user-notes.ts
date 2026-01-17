@@ -130,19 +130,31 @@ export async function updateUserNote(
     throw new Error('Unauthorized')
   }
 
-  // 既存のノードを取得（権限確認のため）
+  // 既存のノードを取得
   const { data: existing, error: fetchError } = await supabase
     .from('chat_nodes')
-    .select('*, sessions!inner(user_id)')
+    .select('*')
     .eq('id', nodeId)
     .single()
 
   if (fetchError || !existing) {
+    console.error('Failed to fetch node:', fetchError)
     throw new Error('Note not found')
   }
 
-  // セッション所有者確認
-  if (existing.sessions.user_id !== user.id) {
+  // セッションの所有者確認
+  const { data: session, error: sessionError } = await supabase
+    .from('sessions')
+    .select('user_id')
+    .eq('id', existing.session_id)
+    .single()
+
+  if (sessionError || !session) {
+    console.error('Failed to fetch session:', sessionError)
+    throw new Error('Session not found')
+  }
+
+  if (session.user_id !== user.id) {
     throw new Error('Unauthorized: Cannot update another user\'s note')
   }
 
@@ -192,19 +204,31 @@ export async function deleteUserNote(nodeId: string): Promise<void> {
     throw new Error('Unauthorized')
   }
 
-  // 既存のノードを取得（権限確認のため）
+  // 既存のノードを取得
   const { data: existing, error: fetchError } = await supabase
     .from('chat_nodes')
-    .select('*, sessions!inner(user_id)')
+    .select('*')
     .eq('id', nodeId)
     .single()
 
   if (fetchError || !existing) {
+    console.error('Failed to fetch node:', fetchError)
     throw new Error('Note not found')
   }
 
-  // セッション所有者確認
-  if (existing.sessions.user_id !== user.id) {
+  // セッションの所有者確認
+  const { data: session, error: sessionError } = await supabase
+    .from('sessions')
+    .select('user_id')
+    .eq('id', existing.session_id)
+    .single()
+
+  if (sessionError || !session) {
+    console.error('Failed to fetch session:', sessionError)
+    throw new Error('Session not found')
+  }
+
+  if (session.user_id !== user.id) {
     throw new Error('Unauthorized: Cannot delete another user\'s note')
   }
 
@@ -284,19 +308,32 @@ export async function getUserNoteById(nodeId: string): Promise<ChatNode> {
     throw new Error('Unauthorized')
   }
 
+  // ノードを取得
   const { data, error } = await supabase
     .from('chat_nodes')
-    .select('*, sessions!inner(user_id)')
+    .select('*')
     .eq('id', nodeId)
     .eq('metadata->>nodeType', 'user_note')
     .single()
 
   if (error || !data) {
+    console.error('Failed to fetch node:', error)
     throw new Error('Note not found')
   }
 
-  // セッション所有者確認
-  if (data.sessions.user_id !== user.id) {
+  // セッションの所有者確認
+  const { data: session, error: sessionError } = await supabase
+    .from('sessions')
+    .select('user_id')
+    .eq('id', data.session_id)
+    .single()
+
+  if (sessionError || !session) {
+    console.error('Failed to fetch session:', sessionError)
+    throw new Error('Session not found')
+  }
+
+  if (session.user_id !== user.id) {
     throw new Error('Unauthorized: Cannot access another user\'s note')
   }
 

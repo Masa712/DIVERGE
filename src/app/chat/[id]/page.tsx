@@ -465,6 +465,22 @@ export default function ChatSessionPage({ params }: Props) {
     }
   }
 
+  const handleUpdateNodeInPlace = (nodeId: string, updates: { prompt?: string; metadata?: any }) => {
+    setChatNodes(prev =>
+      prev.map(node =>
+        node.id === nodeId
+          ? {
+              ...node,
+              ...(updates.prompt !== undefined && { prompt: updates.prompt }),
+              ...(updates.metadata !== undefined && { metadata: { ...node.metadata, ...updates.metadata } }),
+              updatedAt: new Date()
+            }
+          : node
+      )
+    )
+    log.info('Node updated in place', { nodeId, updates })
+  }
+
   const handleEditNote = (note: ChatNode) => {
     setEditingNote(note)
   }
@@ -661,6 +677,7 @@ export default function ChatSessionPage({ params }: Props) {
           onWidthChange={setRightSidebarWidth}
           onRetryNode={handleRetryNode}
           onDeleteNode={handleDeleteNode}
+          onUpdateNode={handleUpdateNodeInPlace}
         />
 
         {/* User Note Editor Modal */}
