@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw } from 'lucide-react'
+import { Copy, User, Bot, Settings, MessageCircle, Clock, Edit2, Trash2, RefreshCw, FileText } from 'lucide-react'
 import { MagnifyingGlassIcon, BoltIcon } from '@heroicons/react/24/outline'
 import { ChatNode } from '@/types'
 import { log } from '@/lib/utils/logger'
@@ -41,6 +41,9 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   // User note editing states
   const [noteContent, setNoteContent] = useState('')
   const previousNoteContentRef = useRef<string>('')
+
+  // Parent snapshot viewing state
+  const [showParentSnapshot, setShowParentSnapshot] = useState(false)
   
   // Use custom hooks for better separation of concerns
   const { currentDisplayNode, nodeChain, currentNodeIndex, canNavigate, navigate } = useNodeChain(node, allNodes)
@@ -72,17 +75,38 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
 
   // Check if current node can be deleted
   const canDeleteCurrentNode = currentDisplayNode && !hasChildren(currentDisplayNode.id)
-  
+
+  // Check if parent note has been edited after this node was created
+  const isParentNoteEdited = useCallback(() => {
+    if (!currentDisplayNode || !currentDisplayNode.parentId) return false
+
+    const parentNode = allNodes.find(n => n.id === currentDisplayNode.parentId)
+    if (!parentNode || parentNode.metadata?.nodeType !== 'user_note') return false
+
+    // Check if parent has editedAt timestamp or if parent was updated after child was created
+    if (parentNode.metadata?.editedAt) {
+      return true
+    }
+
+    // Fallback: compare timestamps
+    if (parentNode.updatedAt > currentDisplayNode.createdAt) {
+      return true
+    }
+
+    return false
+  }, [currentDisplayNode, allNodes])
+
   // Use comments hook to fetch and manage comments
   const { comments, loading: commentsLoading, createComment, deleteComment, refetch } = useComments({
     nodeId: currentDisplayNode?.id,
     sessionId: session?.id
   })
 
-  // Reset comment when node changes
+  // Reset comment and parent snapshot view when node changes
   useEffect(() => {
     if (currentDisplayNode?.id !== previousNodeIdRef.current) {
       setComment('')
+      setShowParentSnapshot(false)  // Reset snapshot view on node change
       previousNodeIdRef.current = currentDisplayNode?.id || null
     }
   }, [currentDisplayNode?.id])
@@ -381,6 +405,49 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                 </div>
               )}
             </div>
+
+            {/* Parent Note Edited Warning - Show when parent note was edited after this node was created */}
+            {isParentNoteEdited() && (
+              <div className="space-y-2">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
+                  <div className="text-yellow-600 mt-0.5">⚠️</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-yellow-800">Parent note has been edited</p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      The parent note was modified after this response was generated. The content may no longer reflect the current note.
+                    </p>
+                    {currentDisplayNode?.metadata?.parentSnapshot && (
+                      <button
+                        onClick={() => setShowParentSnapshot(!showParentSnapshot)}
+                        className="mt-2 flex items-center gap-1 text-xs font-medium text-yellow-800 hover:text-yellow-900 transition-colors"
+                      >
+                        <FileText className="w-3 h-3" />
+                        {showParentSnapshot ? 'Hide' : 'View'} original parent content
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Parent Snapshot Display */}
+                {showParentSnapshot && currentDisplayNode?.metadata?.parentSnapshot && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      <h4 className="text-sm font-semibold text-blue-900">Original Parent Note Content</h4>
+                    </div>
+                    <p className="text-xs text-blue-700 mb-3">
+                      Captured at: {new Date(currentDisplayNode.metadata.parentSnapshot.capturedAt).toLocaleString()}
+                    </p>
+                    <div className="bg-white/50 rounded-lg p-3 border border-blue-200">
+                      <MarkdownRenderer
+                        content={currentDisplayNode.metadata.parentSnapshot.content}
+                        className="text-sm leading-relaxed text-gray-800"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* AI Response Section - Only show for AI chat nodes */}
             {currentDisplayNode.metadata?.nodeType !== 'user_note' && (

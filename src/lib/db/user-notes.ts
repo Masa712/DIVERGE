@@ -168,7 +168,8 @@ export async function updateUserNote(
     ...existing.metadata,
     nodeType: 'user_note',
     ...(updates.title !== undefined && { noteTitle: updates.title }),
-    ...(updates.tags !== undefined && { noteTags: updates.tags })
+    ...(updates.tags !== undefined && { noteTags: updates.tags }),
+    editedAt: new Date().toISOString()  // Track when note was edited
   }
 
   // 更新実行

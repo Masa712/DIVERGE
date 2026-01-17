@@ -57,6 +57,30 @@ export async function createChatNode(nodeData: {
 }): Promise<any> {
   try {
     return await withPooledConnection(async (supabase) => {
+      // Fetch parent node snapshot if parent is a user note
+      let parentSnapshot = null
+      if (nodeData.parentId) {
+        const { data: parentNode, error: parentError } = await supabase
+          .from('chat_nodes')
+          .select('prompt, metadata, model')
+          .eq('id', nodeData.parentId)
+          .single()
+
+        if (!parentError && parentNode && parentNode.metadata?.nodeType === 'user_note') {
+          // Store snapshot of parent note content for future reference
+          parentSnapshot = {
+            content: parentNode.prompt,
+            capturedAt: new Date().toISOString()
+          }
+        }
+      }
+
+      // Merge parent snapshot into metadata
+      const finalMetadata = {
+        ...(nodeData.metadata || {}),
+        ...(parentSnapshot && { parentSnapshot })
+      }
+
       const { data: chatNodeRaw, error: nodeError } = await supabase
         .from('chat_nodes')
         .insert({
@@ -68,7 +92,7 @@ export async function createChatNode(nodeData: {
           temperature: nodeData.temperature,
           max_tokens: nodeData.maxTokens,
           depth: nodeData.depth,
-          metadata: nodeData.metadata || {},
+          metadata: finalMetadata,
         })
         .select()
         .single()
