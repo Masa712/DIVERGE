@@ -76,7 +76,7 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
       className={`rounded-lg p-0.5 shadow-sm transition-transform will-change-transform ${statusColors.border} ${
         onNodeClick ? 'cursor-pointer hover:shadow-md hover:scale-[1.02]' : ''
       }`}
-      style={{ minWidth: '250px', maxWidth: '350px' }}
+      style={{ width: '350px' }}
       onClick={() => onNodeClick?.(node.id)}
       title="Click to view full details"
     >

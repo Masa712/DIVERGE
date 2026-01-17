@@ -42,6 +42,9 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
   const [noteContent, setNoteContent] = useState('')
   const previousNoteContentRef = useRef<string>('')
 
+  // Debounced auto-save timer
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
+
   // Parent snapshot viewing state
   const [showParentSnapshot, setShowParentSnapshot] = useState(false)
 
@@ -78,21 +81,50 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
 
   // Check if parent note has been edited after this node was created
   const isParentNoteEdited = useCallback(() => {
-    if (!currentDisplayNode || !currentDisplayNode.parentId) return false
+    if (!currentDisplayNode || !currentDisplayNode.parentId) {
+      log.info('❌ No currentDisplayNode or parentId', {
+        hasNode: !!currentDisplayNode,
+        parentId: currentDisplayNode?.parentId
+      })
+      return false
+    }
+
+    // Only show warning for AI nodes (not user notes)
+    if (currentDisplayNode.metadata?.nodeType === 'user_note') {
+      log.info('❌ Current node is user note, skip warning')
+      return false
+    }
 
     const parentNode = allNodes.find(n => n.id === currentDisplayNode.parentId)
-    if (!parentNode || parentNode.metadata?.nodeType !== 'user_note') return false
+    if (!parentNode || parentNode.metadata?.nodeType !== 'user_note') {
+      log.info('❌ Parent not found or not user note', {
+        hasParent: !!parentNode,
+        parentType: parentNode?.metadata?.nodeType
+      })
+      return false
+    }
+
+    log.info('🔍 Checking parent note edit status:', {
+      parentId: parentNode.id,
+      parentEditedAt: parentNode.metadata?.editedAt,
+      parentUpdatedAt: parentNode.updatedAt,
+      childCreatedAt: currentDisplayNode.createdAt,
+      childHasSnapshot: !!currentDisplayNode.metadata?.parentSnapshot
+    })
 
     // Check if parent has editedAt timestamp or if parent was updated after child was created
     if (parentNode.metadata?.editedAt) {
+      log.info('✅ Parent has editedAt - showing warning')
       return true
     }
 
     // Fallback: compare timestamps
     if (parentNode.updatedAt > currentDisplayNode.createdAt) {
+      log.info('✅ Parent updated after child created - showing warning')
       return true
     }
 
+    log.info('❌ Parent not edited after child creation')
     return false
   }, [currentDisplayNode, allNodes])
 
@@ -111,88 +143,67 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
     }
   }, [currentDisplayNode?.id])
 
-  // Auto-save note when node changes or sidebar closes
+  // Initialize note content when node changes
   useEffect(() => {
-    const previousNodeId = previousNodeIdRef.current
-    const previousContent = previousNoteContentRef.current
-
-    // Save previous note if it was edited
-    const savePreviousNote = async () => {
-      if (previousNodeId && previousContent && previousContent !== previousNoteContentRef.current) {
-        // Find the previous node
-        const previousNode = allNodes.find(n => n.id === previousNodeId)
-        if (previousNode?.metadata?.nodeType === 'user_note' && previousContent.trim()) {
-          try {
-            const response = await fetch(`/api/user-notes/${previousNodeId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: previousContent.trim() }),
-            })
-
-            if (response.ok) {
-              log.info('Note auto-saved', { nodeId: previousNodeId })
-              onUpdateNode?.(previousNodeId, {
-                prompt: previousContent.trim(),
-                metadata: previousNode.metadata
-              })
-            }
-          } catch (error) {
-            log.error('Failed to auto-save note', error)
-          }
-        }
-      }
-    }
-
-    // If node changed, save the previous note
-    if (previousNodeId && previousNodeId !== currentDisplayNode?.id) {
-      savePreviousNote()
-    }
-
-    // Initialize content for new node
     if (currentDisplayNode?.metadata?.nodeType === 'user_note') {
       const newContent = currentDisplayNode.prompt || ''
       setNoteContent(newContent)
-      previousNoteContentRef.current = newContent
-    }
-  }, [currentDisplayNode?.id, allNodes, onUpdateNode])
 
-  // Auto-save when sidebar closes
-  useEffect(() => {
-    if (!isOpen && currentDisplayNode?.metadata?.nodeType === 'user_note') {
-      const currentContent = noteContent
-      const originalContent = currentDisplayNode.prompt || ''
-
-      if (currentContent !== originalContent && currentContent.trim()) {
-        const saveOnClose = async () => {
-          try {
-            const response = await fetch(`/api/user-notes/${currentDisplayNode.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ content: currentContent.trim() }),
-            })
-
-            if (response.ok) {
-              log.info('Note auto-saved on close', { nodeId: currentDisplayNode.id })
-              onUpdateNode?.(currentDisplayNode.id, {
-                prompt: currentContent.trim(),
-                metadata: currentDisplayNode.metadata
-              })
-            }
-          } catch (error) {
-            log.error('Failed to auto-save note on close', error)
-          }
-        }
-        saveOnClose()
+      // Clear any pending auto-save timer when switching nodes
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+        autoSaveTimerRef.current = null
       }
     }
-  }, [isOpen, currentDisplayNode, noteContent, onUpdateNode])
+  }, [currentDisplayNode?.id])
 
-  // Update ref when note content changes
+  // Debounced real-time auto-save
+  // Saves note 1 second after user stops typing
   useEffect(() => {
-    if (currentDisplayNode?.metadata?.nodeType === 'user_note') {
-      previousNoteContentRef.current = noteContent
+    if (currentDisplayNode?.metadata?.nodeType !== 'user_note') return
+
+    const originalContent = currentDisplayNode?.prompt || ''
+
+    // Only auto-save if content has changed
+    if (noteContent !== originalContent && noteContent.trim()) {
+      // Clear previous timer
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+
+      // Set new timer: auto-save after 1 second of no typing
+      autoSaveTimerRef.current = setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/user-notes/${currentDisplayNode.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: noteContent.trim() }),
+          })
+
+          if (response.ok) {
+            log.info('Note auto-saved (debounced)', { nodeId: currentDisplayNode.id })
+            // Update node with new editedAt timestamp to trigger child node warnings
+            onUpdateNode?.(currentDisplayNode.id, {
+              prompt: noteContent.trim(),
+              metadata: {
+                ...currentDisplayNode.metadata,
+                editedAt: new Date().toISOString()  // Add editedAt for real-time warning
+              }
+            })
+          }
+        } catch (error) {
+          log.error('Failed to auto-save note', error)
+        }
+      }, 1000) // 1 second debounce
     }
-  }, [noteContent, currentDisplayNode?.metadata?.nodeType])
+
+    // Cleanup: clear timer when component unmounts or dependencies change
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+    }
+  }, [noteContent, currentDisplayNode, onUpdateNode])
 
 
   // Notify parent of width changes
