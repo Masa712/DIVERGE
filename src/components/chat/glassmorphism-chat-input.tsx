@@ -467,23 +467,26 @@ export function GlassmorphismChatInput({
   }
 
   return (
-    <div 
+    <div
       className={containerClassName}
-      style={isRightSidebarOpen && typeof window !== 'undefined' && window.innerWidth >= 1024 ? {
-        right: `${rightOffset}px`
-      } : undefined}
+      style={{
+        pointerEvents: 'none', // Allow canvas drag through transparent areas
+        ...(isRightSidebarOpen && typeof window !== 'undefined' && window.innerWidth >= 1024 ? {
+          right: `${rightOffset}px`
+        } : {})
+      }}
     >
       {/* Inner container for responsive centering when right sidebar is hidden */}
       {!isRightSidebarOpen && (
         <>
           {/* Desktop Layout (≥1024px): After left sidebar */}
-          <div className="hidden lg:block" style={{ 
+          <div className="hidden lg:block" style={{
             marginLeft: isLeftSidebarCollapsed ? '124px' : '410px', // 94px (collapsed sidebar) + 30px margin OR 380px (expanded sidebar) + 30px margin
             marginRight: '30px',
             width: isLeftSidebarCollapsed ? 'calc(100vw - 124px - 30px)' : 'calc(100vw - 410px - 30px)'
           }}>
             <div className="max-w-4xl mx-auto px-[30px]">
-              <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
+              <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] pointer-events-auto">
                 {renderInputContent()}
               </div>
             </div>
@@ -492,7 +495,7 @@ export function GlassmorphismChatInput({
           {/* Tablet/Mobile Layout (<1024px): Full width centered */}
           <div className="block lg:hidden px-[30px]">
             <div className="max-w-4xl mx-auto">
-              <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
+              <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] pointer-events-auto">
                 {renderInputContent()}
               </div>
             </div>
@@ -506,15 +509,15 @@ export function GlassmorphismChatInput({
           {/* Desktop Layout */}
           <div className="hidden lg:block w-full px-[30px]">
             <div className="max-w-4xl mx-auto">
-              <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
+              <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] pointer-events-auto">
                 {renderInputContent()}
               </div>
             </div>
           </div>
-          
+
           {/* Tablet/Mobile Layout - Centered */}
           <div className="block lg:hidden w-[90vw] max-w-4xl px-[30px]">
-            <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
+            <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] pointer-events-auto">
               {renderInputContent()}
             </div>
           </div>
