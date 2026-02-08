@@ -252,14 +252,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     contextLength: 131000,
     costPerMillionTokens: { input: 0.3, output: 0.5 }
   },
-  // System Models (Hidden from UI)
-  {
-    id: 'system/user-note',
-    name: 'User Note',
-    provider: 'System',
-    contextLength: 0,
-    costPerMillionTokens: { input: 0, output: 0 }
-  },
 ]
 
 export type NodeStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'cancelled'

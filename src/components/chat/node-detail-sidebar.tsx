@@ -113,15 +113,35 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
       childHasSnapshot: !!currentDisplayNode.metadata?.parentSnapshot
     })
 
-    // Check if parent has editedAt timestamp or if parent was updated after child was created
+    // Check if parent has editedAt timestamp AND it's after child was created
     if (parentNode.metadata?.editedAt) {
-      log.info('✅ Parent has editedAt - showing warning')
-      return true
+      const parentEditedDate = new Date(parentNode.metadata.editedAt)
+      const childCreatedDate = new Date(currentDisplayNode.createdAt)
+
+      if (parentEditedDate > childCreatedDate) {
+        log.info('✅ Parent edited after child created - showing warning', {
+          parentEditedAt: parentEditedDate.toISOString(),
+          childCreatedAt: childCreatedDate.toISOString()
+        })
+        return true
+      } else {
+        log.info('❌ Parent edited before child created - no warning', {
+          parentEditedAt: parentEditedDate.toISOString(),
+          childCreatedAt: childCreatedDate.toISOString()
+        })
+        return false
+      }
     }
 
-    // Fallback: compare timestamps
-    if (parentNode.updatedAt > currentDisplayNode.createdAt) {
-      log.info('✅ Parent updated after child created - showing warning')
+    // Fallback: compare updatedAt timestamps (only if editedAt is not available)
+    const parentUpdatedDate = new Date(parentNode.updatedAt)
+    const childCreatedDate = new Date(currentDisplayNode.createdAt)
+
+    if (parentUpdatedDate > childCreatedDate) {
+      log.info('✅ Parent updated after child created - showing warning', {
+        parentUpdatedAt: parentUpdatedDate.toISOString(),
+        childCreatedAt: childCreatedDate.toISOString()
+      })
       return true
     }
 

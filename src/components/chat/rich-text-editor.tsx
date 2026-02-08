@@ -282,21 +282,13 @@ export function RichTextEditor({
           margin: 0;
           padding: 0;
         }
-        :global(.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before) {
+        /* Placeholder - only show when editor is completely empty */
+        :global(.tiptap-editor .ProseMirror.is-editor-empty p.is-empty:first-child::before) {
           color: #9ca3af;
           content: attr(data-placeholder);
           pointer-events: none;
-          position: absolute;
-          top: 0;
-          left: 0;
-        }
-        :global(.tiptap-editor .ProseMirror .is-empty::before) {
-          color: #9ca3af;
-          content: attr(data-placeholder);
-          pointer-events: none;
-          position: absolute;
-          top: 0;
-          left: 0;
+          float: left;
+          height: 0;
         }
         :global(.tiptap-editor .ProseMirror strong) {
           color: #111827;
