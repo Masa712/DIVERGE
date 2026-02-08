@@ -4,12 +4,52 @@ const { withSentryConfig } = require('@sentry/nextjs')
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+
+  // Security headers
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on'
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'SAMEORIGIN'
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block'
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin'
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()'
+          }
+        ],
+      },
+    ]
+  },
+
   webpack: (config, { isServer }) => {
     // Exclude tiktoken from server-side bundling to prevent WASM issues in Vercel
     if (isServer) {
       config.externals = [...(config.externals || []), 'tiktoken']
     }
-    
+
     // Prevent posthog-node from being bundled on the client side
     if (!isServer) {
       config.resolve.fallback = {
@@ -20,7 +60,7 @@ const nextConfig = {
         crypto: false,
       }
     }
-    
+
     return config
   },
 }

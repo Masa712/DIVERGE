@@ -329,7 +329,7 @@ export function GlassmorphismChatInput({
             onChange={setMessage}
             placeholder={placeholder}
             editable={!sending && !disabled}
-            minHeight="44px"
+            minHeight="27px"
             maxHeight="300px"
           />
         ) : (
