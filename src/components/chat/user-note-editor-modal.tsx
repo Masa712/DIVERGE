@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { ChatNode } from '@/types'
-import { MarkdownToolbar } from './markdown-toolbar'
+import { RichTextEditor } from './rich-text-editor'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -24,7 +24,6 @@ export function UserNoteEditorModal({
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // ノードが変更されたら状態を更新
   useEffect(() => {
@@ -52,28 +51,6 @@ export function UserNoteEditorModal({
     } finally {
       setSaving(false)
     }
-  }
-
-  const insertAtCursor = (text: string) => {
-    if (!textareaRef.current) return
-
-    const textarea = textareaRef.current
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-
-    const newContent =
-      content.substring(0, start) +
-      text +
-      content.substring(end)
-
-    setContent(newContent)
-
-    // カーソル位置を更新
-    setTimeout(() => {
-      textarea.focus()
-      const newPosition = start + text.length
-      textarea.setSelectionRange(newPosition, newPosition)
-    }, 0)
   }
 
   return (
@@ -134,24 +111,20 @@ export function UserNoteEditorModal({
           </div>
 
           {!showPreview ? (
-            <>
-              {/* マークダウンツールバー */}
-              <MarkdownToolbar onInsert={insertAtCursor} />
-
-              {/* コンテンツ */}
-              <div>
-                <label className="block text-sm font-medium mb-1 text-gray-300">
-                  内容
-                </label>
-                <textarea
-                  ref={textareaRef}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 min-h-[400px] font-mono text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="マークダウン形式で記述できます"
-                />
-              </div>
-            </>
+            /* Rich Text Editor */
+            <div>
+              <label className="block text-sm font-medium mb-1 text-gray-300">
+                内容
+              </label>
+              <RichTextEditor
+                content={content}
+                onChange={setContent}
+                placeholder="ノートの内容を入力してください"
+                editable={!saving}
+                minHeight="400px"
+                maxHeight="400px"
+              />
+            </div>
           ) : (
             /* プレビュー表示 */
             <div className="prose prose-invert max-w-none min-h-[400px] p-4 bg-gray-700 rounded border border-gray-600">

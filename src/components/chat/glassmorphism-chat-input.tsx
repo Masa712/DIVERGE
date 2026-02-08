@@ -8,7 +8,7 @@ import { PaperAirplaneIcon, PlusIcon, MagnifyingGlassIcon, BoltIcon } from '@her
 import { ModelSelector } from './model-selector'
 import { AVAILABLE_MODELS, ModelId, ModelConfig } from '@/types'
 import { supportsReasoning } from '@/lib/openrouter/client'
-import { MarkdownToolbar } from './markdown-toolbar'
+import { RichTextEditor } from './rich-text-editor'
 
 interface Props {
   onSendMessage: (message: string) => Promise<void>
@@ -322,46 +322,53 @@ export function GlassmorphismChatInput({
           </div>
         )}
 
-        {/* Markdown Toolbar - shown when user note mode is enabled */}
-        {enableUserNoteMode && (
-          <MarkdownToolbar onInsert={insertAtCursor} />
+        {/* Rich Text Editor for Note Mode */}
+        {enableUserNoteMode ? (
+          <RichTextEditor
+            content={message}
+            onChange={setMessage}
+            placeholder={placeholder}
+            editable={!sending && !disabled}
+            minHeight="44px"
+            maxHeight="300px"
+          />
+        ) : (
+          /* Regular Text Input for Chat Mode */
+          <textarea
+            ref={textareaRef}
+            data-chat-textarea="true"
+            value={message}
+            onChange={(e) => {
+              console.log('⌨️ onChange triggered', {
+                newValue: e.target.value,
+                valueLength: e.target.value.length,
+              })
+              setMessage(e.target.value)
+              adjustTextareaHeight()
+            }}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            onFocus={(e) => {
+              e.currentTarget.dataset.wasFocused = 'true'
+              onFocusChange?.(true)
+            }}
+            onBlur={(e) => {
+              const textarea = e.currentTarget
+              setTimeout(() => {
+                if (textarea && textarea.dataset) {
+                  textarea.dataset.wasFocused = 'false'
+                }
+              }, 200)
+              onFocusChange?.(false)
+            }}
+            placeholder={placeholder}
+            disabled={sending || disabled}
+            className="block w-full resize-none bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:bg-white/15 focus:border-white/30 focus:outline-none transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ minHeight: '44px', maxHeight: '300px', overflow: 'hidden' }}
+            rows={1}
+          />
         )}
-
-        {/* Text Input */}
-        <textarea
-          ref={textareaRef}
-          data-chat-textarea="true"
-          value={message}
-          onChange={(e) => {
-            console.log('⌨️ onChange triggered', {
-              newValue: e.target.value,
-              valueLength: e.target.value.length,
-            })
-            setMessage(e.target.value)
-            adjustTextareaHeight()
-          }}
-          onKeyDown={handleKeyDown}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          onFocus={(e) => {
-            e.currentTarget.dataset.wasFocused = 'true'
-            onFocusChange?.(true)
-          }}
-          onBlur={(e) => {
-            const textarea = e.currentTarget
-            setTimeout(() => {
-              if (textarea && textarea.dataset) {
-                textarea.dataset.wasFocused = 'false'
-              }
-            }, 200)
-            onFocusChange?.(false)
-          }}
-          placeholder={placeholder}
-          disabled={sending || disabled}
-          className="block w-full resize-none bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-gray-900 placeholder:text-gray-500 focus:bg-white/15 focus:border-white/30 focus:outline-none transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ minHeight: '44px', maxHeight: '300px', overflow: 'hidden' }}
-          rows={1}
-        />
 
         {/* Bottom Controls */}
         <div className="flex items-center justify-between mt-3">

@@ -12,6 +12,7 @@ import { StreamingAnimation } from '@/components/ui/streaming-animation'
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer'
 import { useAuth } from '@/components/providers/auth-provider'
 import { NodeDeleteConfirmationModal } from './NodeDeleteConfirmationModal'
+import { RichTextEditor } from './rich-text-editor'
 
 interface UserProfile {
   display_name?: string
@@ -386,19 +387,18 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                 </button>
               </div>
 
-              {/* User note - always editable */}
+              {/* User note - always editable with rich text */}
               {currentDisplayNode.metadata?.nodeType === 'user_note' ? (
                 <div className="space-y-3">
-                  {/* Content textarea - always editable, auto-saves on node change or sidebar close */}
-                  <div className="bg-white/10 backdrop-blur rounded-lg p-3 border border-white/20">
-                    <textarea
-                      value={noteContent}
-                      onChange={(e) => setNoteContent(e.target.value)}
-                      placeholder="Enter note content..."
-                      className="w-full bg-transparent border-none text-sm text-gray-800 placeholder:text-gray-500 focus:outline-none resize-none"
-                      rows={8}
-                    />
-                  </div>
+                  {/* Rich Text Editor - always editable, auto-saves on node change or sidebar close */}
+                  <RichTextEditor
+                    content={noteContent}
+                    onChange={setNoteContent}
+                    placeholder="Enter note content..."
+                    editable={true}
+                    minHeight="200px"
+                    maxHeight="400px"
+                  />
 
                   {/* Auto-save indicator - show when content has changed */}
                   {noteContent !== currentDisplayNode.prompt && (
