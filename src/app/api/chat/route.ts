@@ -332,7 +332,7 @@ Based on these search results and the conversation context, please provide an in
           log.info('AI title generated', { title })
           
           // Update session name with AI-generated title
-          const supabase = createClient()
+          const supabase = await createClient()
           const { data: updatedSession, error: updateError } = await supabase
             .from('sessions')
             .update({ 
@@ -409,10 +409,10 @@ Based on these search results and the conversation context, please provide an in
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
   const stopTimer = performanceMonitor.startTimer('chat_api_total')
-  
+
   try {
-    const supabase = createClient()
-  
+    const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {

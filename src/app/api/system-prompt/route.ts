@@ -14,8 +14,8 @@ import {
 
 // GET: Get current system prompt preferences
 export const GET = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -46,8 +46,8 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
 // PUT: Update system prompt preferences
 export const PUT = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {

@@ -52,7 +52,7 @@ export async function getCachedSessionNodes(sessionId: string): Promise<any[]> {
   }
 
   // Fetch from database
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: allNodes, error } = await supabase
     .from('chat_nodes')
     .select('*')
@@ -154,7 +154,7 @@ export async function getCachedNodesByIds(
   }
 
   // Fallback to database query for specific IDs
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: nodes, error } = await supabase
     .from('chat_nodes')
     .select('*')
@@ -175,8 +175,8 @@ export async function getCachedSiblingNodes(
   parentNodeId: string,
   sessionId: string
 ): Promise<any[]> {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Direct query for siblings - more efficient than full session scan
   const { data: siblingNodes, error } = await supabase
     .from('chat_nodes')

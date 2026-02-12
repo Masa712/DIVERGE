@@ -10,7 +10,7 @@ export async function createChatNode(data: {
   temperature?: number
   maxTokens?: number
 }): Promise<ChatNode> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
@@ -70,7 +70,7 @@ export async function createChatNode(data: {
 }
 
 export async function getSessionChatNodes(sessionId: string): Promise<ChatNode[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
@@ -118,7 +118,7 @@ export async function updateChatNode(
     costUsd: number
   }>
 ): Promise<void> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Convert camelCase to snake_case for database columns
   const dbUpdates: any = {}
@@ -141,7 +141,7 @@ export async function updateChatNode(
 }
 
 export async function getChatNodeById(nodeId: string): Promise<ChatNode | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   const { data, error } = await supabase
     .from('chat_nodes')
@@ -181,7 +181,7 @@ export async function getChatNodeById(nodeId: string): Promise<ChatNode | null> 
 }
 
 export async function getChatNodeChildren(parentId: string): Promise<ChatNode[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   const { data, error } = await supabase
     .from('chat_nodes')
@@ -216,7 +216,7 @@ export async function getChatNodeChildren(parentId: string): Promise<ChatNode[]>
 }
 
 export async function buildContextForNode(nodeId: string): Promise<Array<{ role: string; content: string }>> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Use a recursive CTE query to get all ancestors efficiently
   const { data, error } = await supabase.rpc('get_node_ancestors', { node_id: nodeId })
@@ -276,7 +276,7 @@ export async function buildContextForNode(nodeId: string): Promise<Array<{ role:
 
 // Fallback function for when CTE is not available
 async function buildContextForNodeFallback(nodeId: string): Promise<Array<{ role: string; content: string }>> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   const context: Array<{ role: string; content: string }> = []
   let currentNodeId: string | null = nodeId

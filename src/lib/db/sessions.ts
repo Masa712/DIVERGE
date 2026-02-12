@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Session } from '@/types'
 
 export async function createSession(name: string, description?: string): Promise<Session> {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -22,8 +22,8 @@ export async function createSession(name: string, description?: string): Promise
 }
 
 export async function getUserSessions(): Promise<Session[]> {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -39,8 +39,8 @@ export async function getUserSessions(): Promise<Session[]> {
 }
 
 export async function getSessionById(sessionId: string): Promise<Session | null> {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -59,8 +59,8 @@ export async function getSessionById(sessionId: string): Promise<Session | null>
 }
 
 export async function updateSessionAccess(sessionId: string): Promise<void> {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   const { error } = await supabase
     .from('sessions')
     .update({ last_accessed_at: new Date().toISOString() })
@@ -70,8 +70,8 @@ export async function updateSessionAccess(sessionId: string): Promise<void> {
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 

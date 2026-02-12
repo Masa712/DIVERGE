@@ -481,7 +481,7 @@ Title: Python Error Debugging Help`
         log.info('AI title generated', { title })
         
         // Update session name with AI-generated title
-        const supabase = createClient()
+        const supabase = await createClient()
         const { data: updatedSession, error: updateError } = await supabase
           .from('sessions')
           .update({ 
@@ -561,8 +561,8 @@ async function generateAITitle(sessionId: string, userPrompt: string, responseCo
 
     if (titleResponse.ok) {
       const { title } = await titleResponse.json()
-      
-      const supabase = createClient()
+
+      const supabase = await createClient()
       const { data: updatedSession, error: updateError } = await supabase
         .from('sessions')
         .update({ 
@@ -612,10 +612,10 @@ async function clearCaches(sessionId: string, chatNode: any, responseContent: st
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
   const stopTimer = performanceMonitor.startTimer('chat_api_with_tools_total')
-  
+
   try {
-    const supabase = createClient()
-  
+    const supabase = await createClient()
+
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {

@@ -6,7 +6,7 @@ import { log } from '@/lib/utils/logger'
 
 // GET - Fetch billing data (subscription, usage, plan)
 export const GET = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()

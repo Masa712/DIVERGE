@@ -14,8 +14,8 @@ export const GET = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -140,8 +140,8 @@ export const DELETE = withErrorHandler(async (
   request: NextRequest,
   { params }: { params: { id: string } }
 ) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {

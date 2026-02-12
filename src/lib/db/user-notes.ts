@@ -39,7 +39,7 @@ function convertToCamelCase(node: any): ChatNode {
 export async function createUserNote(
   data: CreateUserNoteInput
 ): Promise<ChatNode> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // ユーザー認証確認
   const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -122,7 +122,7 @@ export async function updateUserNote(
   nodeId: string,
   updates: UpdateUserNoteInput
 ): Promise<ChatNode> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // ユーザー認証確認
   const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -197,7 +197,7 @@ export async function updateUserNote(
  * ユーザーノートを削除
  */
 export async function deleteUserNote(nodeId: string): Promise<void> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // ユーザー認証確認
   const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -258,7 +258,7 @@ export async function deleteUserNote(nodeId: string): Promise<void> {
 export async function getSessionUserNotes(
   sessionId: string
 ): Promise<ChatNode[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // ユーザー認証確認
   const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -301,7 +301,7 @@ export async function getSessionUserNotes(
  * ノードIDでユーザーノートを取得
  */
 export async function getUserNoteById(nodeId: string): Promise<ChatNode> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // ユーザー認証確認
   const { data: { user }, error: authError } = await supabase.auth.getUser()

@@ -5,8 +5,8 @@ import { log } from '@/lib/utils/logger'
 
 // GET - Fetch user profile
 export const GET = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -88,8 +88,8 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 
 // PATCH - Update user profile
 export const PATCH = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {

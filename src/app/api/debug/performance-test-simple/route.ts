@@ -5,7 +5,7 @@ import { clearSessionCache, resetPerformanceMetrics } from '@/lib/db/enhanced-co
 
 // Simplified performance test using existing sessions
 async function runSimplePerformanceTest() {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Get existing sessions (first available)
   const { data: sessions, error: sessionsError } = await supabase

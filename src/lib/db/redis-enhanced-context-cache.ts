@@ -32,7 +32,7 @@ interface CacheMetadata {
 
 export class RedisEnhancedContextCache {
   private cache: DistributedCache
-  private supabase = createClient()
+  private supabasePromise: Promise<any>
   private performanceMetrics = {
     hitCount: 0,
     missCount: 0,
@@ -49,6 +49,11 @@ export class RedisEnhancedContextCache {
       maxLocalCacheSize: 50,
       enablePubSub: true,
     })
+    this.supabasePromise = createClient()
+  }
+
+  private async getSupabase() {
+    return await this.supabasePromise
   }
 
   /**
@@ -69,7 +74,8 @@ export class RedisEnhancedContextCache {
       
       // Cache miss - fetch from database
       this.recordMiss()
-      const { data: nodes, error } = await this.supabase
+      const supabase = await this.getSupabase()
+      const { data: nodes, error } = await supabase
         .from('chat_nodes')
         .select('*')
         .eq('session_id', sessionId)
@@ -168,7 +174,8 @@ export class RedisEnhancedContextCache {
     }
     
     // Fall back to database search
-    const { data, error } = await this.supabase
+    const supabase = await this.getSupabase()
+    const { data, error } = await supabase
       .from('chat_nodes')
       .select('id, session_id')
       .or(`id.ilike.%${shortId}`)

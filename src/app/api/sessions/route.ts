@@ -13,8 +13,8 @@ import { log } from '@/lib/utils/logger'
 import { canCreateSession, incrementSessionCount } from '@/lib/billing/usage-tracker'
 
 export const GET = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -92,8 +92,8 @@ export const GET = withErrorHandler(async (request: NextRequest) => {
 })
 
 export const POST = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {

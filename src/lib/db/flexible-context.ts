@@ -75,7 +75,7 @@ export async function buildFlexibleEnhancedContext(
   
   console.log(`🧠 Building flexible context: strategy=${strategy}, priority=${priority}`)
   
-  const supabase = createClient()
+  const supabase = await createClient()
   const messages: Array<{ role: string; content: string }> = []
   let estimatedTokens = 0
   const includedNodes: string[] = []
