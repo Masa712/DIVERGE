@@ -7,18 +7,18 @@ import { log } from '@/lib/utils/logger'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = createClient()
-    
+    const supabase = await createClient()
+
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const nodeId = params.id
+    const { id: nodeId } = await params
     log.info('DELETE request for node', { nodeId })
 
     // First, check if the node exists

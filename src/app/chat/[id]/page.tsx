@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useError } from '@/components/providers/error-provider'
@@ -14,10 +14,11 @@ import { FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
 import { useChatLayout } from '@/contexts/ChatLayoutContext'
 
 interface Props {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
 export default function ChatSessionPage({ params }: Props) {
+  const { id } = use(params)
   const { user, loading } = useAuth()
   const router = useRouter()
   const { showError } = useError()
@@ -64,7 +65,7 @@ export default function ChatSessionPage({ params }: Props) {
   }, [user, loading, router])
 
   useEffect(() => {
-    if (user && params.id) {
+    if (user && id) {
       // Reset states when session changes
       setShowNotFound(false)
       setError(null)
@@ -83,7 +84,7 @@ export default function ChatSessionPage({ params }: Props) {
 
       return () => clearTimeout(timeoutId)
     }
-  }, [user, params.id])
+  }, [user, id])
   
   const fetchUserProfile = async () => {
     if (!user) return
@@ -174,7 +175,7 @@ export default function ChatSessionPage({ params }: Props) {
 
   const fetchSession = async () => {
     try {
-      const response = await fetch(`/api/sessions/${params.id}`)
+      const response = await fetch(`/api/sessions/${id}`)
       if (response.ok) {
         const { data } = await response.json()
         const { session, chatNodes } = data

@@ -49,7 +49,7 @@ async function executeWebSearch(query: string): Promise<WebSearchResponse | null
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser()

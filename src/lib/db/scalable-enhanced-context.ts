@@ -339,7 +339,7 @@ class ScalableEnhancedContextBuilder {
 
   private async getSessionForNode(nodeId: string): Promise<string | null> {
     try {
-      const supabase = createClient()
+      const supabase = await createClient()
       const { data, error } = await supabase
         .from('chat_nodes')
         .select('session_id')

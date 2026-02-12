@@ -5,7 +5,7 @@ import { log } from '@/lib/utils/logger'
 
 // POST - Change password
 export const POST = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()

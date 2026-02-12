@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 export const POST = async (request: NextRequest) => {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   try {
     // First, let's check if the columns exist

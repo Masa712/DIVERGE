@@ -5,7 +5,7 @@ import { clearSessionCache, resetPerformanceMetrics } from '@/lib/db/enhanced-co
 
 // Create a test session with multiple nodes for performance testing
 async function createTestSession() {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Check authentication first
   const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -92,7 +92,7 @@ async function createTestSession() {
 
 // Clean up test session
 async function cleanupTestSession(sessionId: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Delete nodes first (foreign key constraint)
   await supabase

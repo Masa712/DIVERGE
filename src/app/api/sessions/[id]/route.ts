@@ -12,9 +12,9 @@ import { log } from '@/lib/utils/logger'
 
 export const GET = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
@@ -25,7 +25,7 @@ export const GET = withErrorHandler(async (
     )
   }
 
-  const sessionId = params.id
+  const { id: sessionId } = await params
 
   // Get session information with optimized query and selective fields
   const sessionRaw = await executeOptimizedQuery(
@@ -138,9 +138,9 @@ export const GET = withErrorHandler(async (
 
 export const DELETE = withErrorHandler(async (
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Check authentication
   const { data: { user } } = await supabase.auth.getUser()
@@ -151,7 +151,7 @@ export const DELETE = withErrorHandler(async (
     )
   }
 
-  const sessionId = params.id
+  const { id: sessionId } = await params
 
   // Verify session ownership with optimized query
   const ownershipCheck = await executeOptimizedQuery(

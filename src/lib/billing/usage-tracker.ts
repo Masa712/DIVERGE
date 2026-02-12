@@ -15,7 +15,7 @@ export interface UsageData {
  * FIXED: Uses "next reset after now" instead of hardcoded next month
  */
 async function getCurrentUsageQuota(userId: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const now = new Date()
 
   const { data, error } = await supabase
@@ -39,7 +39,7 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
   limit: number
   planId: string
 }> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     // FIXED: Use helper function to get current quota (works for all plan types)
@@ -91,8 +91,8 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
  * Track actual token usage after API call
  */
 export async function trackTokenUsage(usage: UsageData): Promise<boolean> {
-  const supabase = createClient()
-  
+  const supabase = await createClient()
+
   try {
     // Use the database function to safely update token usage
     const { data, error } = await supabase.rpc('update_token_usage', {
@@ -133,7 +133,7 @@ export async function trackTokenUsage(usage: UsageData): Promise<boolean> {
  * Log usage event for analytics and billing
  */
 async function logUsageEvent(usage: UsageData): Promise<void> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   try {
     const { error } = await supabase.from('usage_logs').insert({
@@ -187,7 +187,7 @@ function calculateCost(modelId: string, tokens: number): number {
  * Get user's current subscription plan
  */
 export async function getUserPlan(userId: string): Promise<string> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     // FIXED: Use helper function to get current quota (works for all plan types)
@@ -229,7 +229,7 @@ export async function canUseWebSearch(userId: string): Promise<{
   currentUsage: number
   limit: number
 }> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     // Use database function to check web search quota
@@ -260,7 +260,7 @@ export async function canUseWebSearch(userId: string): Promise<{
  * Increment web search usage counter
  */
 export async function trackWebSearchUsage(userId: string): Promise<boolean> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     // Use database function to increment web search usage
@@ -299,7 +299,7 @@ export async function canCreateSession(userId: string): Promise<{
   currentSessions: number
   limit: number
 }> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     // FIXED: Use helper function to get current quota (works for all plan types)
@@ -359,7 +359,7 @@ export async function canCreateSession(userId: string): Promise<{
  * Increment session count for the user
  */
 export async function incrementSessionCount(userId: string): Promise<boolean> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   try {
     // FIXED: Use helper function to get current quota (works for all plan types)

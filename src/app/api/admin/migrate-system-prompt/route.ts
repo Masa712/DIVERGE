@@ -8,7 +8,7 @@ import {
 
 // POST: Apply system prompt preferences migration
 export const POST = withErrorHandler(async (request: NextRequest) => {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   // Check authentication (admin only)
   const { data: { user } } = await supabase.auth.getUser()

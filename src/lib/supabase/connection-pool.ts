@@ -91,7 +91,7 @@ class SupabaseConnectionPool {
       
       // Create new connection if pool not at capacity
       if (this.serverPool.size < this.config.maxConnections) {
-        const client = createServerClient()
+        const client = await createServerClient()
         connection = {
           client,
           createdAt: Date.now(),
@@ -112,11 +112,11 @@ class SupabaseConnectionPool {
       
       // Pool at capacity, wait for available connection or create fallback
       console.warn(`⚠️ Connection pool at capacity (${this.config.maxConnections}), creating fallback connection`)
-      return createServerClient() // Fallback to direct creation
-      
+      return await createServerClient() // Fallback to direct creation
+
     } catch (error) {
       console.error('Failed to get pooled connection:', error)
-      return createServerClient() // Fallback
+      return await createServerClient() // Fallback
     }
   }
 

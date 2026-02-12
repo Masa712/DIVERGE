@@ -60,7 +60,7 @@ export { extractNodeReferences } from '@/lib/utils/node-references'
  * Get sibling nodes (same parent, different branches)
  */
 export async function getSiblingNodes(nodeId: string): Promise<ChatNode[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   debugLog(`🔍 Getting siblings for nodeId: ${nodeId}`)
   
@@ -186,11 +186,11 @@ export async function buildEnhancedContext(
     model = 'gpt-4o' // NEW: Default model for token calculations
   } = options
   
-  const supabase = createClient()
+  const supabase = await createClient()
   const messages: Array<{ role: string; content: string }> = []
   let estimatedTokens = 0 // Legacy estimation for comparison
   const includedNodes: string[] = []
-  
+
   console.log(`🧠 Building enhanced context for ${nodeId} (model: ${model}, maxTokens: ${maxTokens}, includeSiblings: ${includeSiblings})`)
   
   // 1. Get ancestor chain - efficient with RPC

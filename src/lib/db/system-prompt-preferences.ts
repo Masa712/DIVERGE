@@ -18,7 +18,7 @@ export interface UserSystemPromptPreferences {
 export async function getUserSystemPromptPreferences(
   userId: string
 ): Promise<UserSystemPromptPreferences | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   const { data, error } = await supabase
     .from('user_profiles')
@@ -50,7 +50,7 @@ export async function updateUserSystemPromptPreferences(
   userId: string,
   preferences: Partial<Omit<UserSystemPromptPreferences, 'user_id'>>
 ): Promise<boolean> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   console.log('Updating system prompt preferences:', { userId, preferences })
   
@@ -117,7 +117,7 @@ export async function generateUserSystemPrompt(
 export async function initializeDefaultSystemPromptPreferences(
   userId: string
 ): Promise<boolean> {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   const { error } = await supabase
     .from('user_profiles')

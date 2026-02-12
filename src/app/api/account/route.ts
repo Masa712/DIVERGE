@@ -12,7 +12,7 @@ interface SubscriptionRecord {
 }
 
 export const DELETE = withErrorHandler(async (_request: NextRequest) => {
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
     error: authError
