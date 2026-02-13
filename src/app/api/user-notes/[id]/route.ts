@@ -15,10 +15,10 @@ import { UpdateUserNoteInput } from '@/types'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const note = await getUserNoteById(params.id)
+    const note = await getUserNoteById((await params).id)
     return NextResponse.json(note)
   } catch (error) {
     console.error('Failed to fetch user note:', error)
@@ -41,7 +41,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const body: UpdateUserNoteInput = await request.json()
@@ -54,7 +54,7 @@ export async function PUT(
       )
     }
 
-    const updated = await updateUserNote(params.id, body)
+    const updated = await updateUserNote((await params).id, body)
 
     return NextResponse.json(updated)
   } catch (error) {
@@ -78,10 +78,10 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await deleteUserNote(params.id)
+    await deleteUserNote((await params).id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
