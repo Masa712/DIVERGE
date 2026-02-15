@@ -809,15 +809,15 @@ function CompactTreeViewInner({
         connectionLineType={ConnectionLineType.SmoothStep}
         fitView={false}
         fitViewOptions={fitViewOptions}
-        attributionPosition="bottom-left"
+        proOptions={{ hideAttribution: true }}
         className="bg-transparent"
         minZoom={shouldUseTouchOptimizations ? 0.5 : 0.1}
         maxZoom={shouldUseTouchOptimizations ? 1.5 : 2}
         // Set a reasonable default to avoid the jump from top-left
-        defaultViewport={{ 
+        defaultViewport={{
           x: 900,  // Approximate center position
           y: 250,  // Approximate center position
-          zoom: 0.8 
+          zoom: 0.8
         }}
         onPaneClick={onBackgroundClick}
         onInit={handleInit}
