@@ -14,8 +14,8 @@ export function AnimatedBackground({
   position = 'fixed'
 }: AnimatedBackgroundProps) {
   // Generate unique IDs to avoid conflicts when multiple instances exist
-  // Use useState to ensure same ID on server and client (hydration fix)
-  const [uniqueId] = React.useState(() => Math.random().toString(36).substring(2, 9))
+  // Use useId() to ensure same ID on server and client (hydration fix)
+  const uniqueId = React.useId()
   
   return (
     <div
