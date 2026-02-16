@@ -13,6 +13,10 @@ interface Props {
   availableModels: ModelConfig[]
   currentNodeId?: string
   currentNodePrompt?: string
+  isRightSidebarOpen?: boolean
+  rightSidebarWidth?: number
+  isLeftSidebarCollapsed?: boolean
+  isLeftSidebarMobileOpen?: boolean
 }
 
 export function GuestChatInput({
@@ -23,6 +27,10 @@ export function GuestChatInput({
   availableModels,
   currentNodeId,
   currentNodePrompt,
+  isRightSidebarOpen = false,
+  rightSidebarWidth = 400,
+  isLeftSidebarCollapsed = false,
+  isLeftSidebarMobileOpen = false,
 }: Props) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -65,8 +73,28 @@ export function GuestChatInput({
     adjustTextareaHeight()
   }, [message])
 
+  // Calculate offsets when sidebars are open
+  // Right sidebar: dynamic width + 30px (right margin) + 30px (padding) = rightSidebarWidth + 60px from right edge
+  const rightOffset = rightSidebarWidth + 60 // sidebar width + margins
+  // Left sidebar: 64px (collapsed) or 256px (expanded) + 30px margin + 30px padding
+  const leftOffset = isLeftSidebarCollapsed ? 124 : 410 // 94px or 380px sidebar + 30px margin + 30px
+
+  // Hide input area on mobile/tablet when any sidebar is open
+  const shouldHideOnMobile = typeof window !== 'undefined' && window.innerWidth < 1024
+  if (shouldHideOnMobile && (isRightSidebarOpen || isLeftSidebarMobileOpen)) {
+    return null
+  }
+
   return (
-    <div className="fixed bottom-6 left-0 right-0 z-40 px-4">
+    <div
+      className="fixed bottom-6 z-40 px-4"
+      style={{
+        left: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${leftOffset}px` : 0,
+        right: isRightSidebarOpen && typeof window !== 'undefined' && window.innerWidth >= 1024
+          ? `${rightOffset}px`
+          : 0
+      }}
+    >
       <div className="max-w-4xl mx-auto">
         <div className="glass-test glass-blur rounded-2xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
           <div className="p-4">

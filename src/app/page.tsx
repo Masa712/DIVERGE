@@ -9,6 +9,7 @@ import { GuestChatInput } from '@/components/guest/guest-chat-input'
 import { GuestLimitBanner } from '@/components/guest/guest-limit-banner'
 import { SignUpModal } from '@/components/guest/sign-up-modal'
 import { GuestNodeSidebar } from '@/components/guest/guest-node-sidebar'
+import { GuestLeftSidebar } from '@/components/guest/guest-left-sidebar'
 import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { GuestNode, convertGuestNodesToTreeFormat } from '@/lib/guest/guest-session'
 import { ModelId, ModelConfig, ChatNode } from '@/types'
@@ -54,6 +55,8 @@ export default function GuestChatPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [selectedNodeForDetail, setSelectedNodeForDetail] = useState<ChatNode | null>(null)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(400)
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
+  const [isLeftSidebarMobileOpen, setIsLeftSidebarMobileOpen] = useState(false)
 
   // 認証済みユーザーは/chatにリダイレクト
   useEffect(() => {
@@ -312,6 +315,14 @@ export default function GuestChatPage() {
     <div className="h-screen flex flex-col relative">
       <AnimatedBackground opacity={0.4} />
 
+      {/* Left Sidebar */}
+      <GuestLeftSidebar
+        isCollapsed={isLeftSidebarCollapsed}
+        onToggleCollapse={() => setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)}
+        onSignUpClick={() => setShowSignUpModal(true)}
+        onMobileOpenChange={setIsLeftSidebarMobileOpen}
+      />
+
       {/* ヘッダー */}
       <header className="fixed top-0 left-0 right-0 z-50 pt-4 pb-3">
         <div className="container mx-auto px-4">
@@ -388,6 +399,7 @@ export default function GuestChatPage() {
               currentNodeId={currentNodeId}
               onNodeClick={handleNodeClick}
               onBackgroundClick={handleBackgroundClick}
+              isLeftSidebarCollapsed={isLeftSidebarCollapsed}
               isRightSidebarOpen={isSidebarOpen}
               rightSidebarWidth={rightSidebarWidth}
             />
@@ -404,6 +416,10 @@ export default function GuestChatPage() {
         availableModels={GUEST_MODELS}
         currentNodeId={currentNodeId}
         currentNodePrompt={guestNodes.find((n: GuestNode) => n.id === currentNodeId)?.prompt}
+        isRightSidebarOpen={isSidebarOpen}
+        rightSidebarWidth={rightSidebarWidth}
+        isLeftSidebarCollapsed={isLeftSidebarCollapsed}
+        isLeftSidebarMobileOpen={isLeftSidebarMobileOpen}
       />
 
       {/* サインアップモーダル */}

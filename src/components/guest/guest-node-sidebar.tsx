@@ -147,7 +147,7 @@ export function GuestNodeSidebar({ node, allNodes, isOpen, onClose, onWidthChang
           transition-all duration-300
 
           /* Desktop positioning */
-          lg:right-[30px] lg:top-[90px] lg:bottom-[120px] lg:left-auto lg:w-auto lg:h-auto lg:max-h-none lg:max-w-none lg:translate-x-0 lg:translate-y-0
+          lg:right-[30px] lg:top-[90px] lg:bottom-6 lg:left-auto lg:w-auto lg:h-auto lg:max-h-none lg:max-w-none lg:translate-x-0 lg:translate-y-0
 
           /* Tablet/Mobile centered positioning */
           left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
