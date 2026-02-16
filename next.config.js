@@ -3,7 +3,6 @@ const { withSentryConfig } = require('@sentry/nextjs')
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   webpack: (config, { isServer }) => {
     // Exclude tiktoken from server-side bundling to prevent WASM issues in Vercel
     if (isServer) {
