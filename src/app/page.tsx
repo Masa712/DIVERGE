@@ -325,11 +325,11 @@ export default function GuestChatPage() {
 
       {/* ヘッダー */}
       <header className="fixed top-0 left-0 right-0 z-50 pt-4 pb-3">
-        <div className="container mx-auto px-4">
-          <div className="glass-nav rounded-full px-6 py-2.5 shadow-xl flex items-center justify-between max-w-4xl mx-auto">
+        <div className="container mx-auto px-2 sm:px-4">
+          <div className="glass-nav rounded-full px-3 sm:px-6 py-2 sm:py-2.5 shadow-xl flex items-center justify-between max-w-4xl mx-auto">
             {/* Logo */}
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-lg overflow-hidden">
+            <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden">
                 <Image
                   src="/android-chrome-512x512.png"
                   alt="Diverge Logo"
@@ -338,29 +338,30 @@ export default function GuestChatPage() {
                   className="w-full h-full object-cover"
                 />
               </div>
-              <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <span className="text-base sm:text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 Diverge
               </span>
             </div>
 
             {/* Remaining Nodes Counter */}
-            <div className="flex items-center space-x-2 text-sm">
-              <span className="text-gray-500">
-                {remainingNodes}/{limits.maxNodesPerSession} messages remaining
+            <div className="flex items-center text-xs sm:text-sm mx-2 flex-shrink min-w-0">
+              <span className="text-gray-500 truncate">
+                <span className="hidden sm:inline">{remainingNodes}/{limits.maxNodesPerSession} messages remaining</span>
+                <span className="sm:hidden">{remainingNodes}/{limits.maxNodesPerSession}</span>
               </span>
             </div>
 
             {/* Auth Buttons */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <Link
                 href="/auth"
-                className="text-gray-700 hover:text-gray-900 font-medium transition-colors text-sm"
+                className="text-gray-700 hover:text-gray-900 font-medium transition-colors text-xs sm:text-sm"
               >
                 Sign In
               </Link>
               <Link
                 href="/auth?tab=signup"
-                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2 rounded-full font-semibold shadow-lg transition-all transform hover:scale-105 text-sm"
+                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-semibold shadow-lg transition-all transform hover:scale-105 text-xs sm:text-sm whitespace-nowrap"
               >
                 Sign Up
               </Link>
@@ -379,15 +380,15 @@ export default function GuestChatPage() {
       {/* メインコンテンツ - ツリービュー */}
       <main className="absolute inset-0 z-10">
         {chatNodes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full">
+          <div className="flex flex-col items-center justify-center h-full px-6">
             <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold mb-4 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
                 Welcome to Diverge
               </h1>
-              <p className="text-gray-600 mb-2">
+              <p className="text-sm sm:text-base text-gray-600 mb-2">
                 Experience AI conversation branching - try it free, no sign-up required.
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-xs sm:text-sm text-gray-500">
                 You can send up to {limits.maxNodesPerSession} messages as a guest.
               </p>
             </div>

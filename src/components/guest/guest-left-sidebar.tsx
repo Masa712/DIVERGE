@@ -71,29 +71,22 @@ export function GuestLeftSidebar({ isCollapsed, onToggleCollapse, onSignUpClick,
         `}
       >
           {/* Header */}
-          <div className="px-6 pt-9 pb-6 border-b border-white/10 relative">
-            {/* Logo/Title - Centered */}
+          <div className="px-6 pt-9 pb-6 border-b border-white/10">
+            {/* Logo/Title - Centered, clickable to expand when collapsed */}
             <div className="text-center">
               {isCollapsed ? (
-                <h1 className="text-2xl font-bold text-gray-900">
+                <button
+                  onClick={onToggleCollapse}
+                  className="text-2xl font-bold text-gray-900 hover:text-gray-600 transition-colors cursor-pointer"
+                  title="Expand sidebar"
+                >
                   D
-                </h1>
+                </button>
               ) : (
                 <h1 className="text-4xl font-bold text-gray-900">
                   Diverge
                 </h1>
               )}
-            </div>
-
-            {/* Toggle Button - Positioned absolutely */}
-            <div className="absolute top-4 right-4">
-              <button
-                onClick={onToggleCollapse}
-                className="p-2 rounded-lg text-gray-700 hover:bg-white/10 transition-all duration-200 lg:block hidden"
-                title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              >
-                <Menu className="w-5 h-5" />
-              </button>
             </div>
           </div>
 
@@ -128,7 +121,7 @@ export function GuestLeftSidebar({ isCollapsed, onToggleCollapse, onSignUpClick,
               `}
             >
               <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2'}`}>
-                <UserPlusIcon className="w-5 h-5" />
+                <UserPlusIcon className={isCollapsed ? 'w-7 h-7' : 'w-5 h-5'} />
                 {!isCollapsed && <span>Sign Up Free</span>}
               </div>
             </button>
@@ -189,8 +182,8 @@ export function GuestLeftSidebar({ isCollapsed, onToggleCollapse, onSignUpClick,
           </div>
 
           {/* Footer Links */}
-          <div className={`p-4 border-t border-white/20 ${isCollapsed ? 'text-center' : ''}`}>
-            {!isCollapsed ? (
+          {!isCollapsed && (
+            <div className="p-4 border-t border-white/20">
               <div className="space-y-2">
                 <Link
                   href="/terms"
@@ -208,10 +201,8 @@ export function GuestLeftSidebar({ isCollapsed, onToggleCollapse, onSignUpClick,
                   © 2026 Diverge
                 </p>
               </div>
-            ) : (
-              <p className="text-xs text-gray-400">©</p>
-            )}
-          </div>
+            </div>
+          )}
       </aside>
     </>
   )
