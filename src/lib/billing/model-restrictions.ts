@@ -13,6 +13,7 @@ export const FREE_PLAN_MODELS: ModelId[] = [
   // Ultra low-cost models (< $1/M tokens)
   'deepseek/deepseek-v3.2', // DeepSeek V3.2 (163K context, $0.25 input)
   'deepseek/deepseek-chat-v3.1', // DeepSeek V3.1 (164K context, $0.27 input)
+  'google/gemini-3.1-flash-lite-preview', // Gemini 3.1 Flash Lite (1M context, $0.25 input)
   'google/gemini-3-flash-preview', // Gemini 3 Flash (1M context, $0.50 input)
   'google/gemini-2.5-flash', // Gemini Flash (1M context, $0.25 input)
   'openai/gpt-5-nano', // GPT-5 Nano (400K context, $0.05 input)
@@ -30,9 +31,11 @@ export const FREE_PLAN_MODELS: ModelId[] = [
  * These are the premium models with higher costs
  */
 export const ADVANCED_MODELS: ModelId[] = [
+  'openai/gpt-5.4-pro', // GPT-5.4 Pro
   'openai/gpt-5.2-pro', // GPT-5.2 Pro
   'openai/gpt-5', // GPT-5
   'openai/gpt-5-pro', // GPT-5 Pro
+  'anthropic/claude-opus-4.6', // Claude Opus 4.6
   'anthropic/claude-opus-4.5', // Claude Opus 4.5
   'anthropic/claude-opus-4.1', // Claude Opus 4.1
   'anthropic/claude-opus-4', // Claude Opus 4
@@ -48,6 +51,8 @@ export const MODEL_TIERS = {
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5', // $5/$25
+    'anthropic/claude-opus-4.6', // $5/$25
+    'openai/gpt-5.4-pro', // $30/$180
     'openai/gpt-5.2-pro', // $21/$168
     'openai/gpt-5', // $20/$60
     'openai/gpt-5-pro', // $15/$120
@@ -60,6 +65,8 @@ export const MODEL_TIERS = {
     'openai/gpt-4.1',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5', // $3/$15
+    'anthropic/claude-sonnet-4.6', // $3/$15
+    'google/gemini-3.1-pro-preview', // $2/$12
     'google/gemini-3-pro-preview', // $2/$12
     'google/gemini-2.5-pro',
     'x-ai/grok-3',
@@ -70,6 +77,9 @@ export const MODEL_TIERS = {
   low: [
     ...FREE_PLAN_MODELS,
     'anthropic/claude-haiku-4.5', // $1/$5
+    'openai/gpt-5.4', // $2.50/$15
+    'openai/gpt-5.3-chat', // $1.75/$14
+    'openai/gpt-5.3-codex', // $1.75/$14
     'openai/gpt-5.2', // $1.75/$14
     'openai/gpt-5.1', // $1.25/$10
     'openai/gpt-5-mini', // $8/$24
