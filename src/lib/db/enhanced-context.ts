@@ -190,7 +190,7 @@ export async function buildEnhancedContext(
   const messages: Array<{ role: string; content: string }> = []
   let estimatedTokens = 0 // Legacy estimation for comparison
   const includedNodes: string[] = []
-  
+
   console.log(`🧠 Building enhanced context for ${nodeId} (model: ${model}, maxTokens: ${maxTokens}, includeSiblings: ${includeSiblings})`)
   
   // 1. Get ancestor chain - efficient with RPC

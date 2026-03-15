@@ -92,7 +92,7 @@ export async function checkUserQuota(userId: string, estimatedTokens: number): P
  */
 export async function trackTokenUsage(usage: UsageData): Promise<boolean> {
   const supabase = await createClient()
-  
+
   try {
     // Use the database function to safely update token usage
     const { data, error } = await supabase.rpc('update_token_usage', {

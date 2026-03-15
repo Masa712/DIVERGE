@@ -11,7 +11,7 @@ export async function createChatNode(data: {
   maxTokens?: number
 }): Promise<ChatNode> {
   const supabase = await createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Unauthorized')
 
@@ -119,7 +119,7 @@ export async function updateChatNode(
   }>
 ): Promise<void> {
   const supabase = await createClient()
-  
+
   // Convert camelCase to snake_case for database columns
   const dbUpdates: any = {}
   if (updates.response !== undefined) dbUpdates.response = updates.response

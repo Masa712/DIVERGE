@@ -2,6 +2,10 @@ export type ModelProvider = 'OpenAI' | 'Anthropic' | 'Google' | 'xAI' | 'DeepSee
 
 export type ModelId =
   // OpenAI Latest Models via OpenRouter
+  | 'openai/gpt-5.4-pro'
+  | 'openai/gpt-5.4'
+  | 'openai/gpt-5.3-chat'
+  | 'openai/gpt-5.3-codex'
   | 'openai/gpt-5.2'
   | 'openai/gpt-5.2-pro'
   | 'openai/gpt-5.1'
@@ -14,6 +18,8 @@ export type ModelId =
   | 'openai/gpt-4.1'
   | 'openai/gpt-4o-2024-11-20'
   // Anthropic Latest Models via OpenRouter
+  | 'anthropic/claude-opus-4.6'
+  | 'anthropic/claude-sonnet-4.6'
   | 'anthropic/claude-opus-4.5'
   | 'anthropic/claude-haiku-4.5'
   | 'anthropic/claude-sonnet-4.5'
@@ -21,6 +27,8 @@ export type ModelId =
   | 'anthropic/claude-opus-4'
   | 'anthropic/claude-sonnet-4'
   // Google Latest Models via OpenRouter
+  | 'google/gemini-3.1-pro-preview'
+  | 'google/gemini-3.1-flash-lite-preview'
   | 'google/gemini-3-pro-preview'
   | 'google/gemini-3-flash-preview'
   | 'google/gemini-2.5-flash'
@@ -52,6 +60,20 @@ export interface ModelConfig {
 // Available models via OpenRouter
 export const AVAILABLE_MODELS: ModelConfig[] = [
   // Anthropic Latest Models
+  {
+    id: 'anthropic/claude-opus-4.6',
+    name: 'Claude Opus 4.6',
+    provider: 'Anthropic',
+    contextLength: 1000000,
+    costPerMillionTokens: { input: 5, output: 25 }
+  },
+  {
+    id: 'anthropic/claude-sonnet-4.6',
+    name: 'Claude Sonnet 4.6',
+    provider: 'Anthropic',
+    contextLength: 1000000,
+    costPerMillionTokens: { input: 3, output: 15 }
+  },
   {
     id: 'anthropic/claude-opus-4.5',
     name: 'Claude Opus 4.5',
@@ -111,6 +133,20 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   },
   // Google Latest Models
   {
+    id: 'google/gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro',
+    provider: 'Google',
+    contextLength: 1048576,
+    costPerMillionTokens: { input: 2, output: 12 }
+  },
+  {
+    id: 'google/gemini-3.1-flash-lite-preview',
+    name: 'Gemini 3.1 Flash Lite',
+    provider: 'Google',
+    contextLength: 1048576,
+    costPerMillionTokens: { input: 0.25, output: 1.50 }
+  },
+  {
     id: 'google/gemini-3-pro-preview',
     name: 'Gemini 3 Pro',
     provider: 'Google',
@@ -139,6 +175,34 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     costPerMillionTokens: { input: 0.25, output: 0.75 }
   },
   // OpenAI Latest Models
+  {
+    id: 'openai/gpt-5.4-pro',
+    name: 'GPT-5.4 Pro',
+    provider: 'OpenAI',
+    contextLength: 1050000,
+    costPerMillionTokens: { input: 30, output: 180 }
+  },
+  {
+    id: 'openai/gpt-5.4',
+    name: 'GPT-5.4',
+    provider: 'OpenAI',
+    contextLength: 1050000,
+    costPerMillionTokens: { input: 2.50, output: 15 }
+  },
+  {
+    id: 'openai/gpt-5.3-chat',
+    name: 'GPT-5.3 Chat',
+    provider: 'OpenAI',
+    contextLength: 128000,
+    costPerMillionTokens: { input: 1.75, output: 14 }
+  },
+  {
+    id: 'openai/gpt-5.3-codex',
+    name: 'GPT-5.3 Codex',
+    provider: 'OpenAI',
+    contextLength: 400000,
+    costPerMillionTokens: { input: 1.75, output: 14 }
+  },
   {
     id: 'openai/gpt-5.2',
     name: 'GPT 5.2',

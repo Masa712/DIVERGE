@@ -25,7 +25,7 @@ export const GET = withErrorHandler(async (
     )
   }
 
-  const sessionId = (await params).id
+  const { id: sessionId } = await params
 
   // Get session information with optimized query and selective fields
   const sessionRaw = await executeOptimizedQuery(
@@ -151,7 +151,7 @@ export const DELETE = withErrorHandler(async (
     )
   }
 
-  const sessionId = (await params).id
+  const { id: sessionId } = await params
 
   // Verify session ownership with optimized query
   const ownershipCheck = await executeOptimizedQuery(

@@ -74,7 +74,7 @@ export async function buildFlexibleEnhancedContext(
   const adaptiveTokens = options.adaptiveTokens ?? true
   
   console.log(`🧠 Building flexible context: strategy=${strategy}, priority=${priority}`)
-  
+
   const supabase = await createClient()
   const messages: Array<{ role: string; content: string }> = []
   let estimatedTokens = 0

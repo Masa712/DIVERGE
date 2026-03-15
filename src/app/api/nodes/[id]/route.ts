@@ -18,7 +18,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const nodeId = (await params).id
+    const { id: nodeId } = await params
     log.info('DELETE request for node', { nodeId })
 
     // First, check if the node exists
