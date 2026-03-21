@@ -28,8 +28,12 @@ import {
   canUseWebSearch,
   trackWebSearchUsage,
   getUserPlan,
-  canUseAdvancedModels
+  canUseAdvancedModels,
+  checkUserQuota,
+  trackTokenUsage,
+  estimateTokens
 } from '@/lib/billing/usage-tracker'
+import { estimateCostUsd, formatCreditUsage } from '@/lib/billing/cost-calculator'
 import {
   isModelAvailableForFreePlan,
   isAdvancedModel,
@@ -351,7 +355,18 @@ async function processAIResponseWithTools(
               'completed'
             )
 
-            log.info('Function calling completed successfully', { 
+            // Track token usage for billing
+            await trackTokenUsage({
+              userId,
+              tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
+              promptTokens: usage.prompt_tokens || 0,
+              completionTokens: usage.completion_tokens || 0,
+              modelId: model,
+              sessionId,
+              nodeId: chatNode.id
+            }).catch(err => log.error('Failed to track token usage (with-tools follow-up)', err))
+
+            log.info('Function calling completed successfully', {
               nodeId: chatNode.id,
               toolCallsCount: toolCalls.length,
               finalResponseLength: finalContent.length
@@ -370,9 +385,20 @@ async function processAIResponseWithTools(
             'completed'
           )
 
-          log.info('Direct response completed', { 
+          // Track token usage for billing
+          await trackTokenUsage({
+            userId,
+            tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
+            promptTokens: usage.prompt_tokens || 0,
+            completionTokens: usage.completion_tokens || 0,
+            modelId: model,
+            sessionId,
+            nodeId: chatNode.id
+          }).catch(err => log.error('Failed to track token usage (with-tools direct)', err))
+
+          log.info('Direct response completed', {
             nodeId: chatNode.id,
-            responseLength: finalContent.length 
+            responseLength: finalContent.length
           })
         }
 
@@ -426,9 +452,20 @@ async function processAIResponseWithTools(
         'completed'
       )
 
-      log.info('Normal chat completed', { 
+      // Track token usage for billing
+      await trackTokenUsage({
+        userId,
+        tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
+        promptTokens: usage.prompt_tokens || 0,
+        completionTokens: usage.completion_tokens || 0,
+        modelId: model,
+        sessionId,
+        nodeId: chatNode.id
+      }).catch(err => log.error('Failed to track token usage (with-tools normal)', err))
+
+      log.info('Normal chat completed', {
         nodeId: chatNode.id,
-        responseLength: finalContent.length 
+        responseLength: finalContent.length
       })
     }
 
@@ -668,6 +705,27 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
           { status: 403 }
         )
       }
+    }
+
+    // Cost-based quota check
+    const estimatedInputTokens = estimateTokens(messages[messages.length - 1]?.content || '')
+    const estimatedCost = estimateCostUsd(model, estimatedInputTokens, max_tokens || 4000)
+    const quotaCheck = await checkUserQuota(user.id, estimatedCost)
+    if (!quotaCheck.allowed) {
+      const quotaExceededMessage = quotaCheck.costLimit === -1
+        ? 'Usage limit exceeded. Please contact support.'
+        : `Monthly credit limit reached (${formatCreditUsage(quotaCheck.currentCostUsed, quotaCheck.costLimit)} credits). Please upgrade your plan or wait for next month's reset.`
+      return NextResponse.json(
+        {
+          error: quotaExceededMessage,
+          quota: {
+            costUsed: quotaCheck.currentCostUsed,
+            costLimit: quotaCheck.costLimit,
+            plan: quotaCheck.planId
+          }
+        },
+        { status: 429 }
+      )
     }
 
     // Fetch user profile for defaults if not provided

@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { OpenRouterClient } from '@/lib/openrouter/client'
 import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
+import { checkUserQuota, trackTokenUsage, estimateTokens } from '@/lib/billing/usage-tracker'
+import { estimateCostUsd, formatCreditUsage } from '@/lib/billing/cost-calculator'
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +32,27 @@ export async function POST(request: NextRequest) {
       return new Response(
         JSON.stringify({ error: 'Messages and model are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Cost-based quota check
+    const estimatedInputTokens = estimateTokens(messages[messages.length - 1]?.content || '')
+    const estimatedCost = estimateCostUsd(model, estimatedInputTokens, max_tokens || 1000)
+    const quotaCheck = await checkUserQuota(user.id, estimatedCost)
+    if (!quotaCheck.allowed) {
+      const quotaExceededMessage = quotaCheck.costLimit === -1
+        ? 'Usage limit exceeded. Please contact support.'
+        : `Monthly credit limit reached (${formatCreditUsage(quotaCheck.currentCostUsed, quotaCheck.costLimit)} credits). Please upgrade your plan or wait for next month's reset.`
+      return new Response(
+        JSON.stringify({
+          error: quotaExceededMessage,
+          quota: {
+            costUsed: quotaCheck.currentCostUsed,
+            costLimit: quotaCheck.costLimit,
+            plan: quotaCheck.planId
+          }
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
@@ -107,6 +130,18 @@ export async function POST(request: NextRequest) {
               response_tokens: tokenCount, // Approximate token count
             })
             .eq('id', chatNode.id)
+
+          // Track token usage for billing (approximate - stream doesn't give exact token counts)
+          const estimatedPromptTokens = estimateTokens(messages[messages.length - 1]?.content || '')
+          await trackTokenUsage({
+            userId: user.id,
+            tokensUsed: estimatedPromptTokens + tokenCount,
+            promptTokens: estimatedPromptTokens,
+            completionTokens: tokenCount,
+            modelId: model,
+            sessionId,
+            nodeId: chatNode.id
+          }).catch(err => console.error('Failed to track token usage (stream)', err))
 
           // Send completion signal
           const doneData = JSON.stringify({ 

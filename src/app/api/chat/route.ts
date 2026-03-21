@@ -19,6 +19,7 @@ import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimiz
 import { log } from '@/lib/utils/logger'
 import { tavilyClient } from '@/lib/tavily'
 import { checkUserQuota, trackTokenUsage, canUseAdvancedModels, estimateTokens, canUseWebSearch, trackWebSearchUsage, getUserPlan } from '@/lib/billing/usage-tracker'
+import { estimateCostUsd, formatCreditUsage } from '@/lib/billing/cost-calculator'
 import { isModelAvailableForFreePlan, isAdvancedModel, getModelAccessErrorMessage, FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
 
 // Background processing function for AI responses
@@ -193,6 +194,7 @@ Based on these search results and the conversation context, please provide an in
     
     // High-performance and reasoning models need more time (2-4 minutes typical)
     const timeoutMs = (() => {
+      if (model.includes('gpt-5') && model.includes('pro')) return 240000 // 4 minutes for GPT-5 Pro models (deep reasoning)
       if (model.startsWith('x-ai/grok-4')) return 150000 // 2.5 minutes for all Grok-4 variants
       if (model.startsWith('deepseek/')) return 120000 // 2 minutes for DeepSeek models (large 236B params)
       if (model.startsWith('openai/o1') || model.includes('gpt-5')) return 120000 // 2 minutes for GPT-5 models
@@ -264,18 +266,22 @@ Based on these search results and the conversation context, please provide an in
 
     // Track token usage for billing
     if (usage) {
-      const totalTokens = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0)
+      const promptTokens = usage.prompt_tokens || 0
+      const completionTokens = usage.completion_tokens || 0
+      const totalTokens = promptTokens + completionTokens
       log.info('Attempting to track token usage', {
         userId,
         totalTokens,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
+        promptTokens,
+        completionTokens,
         modelId: model
       })
 
       const tracked = await trackTokenUsage({
         userId,
         tokensUsed: totalTokens,
+        promptTokens,
+        completionTokens,
         modelId: model,
         sessionId,
         nodeId: chatNode.id
@@ -468,22 +474,23 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     }
   }
 
-  // Estimate token usage for quota check  
-  const estimatedTokens = estimateTokens(messages[messages.length - 1]?.content || '') + (max_tokens || 4000)
-  
-  // Check user quota before processing
-  const quotaCheck = await checkUserQuota(user.id, estimatedTokens)
+  // Estimate cost for quota check
+  const estimatedInputTokens = estimateTokens(messages[messages.length - 1]?.content || '')
+  const estimatedCost = estimateCostUsd(model, estimatedInputTokens, max_tokens || 4000)
+
+  // Check user cost budget before processing
+  const quotaCheck = await checkUserQuota(user.id, estimatedCost)
   if (!quotaCheck.allowed) {
-    const quotaExceededMessage = quotaCheck.limit === -1 
+    const quotaExceededMessage = quotaCheck.costLimit === -1
       ? 'An error occurred while checking your usage quota.'
-      : `Monthly token limit reached (${quotaCheck.currentUsage.toLocaleString()}/${quotaCheck.limit.toLocaleString()}). Please upgrade your plan or wait for next month's reset.`
-    
+      : `Monthly credit limit reached (${formatCreditUsage(quotaCheck.currentCostUsed, quotaCheck.costLimit)} credits). Please upgrade your plan or wait for next month's reset.`
+
     return NextResponse.json(
-      { 
+      {
         error: quotaExceededMessage,
         quota: {
-          used: quotaCheck.currentUsage,
-          limit: quotaCheck.limit,
+          costUsed: quotaCheck.currentCostUsed,
+          costLimit: quotaCheck.costLimit,
           plan: quotaCheck.planId
         }
       },

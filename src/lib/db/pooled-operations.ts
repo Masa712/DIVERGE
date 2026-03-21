@@ -7,6 +7,7 @@ import { withPooledConnection } from '@/lib/supabase/connection-pool'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ModelId } from '@/types'
 import { createAppError, classifyDatabaseError, ErrorCategory } from '@/lib/errors/error-handler'
+import { calculateCostUsd } from '@/lib/billing/cost-calculator'
 
 /**
  * Get parent node depth using pooled connection
@@ -167,7 +168,7 @@ export async function updateChatNodeResponse(
         status,
         prompt_tokens: usage?.prompt_tokens || 0,
         response_tokens: usage?.completion_tokens || 0,
-        cost_usd: calculateCost(model, usage),
+        cost_usd: calculateCostUsd(model, usage?.prompt_tokens || 0, usage?.completion_tokens || 0),
         metadata: existingNode?.metadata || {}, // Preserve existing metadata
       }
       
@@ -314,23 +315,3 @@ export async function getNodesByIdsPooled(nodeIds: string[]): Promise<any[]> {
   }, 'batch_nodes')
 }
 
-// Helper function to calculate cost (keeping existing logic)
-function calculateCost(model: string, usage?: { prompt_tokens: number; completion_tokens: number }) {
-  if (!usage) return 0
-
-  const costMap: Record<string, { input: number; output: number }> = {
-    'openai/gpt-4o': { input: 5, output: 15 },
-    'openai/gpt-4-turbo': { input: 10, output: 30 },
-    'openai/gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-    'anthropic/claude-3.5-sonnet': { input: 3, output: 15 },
-    'anthropic/claude-3-opus': { input: 15, output: 75 },
-    'google/gemini-pro': { input: 0.5, output: 1.5 },
-    'meta-llama/llama-3.1-70b-instruct': { input: 0.8, output: 0.8 },
-  }
-
-  const modelCost = costMap[model] || { input: 1, output: 1 }
-  const inputCost = (usage.prompt_tokens / 1_000_000) * modelCost.input
-  const outputCost = (usage.completion_tokens / 1_000_000) * modelCost.output
-  
-  return inputCost + outputCost
-}

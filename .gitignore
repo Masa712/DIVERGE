@@ -38,3 +38,6 @@ next-env.d.ts
 
 # serena memory files (may contain sensitive information)
 .serena/
+
+# MCP configuration (contains local paths)
+.mcp.json
