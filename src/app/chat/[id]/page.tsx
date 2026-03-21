@@ -12,6 +12,7 @@ import { ChatTreeView } from '@/components/tree/chat-tree-view'
 import { NodeDetailSidebar } from '@/components/chat/node-detail-sidebar'
 import { FREE_PLAN_MODELS } from '@/lib/billing/model-restrictions'
 import { useChatLayout } from '@/contexts/ChatLayoutContext'
+import { readSSEStream } from '@/lib/utils/stream-reader'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -258,14 +259,19 @@ export default function ChatSessionPage({ params }: Props) {
         parentNode = chatNodes.find(node => node.id === currentNodeId)
       } else if (chatNodes && chatNodes.length > 0) {
         // Find the most recently created node as default parent
-        parentNode = chatNodes.reduce((latest, node) => 
+        parentNode = chatNodes.reduce((latest, node) =>
           new Date(node.createdAt) > new Date(latest.createdAt) ? node : latest
         )
       }
 
       log.debug('Message context', { parentNodeId: parentNode?.id, currentNodeId })
-      
-      const response = await fetch('/api/chat', {
+
+      // Use Function Calling endpoint for all models except GPT OSS 120B
+      const apiEndpoint = selectedModel === 'openai/gpt-oss-120b'
+                         ? '/api/chat'
+                         : '/api/chat/with-tools'
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -273,44 +279,91 @@ export default function ChatSessionPage({ params }: Props) {
         body: JSON.stringify({
           messages: [{ role: 'user', content: message }],
           model: selectedModel,
-          max_tokens: 8000, // Ensure sufficient tokens for complete responses
+          max_tokens: 8000,
           sessionId: session.id,
           parentNodeId: parentNode?.id,
-          useEnhancedContext: true, // Explicitly enable enhanced context
+          useEnhancedContext: true,
           reasoning: enableReasoning,
-          enableWebSearch: enableWebSearch,
+          enableWebSearch,
         }),
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        const newNode = result.data.node
-
-        // Immediately add the streaming node to the UI
-        setChatNodes(prev => [...prev, newNode])
-        setCurrentNodeId(newNode.id)
-
-        // Automatically open right sidebar with the new node details
-        setSelectedNodeForDetail(newNode)
-        setIsSidebarOpen(true)
-
-        // Refresh web search quota if web search was enabled
-        if (enableWebSearch) {
-          fetchWebSearchQuota()
-        }
-
-        // Start polling for node updates
-        pollNodeStatus(newNode.id)
-      } else {
+      if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || `HTTP ${response.status}: Failed to send message`
         showError(errorMessage)
         throw new Error(errorMessage)
       }
+
+      // Refresh web search quota if web search was enabled
+      if (enableWebSearch) {
+        fetchWebSearchQuota()
+      }
+
+      // Read SSE stream for real-time response display
+      await readSSEStream(response, {
+        onNode: (node) => {
+          const chatNode: ChatNode = {
+            ...node,
+            createdAt: new Date(node.createdAt),
+            updatedAt: new Date(node.updatedAt),
+          }
+          log.info('Chat node received via SSE', { nodeId: chatNode.id })
+          setChatNodes(prev => [...prev, chatNode])
+          setCurrentNodeId(chatNode.id)
+          setSelectedNodeForDetail(chatNode)
+          setIsSidebarOpen(true)
+        },
+        onContent: (nodeId, chunk) => {
+          setChatNodes(prev => prev.map(n =>
+            n.id === nodeId ? { ...n, response: (n.response || '') + chunk, status: 'streaming' as const } : n
+          ))
+          setSelectedNodeForDetail(prev =>
+            prev?.id === nodeId ? { ...prev, response: (prev.response || '') + chunk, status: 'streaming' as const } : prev
+          )
+        },
+        onSearchStart: (nodeId, query) => {
+          log.debug('Web search started', { nodeId, query })
+        },
+        onSearchResults: (nodeId, results) => {
+          log.debug('Web search results received', { nodeId, resultCount: results?.results?.length })
+          setChatNodes(prev => prev.map(n =>
+            n.id === nodeId ? { ...n, metadata: { ...n.metadata, webSearchResults: results } } : n
+          ))
+          setSelectedNodeForDetail(prev =>
+            prev?.id === nodeId ? { ...prev, metadata: { ...prev.metadata, webSearchResults: results } } : prev
+          )
+        },
+        onTitle: (sessionId, title) => {
+          log.info('Session title updated via SSE', { sessionId, title })
+          setSession(prev => prev ? { ...prev, name: title } : prev)
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('session-sync-needed'))
+          }
+        },
+        onDone: (nodeId) => {
+          log.info('Streaming completed', { nodeId })
+          setChatNodes(prev => prev.map(n =>
+            n.id === nodeId ? { ...n, status: 'completed' as const } : n
+          ))
+          setSelectedNodeForDetail(prev =>
+            prev?.id === nodeId ? { ...prev, status: 'completed' as const } : prev
+          )
+        },
+        onError: (nodeId, error) => {
+          log.error('Streaming error', { nodeId, error })
+          setChatNodes(prev => prev.map(n =>
+            n.id === nodeId ? { ...n, status: 'failed' as const, errorMessage: error } : n
+          ))
+          setSelectedNodeForDetail(prev =>
+            prev?.id === nodeId ? { ...prev, status: 'failed' as const, errorMessage: error } : prev
+          )
+          showError(error)
+        },
+      })
     } catch (error) {
       console.error('Error sending message:', error)
       if (error instanceof Error) {
-        // Error already handled above or network error
         if (!error.message.includes('HTTP')) {
           showError('Network error. Please check your connection.')
         }
@@ -333,8 +386,13 @@ export default function ChatSessionPage({ params }: Props) {
       const parentNode = failedNode.parentId ? chatNodes.find(node => node.id === failedNode.parentId) : null
 
       log.info('Retrying failed node', { nodeId, promptLength: originalPrompt.length })
-      
-      const response = await fetch('/api/chat', {
+
+      // Use Function Calling endpoint for all models except GPT OSS 120B
+      const apiEndpoint = failedNode.model === 'openai/gpt-oss-120b'
+                         ? '/api/chat'
+                         : '/api/chat/with-tools'
+
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -350,39 +408,69 @@ export default function ChatSessionPage({ params }: Props) {
         }),
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        const newNode = result.data.node
-        
-        // Delete the failed node
-        try {
-          await fetch(`/api/nodes/${nodeId}`, {
-            method: 'DELETE',
-          })
-          log.info('Successfully deleted failed node', { nodeId })
-        } catch (deleteError) {
-          log.warn('Failed to delete node from database', deleteError)
-          // Continue with UI update even if deletion fails
-        }
-        
-        // Remove failed node from UI and add the new retry node
-        setChatNodes(prev => {
-          const filteredNodes = prev.filter(node => node.id !== nodeId)
-          return [...filteredNodes, newNode]
-        })
-        setCurrentNodeId(newNode.id)
-        
-        // Update sidebar to show the new node
-        setSelectedNodeForDetail(newNode)
-        setIsSidebarOpen(true)
-        
-        // Start polling for the new node
-        pollNodeStatus(newNode.id)
-      } else {
+      if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error || `HTTP ${response.status}: Failed to retry message`
         showError(errorMessage)
+        return
       }
+
+      // Delete the failed node
+      try {
+        await fetch(`/api/nodes/${nodeId}`, { method: 'DELETE' })
+        log.info('Successfully deleted failed node', { nodeId })
+      } catch (deleteError) {
+        log.warn('Failed to delete node from database', deleteError)
+      }
+
+      // Remove failed node from UI
+      setChatNodes(prev => prev.filter(node => node.id !== nodeId))
+
+      // Read SSE stream for the retry
+      await readSSEStream(response, {
+        onNode: (node) => {
+          const chatNode: ChatNode = {
+            ...node,
+            createdAt: new Date(node.createdAt),
+            updatedAt: new Date(node.updatedAt),
+          }
+          setChatNodes(prev => [...prev, chatNode])
+          setCurrentNodeId(chatNode.id)
+          setSelectedNodeForDetail(chatNode)
+          setIsSidebarOpen(true)
+        },
+        onContent: (nodeId, chunk) => {
+          setChatNodes(prev => prev.map(n =>
+            n.id === nodeId ? { ...n, response: (n.response || '') + chunk, status: 'streaming' as const } : n
+          ))
+          setSelectedNodeForDetail(prev =>
+            prev?.id === nodeId ? { ...prev, response: (prev.response || '') + chunk, status: 'streaming' as const } : prev
+          )
+        },
+        onTitle: (sessionId, title) => {
+          setSession(prev => prev ? { ...prev, name: title } : prev)
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('session-sync-needed'))
+          }
+        },
+        onDone: (nodeId) => {
+          setChatNodes(prev => prev.map(n =>
+            n.id === nodeId ? { ...n, status: 'completed' as const } : n
+          ))
+          setSelectedNodeForDetail(prev =>
+            prev?.id === nodeId ? { ...prev, status: 'completed' as const } : prev
+          )
+        },
+        onError: (nodeId, error) => {
+          setChatNodes(prev => prev.map(n =>
+            n.id === nodeId ? { ...n, status: 'failed' as const, errorMessage: error } : n
+          ))
+          setSelectedNodeForDetail(prev =>
+            prev?.id === nodeId ? { ...prev, status: 'failed' as const, errorMessage: error } : prev
+          )
+          showError(error)
+        },
+      })
     } catch (error) {
       console.error('Error retrying message:', error)
       showError('Network error. Please check your connection.')
@@ -440,77 +528,6 @@ export default function ChatSessionPage({ params }: Props) {
     }
   }
 
-  // Poll for node status updates
-  const pollNodeStatus = async (nodeId: string) => {
-    const maxAttempts = 60 // 5 minutes maximum (5s * 60)
-    let attempts = 0
-
-    const checkStatus = async () => {
-      if (attempts >= maxAttempts) {
-        log.warn('Polling timeout for node', { nodeId })
-        return
-      }
-
-      try {
-        const response = await fetch(`/api/sessions/${session?.id}`)
-        if (response.ok) {
-          const { data } = await response.json()
-          const { chatNodes: updatedNodes } = data
-          const updatedNode = updatedNodes.find((n: any) => n.id === nodeId)
-          
-          if (updatedNode && updatedNode.status !== 'streaming') {
-            // Node has been completed or failed, update only this specific node
-            setChatNodes(prev => {
-              // Check if the node still exists in our local state (not deleted)
-              const nodeExists = prev.some(node => node.id === nodeId)
-              if (!nodeExists) {
-                log.debug('Node was deleted locally, skipping update', { nodeId })
-                return prev // Don't update if node was deleted
-              }
-
-              // Update only the specific node that was polled, preserving local metadata
-              return prev.map(node =>
-                node.id === nodeId
-                  ? {
-                      ...updatedNode,
-                      metadata: {
-                        ...node.metadata,  // Preserve existing metadata
-                        ...updatedNode.metadata  // Merge with any server updates
-                      }
-                    }
-                  : node
-              )
-            })
-            log.info('Node polling completed', { nodeId, status: updatedNode.status })
-
-            // If this is the first node (depth 0) and it completed successfully,
-            // the session title may have been generated - trigger session list refresh
-            if (updatedNode.depth === 0 && updatedNode.status === 'completed') {
-              log.debug('First node completed, triggering session sync for title update')
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('session-sync-needed'))
-              }
-            }
-
-            return // Stop polling
-          }
-          
-          // Continue polling if still streaming
-          attempts++
-          setTimeout(checkStatus, 5000) // Poll every 5 seconds
-        }
-      } catch (error) {
-        log.error('Error polling node status', error)
-        attempts++
-        if (attempts < maxAttempts) {
-          setTimeout(checkStatus, 5000)
-        }
-      }
-    }
-
-    // Start polling after a short delay
-    setTimeout(checkStatus, 2000) // Initial check after 2 seconds
-  }
 
   // Only show full page loading on initial auth load
   if (loading || !user) {

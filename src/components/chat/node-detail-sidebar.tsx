@@ -353,9 +353,21 @@ export function NodeDetailSidebar({ node, allNodes, isOpen, onClose, session, on
                 </div>
                 <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
                   {currentDisplayNode.status === 'streaming' ? (
-                    <div className="py-4 flex items-start">
-                      <StreamingAnimation />
-                    </div>
+                    currentDisplayNode.response ? (
+                      <div>
+                        <MarkdownRenderer
+                          content={currentDisplayNode.response}
+                          className="text-sm leading-relaxed"
+                        />
+                        <div className="mt-2 pt-2 border-t border-white/10">
+                          <StreamingAnimation />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="py-4 flex items-start">
+                        <StreamingAnimation />
+                      </div>
+                    )
                   ) : currentDisplayNode.status === 'failed' ? (
                     <div className="py-4 flex flex-col items-center space-y-3">
                       <div className="flex items-center space-x-2 text-red-600">

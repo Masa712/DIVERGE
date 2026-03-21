@@ -7,23 +7,16 @@ import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 import { isRedisAvailable } from '@/lib/redis/client'
 import { getRedisEnhancedContextCache } from '@/lib/db/redis-enhanced-context-cache'
 import { getParentNodeDepth, createChatNode, updateChatNodeResponse } from '@/lib/db/pooled-operations'
-import { 
-  withErrorHandler, 
-  createAppError, 
-  ErrorCategory, 
+import {
+  createAppError,
+  ErrorCategory,
   classifyDatabaseError,
   withRetry,
-  AppError
 } from '@/lib/errors/error-handler'
 import { recordError } from '@/lib/errors/error-monitoring'
-import { performanceMonitor, withTimeout } from '@/lib/utils/performance-optimizer'
+import { performanceMonitor } from '@/lib/utils/performance-optimizer'
 import { log } from '@/lib/utils/logger'
 import { tavilyClient } from '@/lib/tavily'
-import {
-  webSearchTool,
-  parseFunctionArguments,
-  createToolResultMessage
-} from '@/lib/openrouter/function-calling'
 import {
   canUseWebSearch,
   trackWebSearchUsage,
@@ -40,625 +33,40 @@ import {
   getModelAccessErrorMessage
 } from '@/lib/billing/model-restrictions'
 
-import { generateUserSystemPrompt } from '@/lib/db/system-prompt-preferences'
-
-// Process AI response with Function Calling support
-async function processAIResponseWithTools(
-  chatNode: any,
-  messages: any[],
-  model: string,
-  temperature: number,
-  max_tokens: number,
-  sessionId: string,
-  parentNodeId: string | null,
-  useEnhancedContext: boolean,
-  userPrompt: string,
-  enableWebSearch: boolean,
-  userId: string,
-  reasoning: boolean = false
-) {
-  const stopTimer = performanceMonitor.startTimer('chat_ai_response_with_tools')
-  
-  try {
-    // Parse and validate model
-    if (!AVAILABLE_MODELS.find(m => m.id === model)) {
-      throw createAppError(
-        'Invalid model selection',
-        ErrorCategory.VALIDATION,
-        { 
-          userMessage: 'Please select a valid model.', 
-          context: { model } 
-        }
-      )
-    }
-
-    // Check if we should use enhanced context and have parentNodeId
-    let enhancedContext = null
-    if (useEnhancedContext && parentNodeId) {
-      log.debug('Enhanced context evaluation', { 
-        useEnhancedContext, 
-        hasParent: !!parentNodeId, 
-        parentNodeId,
-        userPromptPreview: userPrompt.substring(0, 100) 
-      })
-      
-      try {
-        // Extract node references from user prompt
-        const referencedNodes = extractNodeReferences(userPrompt)
-        
-        // Build enhanced context using the parent node
-        const contextResult = await withRetry(async () => {
-          return await buildContextWithStrategy(parentNodeId, userPrompt, {
-            maxTokens: 8000,  // Further increased to accommodate multiple references
-            model: model,
-            includeSiblings: false,
-            includeReferences: referencedNodes  // Add node references
-          })
-        }, { maxAttempts: 2 })
-        
-        // Convert context messages to a single enhanced prompt
-        enhancedContext = contextResult.messages
-          .map(msg => `${msg.role}: ${msg.content}`)
-          .join('\n\n') + `\n\nUser: ${userPrompt}`
-          
-        log.debug('Enhanced context built successfully', { 
-          contextLength: enhancedContext?.length || 0,
-          referencedNodes: referencedNodes.length,
-          contextMessagesCount: contextResult.messages.length,
-          contextPreview: enhancedContext.substring(0, 200) + '...'
-        })
-      } catch (contextError) {
-        log.error('Failed to build enhanced context', contextError)
-        recordError(createAppError(
-          'Enhanced context generation failed',
-          ErrorCategory.EXTERNAL_API,
-          { cause: contextError as Error }
-        ))
-      }
-    } else {
-      log.debug('Enhanced context skipped', { 
-        useEnhancedContext, 
-        hasParentNodeId: !!parentNodeId,
-        parentNodeId 
-      })
-    }
-
-    // Check if we should use function calling
-    // Use tools when web search is explicitly enabled by user (not dependent on keywords)
-    const shouldUseTools = enableWebSearch
-    
-    log.debug('Function calling evaluation', { 
-      shouldUseTools, 
-      model, 
-      enableWebSearch,
-      tavilyConfigured: !!process.env.TAVILY_API_KEY,
-      hasEnhancedContext: !!enhancedContext,
-      parentNodeId,
-      userPromptPreview: userPrompt.substring(0, 100)
-    })
-
-    // Use tools if detected or fallback to normal chat
-    let openRouterClient: OpenRouterClient
-    let finalContent = ''
-    
-    if (shouldUseTools) {
-      // Initialize Tavily for web search
-      if (!process.env.TAVILY_API_KEY) {
-        throw createAppError(
-          'Tavily API key not configured',
-          ErrorCategory.EXTERNAL_API
-        )
-      }
-
-      openRouterClient = new OpenRouterClient()
-
-      // Build the request body for function calling
-      const currentDate = new Date().toISOString().split('T')[0]
-      const messagesWithDateContext = enhancedContext 
-        ? [
-            { role: 'system', content: `Current date: ${currentDate}. Use this as reference for time-related queries.` },
-            ...messages.slice(0, -1), 
-            { role: 'user', content: enhancedContext }
-          ]
-        : [
-            { role: 'system', content: `Current date: ${currentDate}. Use this as reference for time-related queries.` },
-            ...messages
-          ]
-      
-      const requestBody: any = {
-        model,
-        messages: messagesWithDateContext,
-        temperature,
-        max_tokens,
-        tools: [
-          {
-            type: 'function',
-            function: {
-              name: 'tavily_search_results_json',
-              description: `A search engine optimized for comprehensive, accurate, and trusted results. Useful for when you need to answer questions about current events. IMPORTANT: Current date is ${new Date().toISOString().split('T')[0]}. When generating search queries, use this current date as reference for recent time periods (last week, recently, etc.) rather than outdated dates from training data.`,
-              parameters: {
-                type: 'object',
-                properties: {
-                  query: {
-                    type: 'string',
-                    description: `The search query to execute. When the user asks about recent events (last week, recently, etc.), calculate the correct dates based on current date: ${new Date().toISOString().split('T')[0]}. Do not use outdated dates from training data.`
-                  }
-                },
-                required: ['query']
-              }
-            }
-          }
-        ],
-        tool_choice: 'auto'
-      }
-
-      // Add reasoning configuration if enabled and model supports it
-      if (reasoning && supportsReasoning(model as ModelId)) {
-        requestBody.reasoning = getReasoningConfig(model as ModelId)
-      }
-      
-      // Debug log for reasoning
-      if (reasoning) {
-        const reasoningConfig = supportsReasoning(model as ModelId) ? getReasoningConfig(model as ModelId) : null
-        console.log('🧠 Reasoning request debug (with-tools API):', {
-          model,
-          reasoning,
-          shouldUseTools,
-          supportsReasoning: supportsReasoning(model as ModelId),
-          reasoningEnabled: reasoning && supportsReasoning(model as ModelId),
-          reasoningConfig,
-          requestHasReasoning: 'reasoning' in requestBody
-        })
-      }
-
-      try {
-        const response = await openRouterClient.createChatCompletion(requestBody)
-        
-        // Handle function calls
-        if (response.choices?.[0]?.message?.tool_calls) {
-          const toolCalls = response.choices[0].message.tool_calls
-          const toolResults = []
-
-          for (const toolCall of toolCalls) {
-            if (toolCall.function.name === 'tavily_search_results_json') {
-              try {
-                const searchQuery = JSON.parse(toolCall.function.arguments).query
-
-                // Check web search quota before executing search
-                const quotaCheck = await canUseWebSearch(userId)
-
-                if (!quotaCheck.allowed) {
-                  log.warn('Web search quota exceeded', {
-                    userId,
-                    currentUsage: quotaCheck.currentUsage,
-                    limit: quotaCheck.limit
-                  })
-
-                  toolResults.push({
-                    tool_call_id: toolCall.id,
-                    role: 'tool',
-                    content: JSON.stringify({
-                      error: 'Quota exceeded',
-                      message: `Web search limit reached (${quotaCheck.currentUsage}/${quotaCheck.limit}). Please upgrade your plan to continue using web search.`
-                    })
-                  })
-                  continue // Skip to next tool call
-                }
-
-                log.debug('Executing web search', {
-                  query: searchQuery,
-                  parentNodeId,
-                  hasEnhancedContext: !!enhancedContext,
-                  enhancedContextLength: enhancedContext?.length || 0,
-                  quotaRemaining: quotaCheck.limit - quotaCheck.currentUsage
-                })
-
-                const searchResults = await tavilyClient.search(searchQuery, { maxResults: 5 })
-
-                // Track web search usage after successful search
-                const tracked = await trackWebSearchUsage(userId)
-                if (!tracked) {
-                  log.warn('Failed to track web search usage', { userId, searchQuery })
-                }
-
-                // Add current date context to help the model understand timing
-                const currentDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
-                const enhancedSearchResults = {
-                  ...searchResults,
-                  search_metadata: {
-                    query: searchQuery,
-                    search_date: currentDate,
-                    note: `These search results are from ${currentDate}. Please use this date as reference for "current" or "recent" events.`
-                  }
-                }
-
-                toolResults.push({
-                  tool_call_id: toolCall.id,
-                  role: 'tool',
-                  content: JSON.stringify(enhancedSearchResults)
-                })
-
-                log.debug('Web search completed successfully', {
-                  resultsCount: searchResults?.results?.length || 0,
-                  searchDate: currentDate,
-                  toolCallId: toolCall.id,
-                  enhancedSearchResultsLength: JSON.stringify(enhancedSearchResults).length,
-                  tracked
-                })
-              } catch (searchError) {
-                log.error('Web search failed', searchError)
-                toolResults.push({
-                  tool_call_id: toolCall.id,
-                  role: 'tool',
-                  content: JSON.stringify({ error: 'Search failed', message: 'Unable to perform web search' })
-                })
-              }
-            }
-          }
-
-          if (toolResults.length > 0) {
-            // Make a second call with the tool results
-            // Use enhanced context messages if available, same as initial request
-            const baseMessages = enhancedContext ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }] : messages
-            
-            log.debug('Preparing follow-up call with search results', {
-              hasEnhancedContext: !!enhancedContext,
-              enhancedContextLength: enhancedContext?.length || 0,
-              baseMessagesCount: baseMessages.length,
-              toolResultsCount: toolResults.length,
-              parentNodeId
-            })
-            
-            // Add system message with current date context to help with temporal awareness
-            const currentDate = new Date().toISOString().split('T')[0]
-            const systemMessage = {
-              role: 'system',
-              content: `Current date: ${currentDate}. When referencing search results, use this date as the baseline for "today", "recent", "current", or "latest" information. Avoid referencing outdated time periods from your training data when discussing current events.`
-            }
-            
-            const followUpMessages = [
-              systemMessage,
-              ...baseMessages,
-              response.choices[0].message,
-              ...toolResults
-            ]
-            
-            log.debug('Follow-up messages prepared', {
-              totalMessagesCount: followUpMessages.length,
-              systemMessageAdded: true,
-              finalMessagePreview: followUpMessages[followUpMessages.length - 1].content?.substring(0, 200) || 'No content'
-            })
-
-            const followUpBody: any = {
-              model,
-              messages: followUpMessages,
-              temperature,
-              max_tokens
-            }
-
-            // Add reasoning to follow-up request as well if enabled
-            if (reasoning && supportsReasoning(model as ModelId)) {
-              followUpBody.reasoning = getReasoningConfig(model as ModelId)
-            }
-
-            const finalResponse = await openRouterClient.createChatCompletion(followUpBody)
-            
-            finalContent = finalResponse.choices?.[0]?.message?.content || ''
-            const usage = finalResponse.usage || { prompt_tokens: 0, completion_tokens: 0 }
-
-            // Update the chat node with final response
-            await updateChatNodeResponse(
-              chatNode.id,
-              finalContent,
-              usage,
-              model,
-              'completed'
-            )
-
-            // Track token usage for billing
-            await trackTokenUsage({
-              userId,
-              tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
-              promptTokens: usage.prompt_tokens || 0,
-              completionTokens: usage.completion_tokens || 0,
-              modelId: model,
-              sessionId,
-              nodeId: chatNode.id
-            }).catch(err => log.error('Failed to track token usage (with-tools follow-up)', err))
-
-            log.info('Function calling completed successfully', {
-              nodeId: chatNode.id,
-              toolCallsCount: toolCalls.length,
-              finalResponseLength: finalContent.length
-            })
-          }
-        } else {
-          // No function calls, treat as regular response
-          finalContent = response.choices?.[0]?.message?.content || ''
-          const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0 }
-
-          await updateChatNodeResponse(
-            chatNode.id,
-            finalContent,
-            usage,
-            model,
-            'completed'
-          )
-
-          // Track token usage for billing
-          await trackTokenUsage({
-            userId,
-            tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
-            promptTokens: usage.prompt_tokens || 0,
-            completionTokens: usage.completion_tokens || 0,
-            modelId: model,
-            sessionId,
-            nodeId: chatNode.id
-          }).catch(err => log.error('Failed to track token usage (with-tools direct)', err))
-
-          log.info('Direct response completed', {
-            nodeId: chatNode.id,
-            responseLength: finalContent.length
-          })
-        }
-
-      } catch (error) {
-        log.error('Function calling request failed', error)
-        throw error
-      }
-
-    } else {
-      // Fallback to normal chat without tools
-      log.info('Using normal chat API (no tools)')
-      
-      openRouterClient = new OpenRouterClient()
-
-      const requestBody: any = {
-        model,
-        messages: enhancedContext ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }] : messages,
-        temperature,
-        max_tokens
-      }
-
-      // Add reasoning configuration if enabled and model supports it
-      if (reasoning && supportsReasoning(model as ModelId)) {
-        requestBody.reasoning = getReasoningConfig(model as ModelId)
-      }
-      
-      // Debug log for reasoning
-      if (reasoning) {
-        const reasoningConfig = supportsReasoning(model as ModelId) ? getReasoningConfig(model as ModelId) : null
-        console.log('🧠 Reasoning request debug (with-tools API fallback):', {
-          model,
-          reasoning,
-          shouldUseTools,
-          supportsReasoning: supportsReasoning(model as ModelId),
-          reasoningEnabled: reasoning && supportsReasoning(model as ModelId),
-          reasoningConfig,
-          requestHasReasoning: 'reasoning' in requestBody
-        })
-      }
-
-      const response = await openRouterClient.createChatCompletion(requestBody)
-      
-      finalContent = response.choices?.[0]?.message?.content || ''
-      const usage = response.usage || { prompt_tokens: 0, completion_tokens: 0 }
-
-      await updateChatNodeResponse(
-        chatNode.id,
-        finalContent,
-        usage,
-        model,
-        'completed'
-      )
-
-      // Track token usage for billing
-      await trackTokenUsage({
-        userId,
-        tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
-        promptTokens: usage.prompt_tokens || 0,
-        completionTokens: usage.completion_tokens || 0,
-        modelId: model,
-        sessionId,
-        nodeId: chatNode.id
-      }).catch(err => log.error('Failed to track token usage (with-tools normal)', err))
-
-      log.info('Normal chat completed', {
-        nodeId: chatNode.id,
-        responseLength: finalContent.length
-      })
-    }
-
-    // Generate AI title for the session if it's the first node (depth = 0 and no parentNodeId)
-    log.info('Title generation check', { 
-      parentNodeId, 
-      depth: chatNode.depth, 
-      shouldGenerateTitle: !parentNodeId && chatNode.depth === 0 
-    })
-    
-    if (!parentNodeId && chatNode.depth === 0) {
-      try {
-        log.info('Generating AI title for session', { sessionId, userPrompt: userPrompt.substring(0, 50) })
-        
-        // Generate title directly using OpenRouter client instead of HTTP fetch
-        const titleClient = new OpenRouterClient()
-        const systemPrompt = `You are a helpful assistant that generates concise, descriptive titles for chat conversations.
-Based on the user's first message and optionally the assistant's response, generate a short title (3-7 words) that captures the essence of the conversation.
-The title should be:
-- Clear and descriptive
-- In the same language as the user's message
-- Without quotes or special characters
-- Focused on the main topic or question
-
-Examples:
-User: "How do I implement authentication in Next.js?"
-Title: Next.js Authentication Implementation
-
-User: "ホテル経営について教えてください"
-Title: ホテル経営について
-
-User: "Can you help me debug this Python error?"
-Title: Python Error Debugging Help`
-
-        const titlePrompt = finalContent 
-          ? `User's first message: "${userPrompt}"\n\nAssistant's response summary: "${finalContent.substring(0, 500)}..."\n\nGenerate a concise title for this conversation.`
-          : `User's first message: "${userPrompt}"\n\nGenerate a concise title for this conversation.`
-
-        const titleResponse = await titleClient.createChatCompletion({
-          model: 'openai/gpt-4o-2024-11-20',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: titlePrompt }
-          ],
-          max_tokens: 50,
-          temperature: 0.7,
-        })
-
-        const title = titleResponse.choices[0]?.message?.content?.trim() || 'New Chat'
-        log.info('AI title generated', { title })
-        
-        // Update session name with AI-generated title
-        const supabase = await createClient()
-        const { data: updatedSession, error: updateError } = await supabase
-          .from('sessions')
-          .update({ 
-            name: title,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', sessionId)
-          .select('id, name')
-          .single()
-        
-        if (updateError) {
-          log.error('Failed to update session name in database', updateError)
-        } else {
-          log.info('Successfully updated session title', { title, verified: updatedSession?.name })
-          
-          // Force clear all related caches
-          try {
-            const { clearQueryCache } = await import('@/lib/db/query-optimizer')
-            clearQueryCache()
-            log.debug('Cleared query cache to force fresh data')
-          } catch (error) {
-            log.warn('Failed to clear query cache', error)
-          }
-        }
-      } catch (error) {
-        log.error('Failed to generate AI title - exception', error)
-        // Don't throw - this is a non-critical feature
-      }
-    }
-
-  } catch (error) {
-    log.error('AI response processing failed', error)
-    
-    const appError = createAppError(
-      'AI request processing failed',
-      ErrorCategory.EXTERNAL_API,
-      {
-        userMessage: 'Unable to generate AI response. Please try again.',
-        context: { model, nodeId: chatNode.id },
-        cause: error as Error
-      }
-    )
-    
-    recordError(appError)
-    
-    // Update node with error status
-    await updateChatNodeResponse(
-      chatNode.id,
-      '',
-      undefined,
-      model,
-      'failed',
-      appError.message
-    ).catch(err => {
-      log.error('Failed to update node error status', err)
-    })
-    
-    throw appError
-  } finally {
-    stopTimer()
-  }
-}
-
-// Helper function to generate AI title
-async function generateAITitle(sessionId: string, userPrompt: string, responseContent: string) {
-  try {
-    const titleResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/sessions/generate-title`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userMessage: userPrompt,
-        assistantResponse: responseContent.substring(0, 500)
-      })
-    })
-
-    if (titleResponse.ok) {
-      const { title } = await titleResponse.json()
-      
-      const supabase = await createClient()
-      const { data: updatedSession, error: updateError } = await supabase
-        .from('sessions')
-        .update({ 
-          name: title,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', sessionId)
-        .select('id, name')
-        .single()
-      
-      if (updateError) {
-        log.error('Failed to update session name', updateError)
-      } else {
-        log.info('Updated session title', { title, verified: updatedSession?.name })
-        
-        try {
-          const { clearQueryCache } = await import('@/lib/db/query-optimizer')
-          clearQueryCache()
-          log.debug('Cleared query cache to force fresh data')
-        } catch (error) {
-          log.warn('Failed to clear query cache', error)
-        }
-      }
-    }
-  } catch (error) {
-    log.error('Failed to generate AI title', error)
-  }
-}
-
-// Helper function to clear caches
+// Helper function to clear caches after completion
 async function clearCaches(sessionId: string, chatNode: any, responseContent: string) {
-  const redisIsAvailable = await isRedisAvailable()
-  if (redisIsAvailable) {
-    const redisCache = getRedisEnhancedContextCache()
-    await redisCache.clearSessionCache(sessionId)
-    await redisCache.addNode(sessionId, {
-      ...chatNode,
-      response: responseContent,
-      status: 'completed',
-      createdAt: chatNode.createdAt.toISOString(),
-      updatedAt: chatNode.updatedAt.toISOString(),
-    })
-  } else {
-    await clearSessionCache(sessionId)
+  try {
+    const redisIsAvailable = await isRedisAvailable()
+    if (redisIsAvailable) {
+      const redisCache = getRedisEnhancedContextCache()
+      await redisCache.clearSessionCache(sessionId)
+      await redisCache.addNode(sessionId, {
+        ...chatNode,
+        response: responseContent,
+        status: 'completed',
+        createdAt: chatNode.createdAt instanceof Date ? chatNode.createdAt.toISOString() : chatNode.createdAt,
+        updatedAt: chatNode.updatedAt instanceof Date ? chatNode.updatedAt.toISOString() : chatNode.updatedAt,
+      })
+    } else {
+      await clearSessionCache(sessionId)
+    }
+  } catch (error) {
+    log.warn('Failed to clear caches', error)
   }
 }
 
-export const POST = withErrorHandler(async (request: NextRequest) => {
+export async function POST(request: NextRequest) {
   const stopTimer = performanceMonitor.startTimer('chat_api_with_tools_total')
-  
+
   try {
     const supabase = await createClient()
-  
+
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      throw createAppError(
-        'User authentication required',
-        ErrorCategory.AUTHENTICATION
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
       )
     }
 
@@ -678,15 +86,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
     // Check model access based on user's plan
     const userPlan = await getUserPlan(user.id)
 
-    // Free plan: Check if model is in the allowed list
     if (userPlan === 'free') {
       const isAllowed = isModelAvailableForFreePlan(model)
-      log.debug('Free plan model access check (with-tools)', {
-        model,
-        isAllowed,
-        userPlan
-      })
-
       if (!isAllowed) {
         log.warn('Model access denied for free plan (with-tools)', { model, userPlan })
         return NextResponse.json(
@@ -696,7 +97,6 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       }
     }
 
-    // Plus/Pro plans: Check for advanced models
     if (isAdvancedModel(model)) {
       const hasAdvancedAccess = await canUseAdvancedModels(user.id)
       if (!hasAdvancedAccess) {
@@ -738,12 +138,8 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
           .single()
 
         if (profile) {
-          if (temperature === undefined) {
-            temperature = profile.default_temperature || 0.7
-          }
-          if (max_tokens === undefined) {
-            max_tokens = profile.default_max_tokens || 4000
-          }
+          if (temperature === undefined) temperature = profile.default_temperature || 0.7
+          if (max_tokens === undefined) max_tokens = profile.default_max_tokens || 4000
         } else {
           temperature = temperature || 0.7
           max_tokens = max_tokens || 4000
@@ -755,33 +151,35 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       }
     }
 
-    // Increase max_tokens for reasoning requests to accommodate longer thought processes
+    // Increase max_tokens for reasoning requests
     if (reasoning && supportsReasoning(model as ModelId)) {
       const currentMaxTokens = max_tokens || 4000
-      // Double the max_tokens for reasoning, with a minimum of 8000
       max_tokens = Math.max(currentMaxTokens * 2, 8000)
-      log.debug('Increased max_tokens for reasoning', { 
-        originalMaxTokens: currentMaxTokens, 
+      log.debug('Increased max_tokens for reasoning', {
+        originalMaxTokens: currentMaxTokens,
         reasoningMaxTokens: max_tokens,
-        model 
+        model
       })
     }
 
     if (!messages || !model) {
-      throw createAppError(
-        'Messages and model parameters are required',
-        ErrorCategory.VALIDATION,
-        {
-          userMessage: 'Please provide both messages and model selection.',
-          context: { hasMessages: !!messages, hasModel: !!model }
-        }
+      return NextResponse.json(
+        { error: 'Messages and model parameters are required' },
+        { status: 400 }
       )
     }
 
-    // Extract user prompt for processing
+    // Validate model
+    if (!AVAILABLE_MODELS.find(m => m.id === model)) {
+      return NextResponse.json(
+        { error: 'Invalid model selection' },
+        { status: 400 }
+      )
+    }
+
     const userPrompt = messages[messages.length - 1]?.content || ''
 
-    // Calculate depth for the new node
+    // Calculate depth
     let depth = 0
     if (parentNodeId) {
       try {
@@ -799,37 +197,24 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       }
     }
 
-    // Create a new chat node
-    const nodeData = {
-      sessionId,
-      parentId: parentNodeId,
-      model: model as ModelId,
-      prompt: userPrompt,
-      temperature,
-      maxTokens: max_tokens,
-      depth,
-      metadata: {
-        reasoning: reasoning && supportsReasoning(model as ModelId),
-        functionCalling: enableWebSearch,
-        enableWebSearch: enableWebSearch
-      }
-    }
-    
+    // Create chat node in DB
     const chatNodeRaw = await withRetry(async () => {
-      return await createChatNode(nodeData)
-    }, { maxAttempts: 3 }).catch(error => {
-      throw createAppError(
-        'Failed to create chat node in database',
-        classifyDatabaseError(error),
-        {
-          userMessage: 'Unable to save your message. Please try again.',
-          context: { sessionId, parentNodeId, model },
-          cause: error as Error
+      return await createChatNode({
+        sessionId,
+        parentId: parentNodeId,
+        model: model as ModelId,
+        prompt: userPrompt,
+        temperature,
+        maxTokens: max_tokens,
+        depth,
+        metadata: {
+          reasoning: reasoning && supportsReasoning(model as ModelId),
+          functionCalling: enableWebSearch,
+          enableWebSearch
         }
-      )
-    })
+      })
+    }, { maxAttempts: 3 })
 
-    // Convert to camelCase for consistency
     const chatNode = {
       id: chatNodeRaw.id,
       parentId: chatNodeRaw.parent_id,
@@ -852,39 +237,398 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       updatedAt: new Date(chatNodeRaw.updated_at),
     }
 
-    // Return node immediately for instant UI feedback
-    const immediateResponse = NextResponse.json({
-      success: true,
-      data: {
-        id: chatNode.id,
-        content: null,
-        status: 'streaming',
-        node: chatNode
-      }
+    // Return SSE stream
+    const encoder = new TextEncoder()
+    const userId = user.id
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (data: any) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+        }
+
+        try {
+          // 1. Send initial node data for immediate UI display
+          sendEvent({ type: 'node', node: chatNode })
+
+          // 2. Build enhanced context
+          let enhancedContext: string | null = null
+          if (useEnhancedContext && parentNodeId) {
+            try {
+              const referencedNodes = extractNodeReferences(userPrompt)
+              const contextResult = await withRetry(async () => {
+                return await buildContextWithStrategy(parentNodeId, userPrompt, {
+                  maxTokens: 8000,
+                  model,
+                  includeSiblings: false,
+                  includeReferences: referencedNodes
+                })
+              }, { maxAttempts: 2 })
+
+              enhancedContext = contextResult.messages
+                .map(msg => `${msg.role}: ${msg.content}`)
+                .join('\n\n') + `\n\nUser: ${userPrompt}`
+
+              log.debug('Enhanced context built', {
+                contextLength: enhancedContext.length,
+                referencedNodes: referencedNodes.length
+              })
+            } catch (contextError) {
+              log.warn('Enhanced context failed, falling back to simple messages', contextError)
+              recordError(createAppError(
+                'Enhanced context generation failed',
+                ErrorCategory.EXTERNAL_API,
+                { cause: contextError as Error }
+              ))
+            }
+          }
+
+          // 3. Determine if we should use tools
+          const shouldUseTools = enableWebSearch
+          const openRouterClient = new OpenRouterClient()
+          let finalMessages = [...messages]
+          let responseText = ''
+          let tokenCount = 0
+
+          if (shouldUseTools) {
+            // Tool calling: first non-streaming call for tool detection
+            const currentDate = new Date().toISOString().split('T')[0]
+            const messagesWithDateContext = enhancedContext
+              ? [
+                  { role: 'system', content: `Current date: ${currentDate}. Use this as reference for time-related queries.` },
+                  ...messages.slice(0, -1),
+                  { role: 'user', content: enhancedContext }
+                ]
+              : [
+                  { role: 'system', content: `Current date: ${currentDate}. Use this as reference for time-related queries.` },
+                  ...messages
+                ]
+
+            const toolRequestBody: any = {
+              model,
+              messages: messagesWithDateContext,
+              temperature,
+              max_tokens,
+              tools: [{
+                type: 'function',
+                function: {
+                  name: 'tavily_search_results_json',
+                  description: `A search engine optimized for comprehensive, accurate, and trusted results. IMPORTANT: Current date is ${currentDate}.`,
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      query: {
+                        type: 'string',
+                        description: `The search query to execute. Use current date ${currentDate} as reference.`
+                      }
+                    },
+                    required: ['query']
+                  }
+                }
+              }],
+              tool_choice: 'auto'
+            }
+
+            if (reasoning && supportsReasoning(model as ModelId)) {
+              toolRequestBody.reasoning = getReasoningConfig(model as ModelId)
+            }
+
+            const toolResponse = await openRouterClient.createChatCompletion(toolRequestBody)
+
+            if (toolResponse.choices?.[0]?.message?.tool_calls) {
+              const toolCalls = toolResponse.choices[0].message.tool_calls
+              const toolResults: any[] = []
+
+              for (const toolCall of toolCalls) {
+                if (toolCall.function.name === 'tavily_search_results_json') {
+                  try {
+                    const searchQuery = JSON.parse(toolCall.function.arguments).query
+
+                    const webQuotaCheck = await canUseWebSearch(userId)
+                    if (!webQuotaCheck.allowed) {
+                      sendEvent({
+                        type: 'search_quota_exceeded',
+                        id: chatNode.id,
+                        message: `Web search limit reached (${webQuotaCheck.currentUsage}/${webQuotaCheck.limit}).`
+                      })
+                      toolResults.push({
+                        tool_call_id: toolCall.id,
+                        role: 'tool',
+                        content: JSON.stringify({ error: 'Quota exceeded' })
+                      })
+                      continue
+                    }
+
+                    sendEvent({ type: 'search_start', id: chatNode.id, query: searchQuery })
+
+                    const searchResults = await tavilyClient.search(searchQuery, { maxResults: 5 })
+                    await trackWebSearchUsage(userId)
+
+                    sendEvent({ type: 'search_results', id: chatNode.id, results: searchResults })
+
+                    const enhancedSearchResults = {
+                      ...searchResults,
+                      search_metadata: {
+                        query: searchQuery,
+                        search_date: currentDate,
+                        note: `These search results are from ${currentDate}.`
+                      }
+                    }
+
+                    toolResults.push({
+                      tool_call_id: toolCall.id,
+                      role: 'tool',
+                      content: JSON.stringify(enhancedSearchResults)
+                    })
+                  } catch (searchError) {
+                    log.error('Web search failed', searchError)
+                    toolResults.push({
+                      tool_call_id: toolCall.id,
+                      role: 'tool',
+                      content: JSON.stringify({ error: 'Search failed' })
+                    })
+                  }
+                }
+              }
+
+              if (toolResults.length > 0) {
+                const baseMessages = enhancedContext
+                  ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }]
+                  : messages
+
+                const systemMessage = {
+                  role: 'system',
+                  content: `Current date: ${currentDate}. When referencing search results, use this date as baseline.`
+                }
+
+                finalMessages = [
+                  systemMessage,
+                  ...baseMessages,
+                  toolResponse.choices[0].message,
+                  ...toolResults
+                ]
+              } else {
+                // Tool detection but no results - use enhanced context
+                finalMessages = enhancedContext
+                  ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }]
+                  : messages
+              }
+            } else {
+              // No tool calls - model decided not to search
+              const directContent = toolResponse.choices?.[0]?.message?.content
+              if (directContent) {
+                // Model already produced a response without tools
+                responseText = directContent
+                const usage = toolResponse.usage || { prompt_tokens: 0, completion_tokens: 0 }
+
+                // Send the full content as a single chunk
+                sendEvent({ type: 'content', id: chatNode.id, content: directContent })
+
+                // Update DB
+                await updateChatNodeResponse(chatNode.id, directContent, usage, model, 'completed')
+
+                // Track usage
+                await trackTokenUsage({
+                  userId,
+                  tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
+                  promptTokens: usage.prompt_tokens || 0,
+                  completionTokens: usage.completion_tokens || 0,
+                  modelId: model,
+                  sessionId,
+                  nodeId: chatNode.id
+                }).catch(err => log.error('Failed to track token usage', err))
+
+                // Title generation
+                if (!parentNodeId && chatNode.depth === 0) {
+                  await generateAndSendTitle(openRouterClient, sessionId, userPrompt, directContent, sendEvent)
+                }
+
+                await clearCaches(sessionId, chatNode, directContent)
+                sendEvent({ type: 'done', id: chatNode.id })
+                controller.close()
+                stopTimer()
+                return
+              }
+
+              // Empty response - fall through to streaming
+              finalMessages = enhancedContext
+                ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }]
+                : messages
+            }
+          } else {
+            // No tools - use enhanced context if available
+            finalMessages = enhancedContext
+              ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }]
+              : messages
+          }
+
+          // 4. Stream the final AI response
+          const streamRequestParams: any = {
+            model: model as ModelId,
+            messages: finalMessages,
+            temperature,
+            max_tokens,
+            stream: true,
+          }
+
+          if (reasoning && supportsReasoning(model as ModelId)) {
+            streamRequestParams.reasoning = getReasoningConfig(model as ModelId)
+          }
+
+          // Generous timeout for streaming (5 minutes)
+          const streamTimeout = 300000
+
+          await openRouterClient.createStreamingChatCompletion(
+            streamRequestParams,
+            (chunk) => {
+              responseText += chunk
+              tokenCount++
+              sendEvent({ type: 'content', id: chatNode.id, content: chunk })
+            },
+            streamTimeout
+          )
+
+          // 5. Update DB with completed response
+          const estimatedPromptTokens = estimateTokens(userPrompt)
+          await updateChatNodeResponse(
+            chatNode.id,
+            responseText,
+            { prompt_tokens: estimatedPromptTokens, completion_tokens: tokenCount },
+            model,
+            'completed'
+          )
+
+          // 6. Track billing
+          await trackTokenUsage({
+            userId,
+            tokensUsed: estimatedPromptTokens + tokenCount,
+            promptTokens: estimatedPromptTokens,
+            completionTokens: tokenCount,
+            modelId: model,
+            sessionId,
+            nodeId: chatNode.id
+          }).catch(err => log.error('Failed to track token usage (streaming)', err))
+
+          // 7. Title generation for first message
+          if (!parentNodeId && chatNode.depth === 0) {
+            await generateAndSendTitle(openRouterClient, sessionId, userPrompt, responseText, sendEvent)
+          }
+
+          // 8. Clear caches
+          await clearCaches(sessionId, chatNode, responseText)
+
+          // 9. Done
+          sendEvent({ type: 'done', id: chatNode.id })
+          controller.close()
+        } catch (error) {
+          log.error('Streaming error in with-tools route', error)
+
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+          // Update DB with failed status
+          await updateChatNodeResponse(
+            chatNode.id, '', undefined, model, 'failed', errorMessage
+          ).catch(err => log.error('Failed to update node status to failed', err))
+
+          recordError(createAppError(
+            'SSE streaming failed',
+            ErrorCategory.EXTERNAL_API,
+            {
+              context: { chatNodeId: chatNode.id, sessionId, model },
+              cause: error as Error,
+            }
+          ))
+
+          sendEvent({ type: 'error', id: chatNode.id, error: errorMessage })
+          controller.close()
+        }
+
+        stopTimer()
+      },
     })
 
-    // Continue processing AI response with tools in background
-    processAIResponseWithTools(
-      chatNode, 
-      messages, 
-      model, 
-      temperature, 
-      max_tokens, 
-      sessionId, 
-      parentNodeId, 
-      useEnhancedContext, 
-      userPrompt,
-      enableWebSearch,
-      user.id,  // Pass user ID for personalized system prompt
-      reasoning // Pass reasoning parameter
-    ).catch(error => {
-      log.error('Background AI processing with tools failed', error)
-      updateChatNodeResponse(chatNode.id, '', undefined, model, 'failed', error.message)
-        .catch(err => log.error('Failed to update node status to failed', err))
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
     })
-
-    return immediateResponse
-  } finally {
+  } catch (error) {
     stopTimer()
+    log.error('Pre-stream error in with-tools route', error)
+
+    recordError(createAppError(
+      'Chat with-tools API failed',
+      ErrorCategory.INTERNAL,
+      { cause: error as Error }
+    ))
+
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    )
   }
-})
+}
+
+// Helper: Generate AI title and send via SSE
+async function generateAndSendTitle(
+  client: OpenRouterClient,
+  sessionId: string,
+  userPrompt: string,
+  responseContent: string,
+  sendEvent: (data: any) => void
+) {
+  try {
+    const systemPrompt = `You are a helpful assistant that generates concise, descriptive titles for chat conversations.
+Based on the user's first message and optionally the assistant's response, generate a short title (3-7 words) that captures the essence of the conversation.
+The title should be:
+- Clear and descriptive
+- In the same language as the user's message
+- Without quotes or special characters
+- Focused on the main topic or question`
+
+    const titlePrompt = responseContent
+      ? `User's first message: "${userPrompt}"\n\nAssistant's response summary: "${responseContent.substring(0, 500)}..."\n\nGenerate a concise title for this conversation.`
+      : `User's first message: "${userPrompt}"\n\nGenerate a concise title for this conversation.`
+
+    const titleResponse = await client.createChatCompletion({
+      model: 'openai/gpt-4o-2024-11-20',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: titlePrompt }
+      ],
+      max_tokens: 50,
+      temperature: 0.7,
+    })
+
+    const title = titleResponse.choices[0]?.message?.content?.trim() || 'New Chat'
+
+    const supabase = await createClient()
+    const { error: updateError } = await supabase
+      .from('sessions')
+      .update({
+        name: title,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessionId)
+
+    if (!updateError) {
+      sendEvent({ type: 'title', sessionId, title })
+      log.info('Session title updated', { title, sessionId })
+
+      try {
+        const { clearQueryCache } = await import('@/lib/db/query-optimizer')
+        clearQueryCache()
+      } catch {
+        // Non-critical
+      }
+    } else {
+      log.error('Failed to update session title', updateError)
+    }
+  } catch (error) {
+    log.error('Failed to generate AI title', error)
+    // Non-critical - don't fail the stream
+  }
+}

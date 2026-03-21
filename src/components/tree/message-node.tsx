@@ -135,9 +135,16 @@ export const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
       <div className="mb-2">
         <p className="text-xs font-medium text-gray-600 mb-1">Assistant:</p>
         {node.status === 'streaming' ? (
-          <div className="py-2">
-            <StreamingAnimation />
-          </div>
+          node.response ? (
+            <div>
+              <p className="text-sm text-gray-700">{truncateText(node.response, 80)}</p>
+              <StreamingAnimation className="mt-1" />
+            </div>
+          ) : (
+            <div className="py-2">
+              <StreamingAnimation />
+            </div>
+          )
         ) : node.response ? (
           <p className="text-sm text-gray-700">{truncateText(node.response, 80)}</p>
         ) : (
