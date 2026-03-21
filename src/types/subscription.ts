@@ -1,3 +1,14 @@
+// Credit system: 1 credit = $0.01 USD (internal conversion rate)
+export const CREDIT_RATE_USD = 0.01
+
+export function usdToCredits(usd: number): number {
+  return Math.round(usd / CREDIT_RATE_USD)
+}
+
+export function creditsToUsd(credits: number): number {
+  return credits * CREDIT_RATE_USD
+}
+
 export interface SubscriptionPlan {
   id: string
   name: string
@@ -8,6 +19,8 @@ export interface SubscriptionPlan {
   features: string[]
   limits: {
     monthlyTokens: number
+    monthlyCostUsd: number // USD budget per month (-1 for unlimited)
+    monthlyCredits: number // Credit display value (-1 for unlimited)
     sessionsPerMonth: number
     advancedModels: boolean
     prioritySupport: boolean
@@ -40,6 +53,8 @@ export interface UsageQuota {
   planId: string
   monthlyTokensUsed: number
   monthlyTokensLimit: number
+  monthlyCostUsed: number
+  monthlyCostLimit: number
   sessionsThisMonth: number
   sessionsLimit: number
   webSearchesUsed: number
@@ -57,7 +72,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     currency: 'usd',
     interval: 'month',
     features: [
-      '500,000 tokens per month',
+      '100 credits per month',
       '5 basic AI models (DeepSeek V3.1, Gemini Flash, GPT-5 Nano, etc.)',
       '10 web searches per month',
       'Unlimited sessions',
@@ -65,6 +80,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     ],
     limits: {
       monthlyTokens: 500000,
+      monthlyCostUsd: 1.0, // $1.00
+      monthlyCredits: 100,
       sessionsPerMonth: -1,
       advancedModels: false,
       prioritySupport: false,
@@ -84,7 +101,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     currency: 'usd',
     interval: 'month',
     features: [
-      '4,000,000 tokens per month (hybrid limits)',
+      '1,300 credits per month',
       'All AI models with smart allocation',
       '200 web searches per month',
       'Unlimited sessions',
@@ -94,6 +111,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     ],
     limits: {
       monthlyTokens: 4000000,
+      monthlyCostUsd: 13.0, // $13.00 (35% margin on $20)
+      monthlyCredits: 1300,
       sessionsPerMonth: -1, // unlimited
       advancedModels: true,
       prioritySupport: true,
@@ -114,7 +133,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     currency: 'usd',
     interval: 'month',
     features: [
-      '15,000,000 tokens per month (unlimited)',
+      '3,500 credits per month',
       'All AI models unlimited',
       'Unlimited web searches',
       'Unlimited sessions',
@@ -125,6 +144,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     ],
     limits: {
       monthlyTokens: 15000000,
+      monthlyCostUsd: 35.0, // $35.00 (30% margin on $50)
+      monthlyCredits: 3500,
       sessionsPerMonth: -1, // unlimited
       advancedModels: true,
       prioritySupport: true,

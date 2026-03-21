@@ -3,7 +3,10 @@ import { createChatNode, getChatNodeById, buildContextForNode } from '@/lib/db/c
 import { buildEnhancedContext, buildContextWithStrategy, extractNodeReferences } from '@/lib/db/enhanced-context'
 import { clearSessionCache } from '@/lib/db/enhanced-context-cache'
 import { OpenRouterClient } from '@/lib/openrouter/client'
+import { createClient } from '@/lib/supabase/server'
 import { ModelId } from '@/types'
+import { calculateCostUsd, estimateCostUsd, formatCreditUsage } from '@/lib/billing/cost-calculator'
+import { checkUserQuota, trackTokenUsage, estimateTokens } from '@/lib/billing/usage-tracker'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,6 +26,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
+      )
+    }
+
+    // Check authentication
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    // Cost-based quota check
+    const estimatedInputTokens = estimateTokens(prompt)
+    const estimatedCost = estimateCostUsd(model, estimatedInputTokens, maxTokens)
+    const quotaCheck = await checkUserQuota(user.id, estimatedCost)
+    if (!quotaCheck.allowed) {
+      const quotaExceededMessage = quotaCheck.costLimit === -1
+        ? 'Usage limit exceeded. Please contact support.'
+        : `Monthly credit limit reached (${formatCreditUsage(quotaCheck.currentCostUsed, quotaCheck.costLimit)} credits). Please upgrade your plan or wait for next month's reset.`
+      return NextResponse.json(
+        {
+          error: quotaExceededMessage,
+          quota: {
+            costUsed: quotaCheck.currentCostUsed,
+            costLimit: quotaCheck.costLimit,
+            plan: quotaCheck.planId
+          }
+        },
+        { status: 429 }
       )
     }
 
@@ -135,8 +169,21 @@ export async function POST(request: NextRequest) {
       status: 'completed',
       promptTokens: usage?.prompt_tokens || 0,
       responseTokens: usage?.completion_tokens || 0,
-      costUsd: calculateCost(model, usage),
+      costUsd: calculateCostUsd(model, usage?.prompt_tokens || 0, usage?.completion_tokens || 0),
     })
+
+    // Track token usage for billing
+    if (usage) {
+      await trackTokenUsage({
+        userId: user.id,
+        tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
+        promptTokens: usage.prompt_tokens || 0,
+        completionTokens: usage.completion_tokens || 0,
+        modelId: model,
+        sessionId,
+        nodeId: newNode.id
+      }).catch(err => console.error('Failed to track token usage (branch)', err))
+    }
 
     // Clear session cache since new node was added
     clearSessionCache(sessionId)
@@ -162,22 +209,3 @@ export async function POST(request: NextRequest) {
 // Import these from the existing chat route
 import { updateChatNode } from '@/lib/db/chat-nodes'
 
-function calculateCost(model: string, usage?: { prompt_tokens: number; completion_tokens: number }) {
-  if (!usage) return 0
-
-  const costMap: Record<string, { input: number; output: number }> = {
-    'openai/gpt-4o': { input: 5, output: 15 },
-    'openai/gpt-4-turbo': { input: 10, output: 30 },
-    'openai/gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-    'anthropic/claude-3.5-sonnet': { input: 3, output: 15 },
-    'anthropic/claude-3-opus': { input: 15, output: 75 },
-    'google/gemini-pro': { input: 0.5, output: 1.5 },
-    'meta-llama/llama-3.1-70b-instruct': { input: 0.8, output: 0.8 },
-  }
-
-  const modelCost = costMap[model] || { input: 1, output: 1 }
-  const inputCost = (usage.prompt_tokens / 1_000_000) * modelCost.input
-  const outputCost = (usage.completion_tokens / 1_000_000) * modelCost.output
-  
-  return inputCost + outputCost
-}

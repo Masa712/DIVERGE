@@ -261,6 +261,7 @@ async function updateUsageQuotaPlan(
         monthly_tokens_limit: limits.monthly_tokens_limit,
         sessions_limit: limits.sessions_limit,
         web_searches_limit: limits.web_searches_limit,
+        monthly_cost_limit: limits.monthly_cost_limit,
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
@@ -327,6 +328,8 @@ async function updateUsageQuotaPlan(
         sessions_limit: limits.sessions_limit,
         web_searches_used: 0,
         web_searches_limit: limits.web_searches_limit,
+        monthly_cost_used: 0,
+        monthly_cost_limit: limits.monthly_cost_limit,
         reset_date: nextResetDate.toISOString(),
       })
 
@@ -347,32 +350,38 @@ function getPlanLimits(planId: string): {
   monthly_tokens_limit: number
   sessions_limit: number
   web_searches_limit: number
+  monthly_cost_limit: number
 } {
-  const planLimits: Record<string, { monthly_tokens_limit: number; sessions_limit: number; web_searches_limit: number }> = {
+  const planLimits: Record<string, { monthly_tokens_limit: number; sessions_limit: number; web_searches_limit: number; monthly_cost_limit: number }> = {
     free: {
       monthly_tokens_limit: 500000,
       sessions_limit: -1,
       web_searches_limit: 10,
+      monthly_cost_limit: 1.0,
     },
     plus: {
       monthly_tokens_limit: 4000000,
       sessions_limit: -1, // unlimited
       web_searches_limit: 200,
+      monthly_cost_limit: 13.0, // $13.00 = 1,300 credits (35% margin)
     },
     'plus-yearly': {
       monthly_tokens_limit: 4000000,
       sessions_limit: -1, // unlimited
       web_searches_limit: 200,
+      monthly_cost_limit: 13.0, // $13.00 = 1,300 credits (35% margin)
     },
     pro: {
       monthly_tokens_limit: 15000000,
       sessions_limit: -1, // unlimited
       web_searches_limit: -1, // unlimited
+      monthly_cost_limit: 35.0, // $35.00 = 3,500 credits (30% margin)
     },
     'pro-yearly': {
       monthly_tokens_limit: 15000000,
       sessions_limit: -1, // unlimited
       web_searches_limit: -1, // unlimited
+      monthly_cost_limit: 35.0, // $35.00 = 3,500 credits (30% margin)
     },
   }
 

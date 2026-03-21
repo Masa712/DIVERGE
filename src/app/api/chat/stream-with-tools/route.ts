@@ -5,8 +5,12 @@ import { ModelId } from '@/types'
 import { tavilyClient, WebSearchResponse } from '@/lib/tavily'
 import {
   canUseWebSearch,
-  trackWebSearchUsage
+  trackWebSearchUsage,
+  checkUserQuota,
+  trackTokenUsage,
+  estimateTokens
 } from '@/lib/billing/usage-tracker'
+import { estimateCostUsd, formatCreditUsage } from '@/lib/billing/cost-calculator'
 
 // Define tool schemas for function calling
 const AVAILABLE_TOOLS = [
@@ -75,6 +79,27 @@ export async function POST(request: NextRequest) {
       return new Response(
         JSON.stringify({ error: 'Messages and model are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Cost-based quota check
+    const estimatedInputTokens = estimateTokens(messages[messages.length - 1]?.content || '')
+    const estimatedCost = estimateCostUsd(model, estimatedInputTokens, max_tokens || 1000)
+    const quotaCheck = await checkUserQuota(user.id, estimatedCost)
+    if (!quotaCheck.allowed) {
+      const quotaExceededMessage = quotaCheck.costLimit === -1
+        ? 'Usage limit exceeded. Please contact support.'
+        : `Monthly credit limit reached (${formatCreditUsage(quotaCheck.currentCostUsed, quotaCheck.costLimit)} credits). Please upgrade your plan or wait for next month's reset.`
+      return new Response(
+        JSON.stringify({
+          error: quotaExceededMessage,
+          quota: {
+            costUsed: quotaCheck.currentCostUsed,
+            costLimit: quotaCheck.costLimit,
+            plan: quotaCheck.planId
+          }
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
@@ -259,7 +284,7 @@ ${searchResult.results.map((r, i) =>
           )
 
           // Store search results metadata if any
-          const metadata = searchResults.length > 0 
+          const metadata = searchResults.length > 0
             ? { web_searches: searchResults.map(s => ({ query: s.query, resultCount: s.results.length })) }
             : undefined
 
@@ -273,6 +298,18 @@ ${searchResult.results.map((r, i) =>
               metadata
             })
             .eq('id', chatNode.id)
+
+          // Track token usage for billing (approximate - stream doesn't give exact token counts)
+          const estimatedPromptTokens = estimateTokens(messages[messages.length - 1]?.content || '')
+          await trackTokenUsage({
+            userId: user.id,
+            tokensUsed: estimatedPromptTokens + tokenCount,
+            promptTokens: estimatedPromptTokens,
+            completionTokens: tokenCount,
+            modelId: model,
+            sessionId,
+            nodeId: chatNode.id
+          }).catch(err => console.error('Failed to track token usage (stream-with-tools)', err))
 
           // Send completion signal
           const doneData = JSON.stringify({ 

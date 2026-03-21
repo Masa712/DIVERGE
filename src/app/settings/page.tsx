@@ -19,7 +19,7 @@ import {
 import { SystemPromptSettings } from '@/components/settings/system-prompt-settings'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
-import { SubscriptionPlan, UserSubscription, UsageQuota, formatPrice } from '@/types/subscription'
+import { SubscriptionPlan, UserSubscription, UsageQuota, formatPrice, usdToCredits } from '@/types/subscription'
 
 interface UserProfile {
   display_name: string
@@ -232,6 +232,8 @@ function SettingsContent() {
           planId: usage.plan_id,
           monthlyTokensUsed: usage.monthly_tokens_used,
           monthlyTokensLimit: usage.monthly_tokens_limit,
+          monthlyCostUsed: usage.monthly_cost_used || 0,
+          monthlyCostLimit: usage.monthly_cost_limit || 1.0,
           sessionsThisMonth: usage.sessions_this_month,
           sessionsLimit: usage.sessions_limit,
           webSearchesUsed: usage.web_searches_used || 0,
@@ -644,34 +646,45 @@ function SettingsContent() {
                   <div className="h-32 bg-gray-100 rounded-lg animate-pulse"></div>
                 ) : billingData?.usage ? (
                   <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 space-y-4">
-                    {/* Token Usage */}
+                    {/* Credit Usage (Primary) */}
                     <div>
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-gray-700">Tokens Used</span>
+                        <span className="text-sm font-medium text-gray-700">Credits Used</span>
                         <span className="text-sm font-semibold text-gray-900">
-                          {billingData.usage.monthlyTokensUsed.toLocaleString()} / {' '}
-                          {billingData.usage.monthlyTokensLimit === -1
+                          {usdToCredits(billingData.usage.monthlyCostUsed).toLocaleString()} / {' '}
+                          {billingData.usage.monthlyCostLimit === -1
                             ? 'Unlimited'
-                            : billingData.usage.monthlyTokensLimit.toLocaleString()
+                            : `${usdToCredits(billingData.usage.monthlyCostLimit).toLocaleString()}`
                           }
+                          {' '}credits
                         </span>
                       </div>
-                      {billingData.usage.monthlyTokensLimit !== -1 && (
+                      {billingData.usage.monthlyCostLimit > 0 && (
                         <div className="w-full bg-gray-300 rounded-full h-2">
                           <div
                             className={`h-2 rounded-full transition-all duration-300 ${
-                              ((billingData.usage.monthlyTokensUsed / billingData.usage.monthlyTokensLimit) * 100) < 50
+                              ((billingData.usage.monthlyCostUsed / billingData.usage.monthlyCostLimit) * 100) < 50
                                 ? 'bg-green-500'
-                                : ((billingData.usage.monthlyTokensUsed / billingData.usage.monthlyTokensLimit) * 100) < 80
+                                : ((billingData.usage.monthlyCostUsed / billingData.usage.monthlyCostLimit) * 100) < 80
                                 ? 'bg-yellow-500'
                                 : 'bg-red-500'
                             }`}
                             style={{
-                              width: `${Math.min((billingData.usage.monthlyTokensUsed / billingData.usage.monthlyTokensLimit) * 100, 100)}%`
+                              width: `${Math.min((billingData.usage.monthlyCostUsed / billingData.usage.monthlyCostLimit) * 100, 100)}%`
                             }}
                           />
                         </div>
                       )}
+                    </div>
+
+                    {/* Token Usage (Secondary/Analytics) */}
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-gray-500">Tokens Used</span>
+                        <span className="text-sm text-gray-500">
+                          {billingData.usage.monthlyTokensUsed.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Web Search Usage */}
