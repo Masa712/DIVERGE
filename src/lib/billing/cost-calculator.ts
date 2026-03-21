@@ -42,10 +42,21 @@ export function estimateCostUsd(
 }
 
 /**
- * Convert USD amount to credits for display
+ * Convert USD amount to credits for display (preserves 3 decimal places)
  */
 export function usdToCredits(usd: number): number {
-  return Math.round(usd / CREDIT_RATE_USD)
+  return Math.round((usd / CREDIT_RATE_USD) * 1000) / 1000
+}
+
+/**
+ * Format a credit value for display (shows decimals only when needed)
+ */
+export function formatCredits(credits: number): string {
+  if (credits >= 100 || Number.isInteger(credits)) {
+    return Math.round(credits).toLocaleString()
+  }
+  // Remove trailing zeros: 0.100 → 0.1, 0.050 → 0.05, 0.003 → 0.003
+  return parseFloat(credits.toFixed(3)).toString()
 }
 
 /**
@@ -54,5 +65,5 @@ export function usdToCredits(usd: number): number {
 export function formatCreditUsage(costUsed: number, costLimit: number): string {
   const creditsUsed = usdToCredits(costUsed)
   const creditsLimit = usdToCredits(costLimit)
-  return `${creditsUsed.toLocaleString()} / ${creditsLimit.toLocaleString()}`
+  return `${formatCredits(creditsUsed)} / ${formatCredits(creditsLimit)}`
 }

@@ -19,7 +19,8 @@ import {
 import { SystemPromptSettings } from '@/components/settings/system-prompt-settings'
 import { AVAILABLE_MODELS, ModelId } from '@/types'
 import { AnimatedBackground } from '@/components/ui/AnimatedBackground'
-import { SubscriptionPlan, UserSubscription, UsageQuota, formatPrice, usdToCredits } from '@/types/subscription'
+import { SubscriptionPlan, UserSubscription, UsageQuota, formatPrice } from '@/types/subscription'
+import { usdToCredits, formatCredits } from '@/lib/billing/cost-calculator'
 
 interface UserProfile {
   display_name: string
@@ -651,10 +652,10 @@ function SettingsContent() {
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-sm font-medium text-gray-700">Credits Used</span>
                         <span className="text-sm font-semibold text-gray-900">
-                          {usdToCredits(billingData.usage.monthlyCostUsed).toLocaleString()} / {' '}
+                          {formatCredits(usdToCredits(billingData.usage.monthlyCostUsed))} / {' '}
                           {billingData.usage.monthlyCostLimit === -1
                             ? 'Unlimited'
-                            : `${usdToCredits(billingData.usage.monthlyCostLimit).toLocaleString()}`
+                            : formatCredits(usdToCredits(billingData.usage.monthlyCostLimit))
                           }
                           {' '}credits
                         </span>
