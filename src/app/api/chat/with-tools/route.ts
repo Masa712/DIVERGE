@@ -288,7 +288,6 @@ export async function POST(request: NextRequest) {
           const openRouterClient = new OpenRouterClient()
           let finalMessages = [...messages]
           let responseText = ''
-          let tokenCount = 0
 
           if (shouldUseTools) {
             // Tool calling: first non-streaming call for tool detection
@@ -415,42 +414,8 @@ export async function POST(request: NextRequest) {
               }
             } else {
               // No tool calls - model decided not to search
-              const directContent = toolResponse.choices?.[0]?.message?.content
-              if (directContent) {
-                // Model already produced a response without tools
-                responseText = directContent
-                const usage = toolResponse.usage || { prompt_tokens: 0, completion_tokens: 0 }
-
-                // Send the full content as a single chunk
-                sendEvent({ type: 'content', id: chatNode.id, content: directContent })
-
-                // Update DB
-                await updateChatNodeResponse(chatNode.id, directContent, usage, model, 'completed')
-
-                // Track usage
-                await trackTokenUsage({
-                  userId,
-                  tokensUsed: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0),
-                  promptTokens: usage.prompt_tokens || 0,
-                  completionTokens: usage.completion_tokens || 0,
-                  modelId: model,
-                  sessionId,
-                  nodeId: chatNode.id
-                }).catch(err => log.error('Failed to track token usage', err))
-
-                // Title generation
-                if (!parentNodeId && chatNode.depth === 0) {
-                  await generateAndSendTitle(openRouterClient, sessionId, userPrompt, directContent, sendEvent)
-                }
-
-                await clearCaches(sessionId, chatNode, directContent)
-                sendEvent({ type: 'done', id: chatNode.id })
-                controller.close()
-                stopTimer()
-                return
-              }
-
-              // Empty response - fall through to streaming
+              // Discard the non-streaming response and fall through to streaming
+              // for consistent real-time character-by-character display
               finalMessages = enhancedContext
                 ? [...messages.slice(0, -1), { role: 'user', content: enhancedContext }]
                 : messages
@@ -478,22 +443,29 @@ export async function POST(request: NextRequest) {
           // Generous timeout for streaming (5 minutes)
           const streamTimeout = 300000
 
-          await openRouterClient.createStreamingChatCompletion(
+          const streamingUsage = await openRouterClient.createStreamingChatCompletion(
             streamRequestParams,
             (chunk) => {
               responseText += chunk
-              tokenCount++
               sendEvent({ type: 'content', id: chatNode.id, content: chunk })
             },
             streamTimeout
           )
 
-          // 5. Update DB with completed response
-          const estimatedPromptTokens = estimateTokens(userPrompt)
+          // 5. Update DB with completed response - use actual usage from OpenRouter when available
+          const promptTokens = streamingUsage?.prompt_tokens || estimateTokens(userPrompt)
+          const completionTokens = streamingUsage?.completion_tokens || estimateTokens(responseText)
+          log.debug('Token usage for billing (with-tools streaming)', {
+            source: streamingUsage ? 'openrouter' : 'estimate',
+            promptTokens,
+            completionTokens,
+            model
+          })
+
           await updateChatNodeResponse(
             chatNode.id,
             responseText,
-            { prompt_tokens: estimatedPromptTokens, completion_tokens: tokenCount },
+            { prompt_tokens: promptTokens, completion_tokens: completionTokens },
             model,
             'completed'
           )
@@ -501,9 +473,9 @@ export async function POST(request: NextRequest) {
           // 6. Track billing
           await trackTokenUsage({
             userId,
-            tokensUsed: estimatedPromptTokens + tokenCount,
-            promptTokens: estimatedPromptTokens,
-            completionTokens: tokenCount,
+            tokensUsed: promptTokens + completionTokens,
+            promptTokens,
+            completionTokens,
             modelId: model,
             sessionId,
             nodeId: chatNode.id

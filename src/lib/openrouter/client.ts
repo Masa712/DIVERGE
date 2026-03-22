@@ -157,7 +157,7 @@ export class OpenRouterClient {
     request: OpenRouterRequest,
     onChunk: (chunk: string) => void,
     timeoutMs: number = 30000
-  ): Promise<void> {
+  ): Promise<{ prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined> {
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
@@ -189,6 +189,7 @@ export class OpenRouterClient {
 
     const decoder = new TextDecoder()
     let buffer = ''
+    let usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined
 
     while (true) {
       const { done, value } = await reader.read()
@@ -202,7 +203,7 @@ export class OpenRouterClient {
         if (line.startsWith('data: ')) {
           const data = line.slice(6)
           if (data === '[DONE]') {
-            return
+            return usage
           }
 
           try {
@@ -211,12 +212,22 @@ export class OpenRouterClient {
             if (content) {
               onChunk(content)
             }
+            // Capture usage from the final chunk (empty choices + usage object)
+            if (parsed.usage) {
+              usage = {
+                prompt_tokens: parsed.usage.prompt_tokens || 0,
+                completion_tokens: parsed.usage.completion_tokens || 0,
+                total_tokens: parsed.usage.total_tokens || 0,
+              }
+            }
           } catch (e) {
             console.error('Error parsing SSE chunk:', e)
           }
         }
       }
     }
+
+    return usage
   }
 
   // Get available models from OpenRouter

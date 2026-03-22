@@ -300,7 +300,6 @@ export async function POST(request: NextRequest) {
           // 5. Stream AI response
           const client = new OpenRouterClient()
           let responseText = ''
-          let tokenCount = 0
 
           const getOptimalMaxTokens = (modelId: string, userMaxTokens: number): number => {
             if (modelId === 'x-ai/grok-4') return Math.max(userMaxTokens, 6000)
@@ -326,23 +325,30 @@ export async function POST(request: NextRequest) {
 
           const streamTimeout = 300000
 
-          await client.createStreamingChatCompletion(
+          const streamingUsage = await client.createStreamingChatCompletion(
             requestParams,
             (chunk) => {
               responseText += chunk
-              tokenCount++
               sendEvent({ type: 'content', id: chatNode.id, content: chunk })
             },
             streamTimeout
           )
 
-          // 6. Update DB
-          const estimatedPromptTokens = estimateTokens(userPrompt)
+          // 6. Update DB - use actual usage from OpenRouter when available
+          const promptTokens = streamingUsage?.prompt_tokens || estimateTokens(userPrompt)
+          const completionTokens = streamingUsage?.completion_tokens || estimateTokens(responseText)
+          log.debug('Token usage for billing', {
+            source: streamingUsage ? 'openrouter' : 'estimate',
+            promptTokens,
+            completionTokens,
+            model
+          })
+
           await withRetry(async () => {
             await updateChatNodeResponse(
               chatNode.id,
               responseText,
-              { prompt_tokens: estimatedPromptTokens, completion_tokens: tokenCount },
+              { prompt_tokens: promptTokens, completion_tokens: completionTokens },
               model,
               'completed'
             )
@@ -351,9 +357,9 @@ export async function POST(request: NextRequest) {
           // 7. Track billing
           await trackTokenUsage({
             userId,
-            tokensUsed: estimatedPromptTokens + tokenCount,
-            promptTokens: estimatedPromptTokens,
-            completionTokens: tokenCount,
+            tokensUsed: promptTokens + completionTokens,
+            promptTokens,
+            completionTokens,
             modelId: model,
             sessionId,
             nodeId: chatNode.id

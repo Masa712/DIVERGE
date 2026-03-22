@@ -85,7 +85,6 @@ export async function POST(request: NextRequest) {
     // Create a readable stream
     const encoder = new TextEncoder()
     let responseText = ''
-    let tokenCount = 0
 
     // Set appropriate timeout for high-performance and reasoning models
     const timeoutMs = (() => {
@@ -98,7 +97,7 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          await client.createStreamingChatCompletion(
+          const streamingUsage = await client.createStreamingChatCompletion(
             {
               model: model as ModelId,
               messages,
@@ -108,10 +107,9 @@ export async function POST(request: NextRequest) {
             },
             (chunk) => {
               responseText += chunk
-              tokenCount++
-              
+
               // Send chunk to client
-              const data = JSON.stringify({ 
+              const data = JSON.stringify({
                 id: chatNode.id,
                 content: chunk,
                 type: 'content'
@@ -121,23 +119,24 @@ export async function POST(request: NextRequest) {
             timeoutMs
           )
 
-          // Update chat node with complete response
+          // Update chat node with complete response - use actual usage from OpenRouter when available
+          const promptTokens = streamingUsage?.prompt_tokens || estimateTokens(messages[messages.length - 1]?.content || '')
+          const completionTokens = streamingUsage?.completion_tokens || estimateTokens(responseText)
           await supabase
             .from('chat_nodes')
             .update({
               response: responseText,
               status: 'completed',
-              response_tokens: tokenCount, // Approximate token count
+              response_tokens: completionTokens,
             })
             .eq('id', chatNode.id)
 
-          // Track token usage for billing (approximate - stream doesn't give exact token counts)
-          const estimatedPromptTokens = estimateTokens(messages[messages.length - 1]?.content || '')
+          // Track token usage for billing
           await trackTokenUsage({
             userId: user.id,
-            tokensUsed: estimatedPromptTokens + tokenCount,
-            promptTokens: estimatedPromptTokens,
-            completionTokens: tokenCount,
+            tokensUsed: promptTokens + completionTokens,
+            promptTokens,
+            completionTokens,
             modelId: model,
             sessionId,
             nodeId: chatNode.id
