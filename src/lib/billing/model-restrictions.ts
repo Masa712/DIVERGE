@@ -67,7 +67,6 @@ export const MODEL_TIERS = {
     'anthropic/claude-sonnet-4.5', // $3/$15
     'anthropic/claude-sonnet-4.6', // $3/$15
     'google/gemini-3.1-pro-preview', // $2/$12
-    'google/gemini-3-pro-preview', // $2/$12
     'google/gemini-2.5-pro',
     'x-ai/grok-3',
     'x-ai/grok-4',

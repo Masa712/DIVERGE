@@ -29,7 +29,6 @@ export type ModelId =
   // Google Latest Models via OpenRouter
   | 'google/gemini-3.1-pro-preview'
   | 'google/gemini-3.1-flash-lite-preview'
-  | 'google/gemini-3-pro-preview'
   | 'google/gemini-3-flash-preview'
   | 'google/gemini-2.5-flash'
   | 'google/gemini-2.5-pro'
@@ -143,13 +142,6 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
     provider: 'Google',
     contextLength: 1048576,
     costPerMillionTokens: { input: 0.25, output: 1.50 }
-  },
-  {
-    id: 'google/gemini-3-pro-preview',
-    name: 'Gemini 3 Pro',
-    provider: 'Google',
-    contextLength: 1048576,
-    costPerMillionTokens: { input: 2, output: 12 }
   },
   {
     id: 'google/gemini-3-flash-preview',
