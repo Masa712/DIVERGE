@@ -42,8 +42,6 @@ Divergeは、会話をツリー構造で可視化し、任意のノードから�
 - **TypeScript 5** - 型安全性
 - **Tailwind CSS 3** - ユーティリティファーストCSS
 - **React Flow 11** - インタラクティブツリー可視化
-- **React Hook Form 7** - フォーム管理
-- **Zod 3** - スキーマバリデーション
 
 ### バックエンド
 - **Next.js API Routes** - サーバーレスAPI

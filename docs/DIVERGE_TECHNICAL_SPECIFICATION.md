@@ -34,9 +34,7 @@ Diverge is a sophisticated multi-model branching chat application that enables u
 - **Framework**: Next.js 14 (App Router)
 - **UI Library**: React 18 with TypeScript 5
 - **Styling**: Tailwind CSS 3 with custom glassmorphism components
-- **State Management**: Zustand 4 for global state
 - **Visualization**: React Flow 11 for tree rendering
-- **Forms**: React Hook Form 7 with Zod 3 validation
 - **Icons**: Heroicons 2.2.0 and Lucide React 0.300.0
 - **Markdown**: React Markdown 10.1.0 with syntax highlighting
 
@@ -46,12 +44,10 @@ Diverge is a sophisticated multi-model branching chat application that enables u
 - **Caching**: Redis with distributed caching and connection pooling
 - **AI Integration**: OpenRouter API for multi-model access
 - **Web Search**: Tavily API integration
-- **Queue Management**: p-queue 7.0.0 for request handling
 - **Logging**: Pino 8.0.0 with structured logging
 
 ### Additional Libraries
 - **UUID Generation**: uuid 9.0.0
-- **Retry Logic**: p-retry 5.0.0
 - **Distributed Locking**: redlock 5.0.0-beta.2
 - **Mathematical Rendering**: KaTeX support via rehype-katex
 - **Code Highlighting**: rehype-highlight 7.0.2
