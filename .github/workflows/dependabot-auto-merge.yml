@@ -18,6 +18,8 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  checks: read
+  statuses: read
 
 concurrency:
   group: dependabot-auto-merge
