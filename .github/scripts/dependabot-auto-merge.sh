@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Dependabot のセキュリティ更新PRのうち、安全に取り込めるものだけを自動マージする。
-# 条件: 自動検証している依存の種類 / パッチ・マイナー更新 / main に追従済み / すべてのチェックが成功。
-# それ以外は「要確認」ラベルとコメントを付けて手動確認に回す。DRY_RUN=true なら判定だけ表示する。
+# 条件: 自動検証している依存の種類 / 含まれる更新がすべてパッチ・マイナー / 衝突なし / すべてのチェックが成功。
+# 同じディレクトリの更新は1回の実行で1件だけマージし、残りは次回に回す（組み合わせの影響を小さくするため）。
+# 条件を満たさないものは「要確認」ラベルとコメントを付けて手動確認に回す。DRY_RUN=true なら判定だけ表示する。
 set -euo pipefail
 
 repo="${GITHUB_REPOSITORY}"
@@ -38,6 +39,7 @@ is_major() {
 }
 
 merged=0
+merged_dirs=" "
 while read -r pr; do
   n=$(jq -r .number <<<"$pr")
   title=$(jq -r .title <<<"$pr")
@@ -48,18 +50,36 @@ while read -r pr; do
   if [[ "$auto_ecosystems" != *" $eco "* ]]; then
     flag "$n" "自動検証していない種類の依存（$eco）"; continue
   fi
-  if [[ ! "$title" =~ from\ v?([0-9][^ ]*)\ to\ v?([0-9][^ ]*) ]]; then
-    flag "$n" "複数の依存をまとめた更新"; continue
+
+  # タイトルと、本文のうち Dependabot が書く「Bumps …」「Updates `x` from A to B」の行から
+  # バージョンの組を拾い、1つでもメジャー更新があれば手動確認にする（リリースノートの引用は対象外）
+  pairs=$({ echo "$title"; gh pr view "$n" --repo "$repo" --json body --jq .body | grep -E '^(Bumps|Updates) ' || true; } |
+    grep -oE 'from v?[0-9][0-9A-Za-z.+-]*[0-9A-Za-z] to v?[0-9][0-9A-Za-z.+-]*[0-9A-Za-z]' || true)
+  if [ -z "$pairs" ]; then
+    flag "$n" "更新前後のバージョンを判別できない"; continue
   fi
-  from=${BASH_REMATCH[1]} to=${BASH_REMATCH[2]}
-  if is_major "$from" "$to"; then
-    flag "$n" "メジャー更新 $from → $to"; continue
+  major=""
+  while read -r _ from _ to; do
+    if is_major "$from" "$to"; then major="$from → $to"; break; fi
+  done <<<"$pairs"
+  if [ -n "$major" ]; then
+    flag "$n" "メジャー更新を含む（$major）"; continue
   fi
 
-  # main の最新を含む状態で検証されたものだけを対象にする（遅れていれば Dependabot のリベース待ち）
-  behind=$(gh api "repos/$repo/compare/$base...$sha" --jq .behind_by)
-  if [ "$behind" != "0" ]; then
-    echo "#$n: main に追従していないため次回に回す"; continue
+  dirs=$(gh pr view "$n" --repo "$repo" --json files --jq '[.files[].path | split("/") | .[:-1] | join("/")] | unique | join(",")')
+  dirs=${dirs:-/}
+  if [[ "$merged_dirs" == *" $dirs "* ]]; then
+    echo "#$n: 同じディレクトリを今回すでに更新したため次回に回す"; continue
+  fi
+
+  # mergeable は GitHub が問い合わせを受けてから計算するため、UNKNOWN の間は少し待って聞き直す
+  for _ in 1 2 3 4 5 6; do
+    mergeable=$(gh pr view "$n" --repo "$repo" --json mergeable --jq .mergeable)
+    [ "$mergeable" != "UNKNOWN" ] && break
+    sleep 5
+  done
+  if [ "$mergeable" != "MERGEABLE" ]; then
+    echo "#$n: 衝突の解消待ち（$mergeable）のため次回に回す"; continue
   fi
 
   statuses=$(gh api "repos/$repo/commits/$sha/status" --jq '[.statuses[].state]')
@@ -78,16 +98,19 @@ while read -r pr; do
   fi
 
   if [ "$dry_run" = "true" ]; then
-    echo "#$n: 自動マージ対象（試行のためマージしない） — $title"; continue
+    echo "#$n: 自動マージ対象（試行のためマージしない） — $title"
+    merged_dirs+="$dirs "
+    continue
   fi
   if gh pr merge "$n" --repo "$repo" --merge --delete-branch; then
     echo "#$n: 自動マージ — $title"
     merged=$((merged + 1))
+    merged_dirs+="$dirs "
   else
     echo "#$n: マージできなかったため次回に回す"
   fi
 done < <(gh pr list --repo "$repo" --author "app/dependabot" --state open --base "$base" \
-  --json number,title,headRefName,headRefOid --jq '.[] | @json')
+  --json number,title,headRefName,headRefOid --jq 'sort_by(.number) | .[] | @json')
 
 echo "自動マージ: ${merged} 件"
 
