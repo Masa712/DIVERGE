@@ -1,0 +1,36 @@
+# 毎日 3 時台（日本時間）に Dependabot のセキュリティ更新PRを確認し、
+# パッチ・マイナー更新で検証がすべて成功したものだけを自動マージする。
+# メジャー更新や検証に失敗したものは「要確認」ラベルとコメントを付けて残す。
+# 手動実行では既定で判定だけを表示し（dry_run）、マージはしない。
+name: dependabot-auto-merge
+
+on:
+  schedule:
+    - cron: "17 18 * * *" # 03:17 JST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 判定だけ表示してマージしない
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: dependabot-auto-merge
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 自動マージの判定とマージ
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: bash .github/scripts/dependabot-auto-merge.sh

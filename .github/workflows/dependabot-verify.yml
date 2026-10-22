@@ -1,0 +1,53 @@
+# Dependabot の依存更新PRで、変更があったディレクトリのインストール・ビルド・テストを実行する。
+# このジョブ（verify）の成功が、dependabot-auto-merge で自動マージするための条件になる。
+# Actions タブから手動で実行すると、すべてのディレクトリをまとめて検証する。
+name: dependabot-verify
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: 検証するディレクトリを判定
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ -z "$BASE_SHA" ]; then files=ALL; else files=$(git diff --name-only "$BASE_SHA" HEAD); fi
+          printf '%s\n' "$files"
+          any=false
+          mark() {
+            if [ "$files" = ALL ] || grep -qE "$2" <<<"$files"; then echo "$1=true" >> "$GITHUB_OUTPUT"; any=true; fi
+          }
+          mark root '^(package\.json|package-lock\.json|pnpm-lock\.yaml)$'
+          # 自動マージ対象の依存なのに検証するディレクトリが無い場合は、成功扱いにしない
+          if [ "$any" = false ] && grep -qE "^dependabot/(npm_and_yarn|pip|uv)/" <<<"$HEAD_REF"; then
+            echo "::error::検証の対象になるディレクトリがありません"; exit 1
+          fi
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: ルート を検証
+        if: steps.changed.outputs.root == 'true'
+        run: |
+          npm ci
+          npm run typecheck

@@ -1,0 +1,20 @@
+# 依存パッケージの脆弱性を GitHub Advisory Database と照合し、修正版があればセキュリティ更新のPRを作る。
+# open-pull-requests-limit: 0 で通常のバージョン更新PRは作らず、セキュリティ更新だけにしている。
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+    schedule:
+      interval: "daily"
+      time: "06:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 0
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+    schedule:
+      interval: "daily"
+      time: "06:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 0
